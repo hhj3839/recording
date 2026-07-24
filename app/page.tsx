@@ -1,0 +1,204 @@
+"use client";
+
+import { useMemo, useState } from "react";
+
+type View = "dashboard" | "assessments" | "comments" | "behavior";
+type Level = "상" | "중" | "하" | "-";
+
+const students = [
+  { id: 1, name: "김도윤", assessments: ["상", "중", "상"] as Level[], status: "확정", note: "친구의 발표를 경청하고 자신의 생각을 또렷하게 표현함" },
+  { id: 2, name: "이서아", assessments: ["중", "중", "상"] as Level[], status: "검토 중", note: "모둠 활동에서 역할을 끝까지 책임감 있게 수행함" },
+  { id: 3, name: "박지후", assessments: ["하", "중", "-"] as Level[], status: "미생성", note: "교사의 도움을 받아 활동 과정을 차근차근 완성함" },
+  { id: 4, name: "최하린", assessments: ["상", "상", "중"] as Level[], status: "확정", note: "상황에 알맞은 목소리와 표정으로 실감 나게 발표함" },
+  { id: 5, name: "정시우", assessments: ["중", "상", "중"] as Level[], status: "검토 중", note: "새로운 문제에도 여러 방법을 시도하며 해결함" },
+];
+
+const navItems: { id: View; label: string; icon: string }[] = [
+  { id: "dashboard", label: "대시보드", icon: "⌂" },
+  { id: "assessments", label: "평가 수준 입력", icon: "▦" },
+  { id: "comments", label: "교과 평어", icon: "✦" },
+  { id: "behavior", label: "행동특성", icon: "◎" },
+];
+
+function Dashboard({ move }: { move: (view: View) => void }) {
+  const cards = [
+    { label: "학생", value: "22명", detail: "재적 학생", tone: "blue" },
+    { label: "평가 입력", value: "82%", detail: "108 / 132개", tone: "mint" },
+    { label: "교과 평어 확정", value: "61%", detail: "67 / 110건", tone: "amber" },
+    { label: "행동특성 확정", value: "45%", detail: "10 / 22명", tone: "violet" },
+  ];
+  const tasks = [
+    { title: "국어 평가 수준 입력", detail: "5명이 아직 입력되지 않았어요", action: "이어하기", view: "assessments" as View, progress: 78 },
+    { title: "수학 교과 평어 검토", detail: "생성된 문장 8건을 확인해 주세요", action: "검토하기", view: "comments" as View, progress: 64 },
+    { title: "행동특성 관찰 기록", detail: "12명의 기록을 더 입력해 주세요", action: "기록하기", view: "behavior" as View, progress: 45 },
+  ];
+
+  return (
+    <>
+      <section className="welcome">
+        <div>
+          <p className="eyebrow">2026학년도 · 1학기</p>
+          <h1>홍현진 선생님, 안녕하세요.</h1>
+          <p>오늘도 학생의 성장을 세심하게 기록해 볼까요?</p>
+        </div>
+        <button className="class-button">서울하늘초 · 3학년 5반 <span>⌄</span></button>
+      </section>
+
+      <section className="stats-grid" aria-label="학급 진행 현황">
+        {cards.map((card) => (
+          <article className={`stat-card ${card.tone}`} key={card.label}>
+            <div className="stat-top"><span>{card.label}</span><span className="trend">↗</span></div>
+            <strong>{card.value}</strong>
+            <small>{card.detail}</small>
+          </article>
+        ))}
+      </section>
+
+      <div className="dashboard-grid">
+        <section className="panel task-panel">
+          <div className="section-heading">
+            <div><p className="eyebrow">TO DO</p><h2>지금 할 일</h2></div>
+            <button className="text-button">전체 보기 →</button>
+          </div>
+          <div className="task-list">
+            {tasks.map((task) => (
+              <article className="task-row" key={task.title}>
+                <div className="task-check">✓</div>
+                <div className="task-copy">
+                  <strong>{task.title}</strong>
+                  <span>{task.detail}</span>
+                  <div className="progress"><i style={{ width: `${task.progress}%` }} /></div>
+                </div>
+                <button onClick={() => move(task.view)}>{task.action}</button>
+              </article>
+            ))}
+          </div>
+        </section>
+
+        <aside className="panel quick-panel">
+          <div className="section-heading"><div><p className="eyebrow">QUICK START</p><h2>빠른 시작</h2></div></div>
+          <button onClick={() => move("assessments")}><span className="quick-icon">⇧</span><span><b>평가계획 업로드</b><small>엑셀 파일로 시작하기</small></span><i>›</i></button>
+          <button onClick={() => move("comments")}><span className="quick-icon">✦</span><span><b>교과 평어 생성</b><small>입력된 평가로 초안 만들기</small></span><i>›</i></button>
+          <button onClick={() => move("behavior")}><span className="quick-icon">＋</span><span><b>학생 관찰 기록</b><small>특성과 성장 모습 남기기</small></span><i>›</i></button>
+        </aside>
+      </div>
+
+      <section className="privacy-banner">
+        <span>◈</span><div><strong>학생 정보는 안전하게 보호됩니다</strong><p>AI 문장 생성 시 학생 이름은 자동으로 비식별 처리되며, 입력하지 않은 사실은 문장에 포함하지 않습니다.</p></div>
+        <button>보호 원칙 보기</button>
+      </section>
+    </>
+  );
+}
+
+function Assessments({ goComments }: { goComments: () => void }) {
+  const [data, setData] = useState(students.map((s) => ({ ...s, assessments: [...s.assessments] })));
+  const [saved, setSaved] = useState(false);
+  const cycle = (row: number, col: number) => {
+    const order: Level[] = ["-", "상", "중", "하"];
+    setData((current) => current.map((student, r) => r !== row ? student : {
+      ...student,
+      assessments: student.assessments.map((level, c) => c !== col ? level : order[(order.indexOf(level) + 1) % order.length]),
+    }));
+    setSaved(false);
+  };
+  return (
+    <section>
+      <div className="page-heading">
+        <div><p className="eyebrow">국어 · 1학기</p><h1>평가 수준 입력</h1><p>셀을 눌러 학생별 성취 수준을 빠르게 입력하세요.</p></div>
+        <div className="heading-actions"><button className="secondary">평가계획 업로드</button><button onClick={() => setSaved(true)}>{saved ? "저장됨 ✓" : "변경사항 저장"}</button></div>
+      </div>
+      <div className="table-tools">
+        <div className="subject-tabs"><button className="active">국어</button><button>수학</button><button>사회</button><button>과학</button></div>
+        <span><i className="level high" /> 상 <i className="level middle" /> 중 <i className="level low" /> 하</span>
+      </div>
+      <div className="assessment-wrap">
+        <table className="assessment-table">
+          <thead><tr><th>번호</th><th>학생</th><th><b>1단원</b><small>듣기·말하기</small></th><th><b>2단원</b><small>문법</small></th><th><b>3단원</b><small>문학</small></th><th>관찰 메모</th></tr></thead>
+          <tbody>{data.map((student, row) => <tr key={student.id}><td>{student.id}</td><td><strong>{student.name}</strong></td>{student.assessments.map((level, col) => <td key={col}><button aria-label={`${student.name} ${col + 1}단원 수준 ${level}`} className={`level-button level-${level}`} onClick={() => cycle(row, col)}>{level}</button></td>)}<td><input defaultValue={student.note} aria-label={`${student.name} 관찰 메모`} /></td></tr>)}</tbody>
+        </table>
+      </div>
+      <div className="bottom-action"><span>입력 완료 <strong>12 / 15</strong></span><button onClick={goComments}>교과 평어 생성 <b>→</b></button></div>
+    </section>
+  );
+}
+
+function Comments() {
+  const [selected, setSelected] = useState(0);
+  const [confirmed, setConfirmed] = useState(false);
+  const [text, setText] = useState("작품 속 인물의 상황을 이해하고 알맞은 표정과 말투를 활용하여 대화를 실감 나게 표현함. 문장의 짜임을 살펴보며 자신의 생각을 분명하게 전달함.");
+  const bytes = useMemo(() => new TextEncoder().encode(text).length, [text]);
+  const person = students[selected];
+  return (
+    <section>
+      <div className="page-heading"><div><p className="eyebrow">AI DRAFT</p><h1>교과 평어 검토</h1><p>평가 근거와 생성 문장을 비교한 뒤 선생님이 최종 확정해 주세요.</p></div><button className="secondary">학급 전체 생성</button></div>
+      <div className="review-layout">
+        <aside className="student-list">
+          <div className="student-list-head"><strong>3학년 5반</strong><span>5명</span></div>
+          {students.map((student, index) => <button className={selected === index ? "active" : ""} onClick={() => { setSelected(index); setConfirmed(false); }} key={student.id}><span className="avatar">{student.name[0]}</span><span><b>{student.id}. {student.name}</b><small>{student.status}</small></span><i>›</i></button>)}
+        </aside>
+        <div className="review-content">
+          <div className="review-head"><div><span className="avatar large">{person.name[0]}</span><div><h2>{person.name}</h2><p>국어 · 교과학습발달상황</p></div></div><span className={`status ${confirmed ? "done" : ""}`}>{confirmed ? "최종 확정" : "검토 필요"}</span></div>
+          <div className="evidence">
+            <h3>평가 근거</h3><div className="evidence-grid"><p><span>듣기·말하기</span><b className="tag high">상</b></p><p><span>문법</span><b className="tag middle">중</b></p><p><span>문학</span><b className="tag high">상</b></p></div>
+            <div className="memo"><span>관찰 메모</span>{person.note}</div>
+          </div>
+          <div className="editor-card">
+            <div className="editor-title"><div><span className="spark">✦</span><strong>AI 생성 초안</strong><small>입력한 평가 근거만 활용했어요</small></div><button onClick={() => setText((v) => v.replace("분명하게", "논리적으로"))}>↻ 다시 생성</button></div>
+            <textarea value={text} onChange={(e) => { setText(e.target.value); setConfirmed(false); }} />
+            <div className="editor-meta"><span>{bytes} bytes</span><span className="safe">✓ 종결어미 정상</span><span className="safe">✓ 금지 내용 없음</span></div>
+          </div>
+          <div className="suggestions"><button onClick={() => setText(text.slice(0, Math.max(65, text.length - 18)) + "함.")}>짧게</button><button onClick={() => setText(text + " 관찰한 내용을 바탕으로 자신의 표현을 스스로 다듬는 태도가 돋보임.")}>더 구체적으로</button><button>표현 바꾸기</button></div>
+          <div className="confirm-box"><label><input type="checkbox" checked={confirmed} onChange={(e) => setConfirmed(e.target.checked)} /> 평가 결과와 관찰 사실에 맞는 문장인지 확인했습니다.</label><button disabled={!confirmed}>{confirmed ? "확정 완료 ✓" : "최종 확정"}</button></div>
+        </div>
+      </div>
+    </section>
+  );
+}
+
+function Behavior() {
+  const fields = ["학습 태도", "교우관계", "책임감", "생활 습관", "성장 모습"];
+  const defaults = ["수업에 성실하게 참여하며 궁금한 점을 질문으로 해결함", "친구의 이야기를 잘 듣고 의견 차이를 대화로 해결함", "맡은 역할을 끝까지 수행하고 결과를 점검함", "준비물을 스스로 확인하는 습관이 형성됨", "최근 모둠 앞에서 자신의 생각을 자신 있게 말함"];
+  const [values, setValues] = useState(defaults);
+  const [generated, setGenerated] = useState("");
+  const generate = () => setGenerated(`${values[0]}. ${values[1]}. ${values[2]}. ${values[3]}. 특히 ${values[4].replace("함", "하는 성장 모습이 돋보임")}.`);
+  const bytes = new TextEncoder().encode(generated).length;
+  return (
+    <section>
+      <div className="page-heading"><div><p className="eyebrow">GROWTH NOTE</p><h1>행동특성 작성</h1><p>관찰한 사실을 입력하면 성장 중심의 문장 초안을 만듭니다.</p></div><button className="secondary">학생 변경 · 김도윤 ⌄</button></div>
+      <div className="behavior-grid">
+        <div className="panel behavior-form"><div className="section-heading"><div><h2>관찰 사실 입력</h2><p>구체적인 행동과 변화 모습을 적어 주세요.</p></div><span>5 / 5 입력</span></div>
+          {fields.map((field, index) => <label key={field}><span>{field}{index === 4 && <b>중요</b>}</span><textarea value={values[index]} onChange={(e) => setValues(values.map((v, i) => i === index ? e.target.value : v))} /></label>)}
+          <button className="generate-button" onClick={generate}>✦ 행동특성 초안 생성</button>
+        </div>
+        <div className="panel result-panel"><div className="section-heading"><div><h2>생성 결과</h2><p>선생님의 최종 검토가 필요합니다.</p></div></div>
+          {generated ? <><textarea value={generated} onChange={(e) => setGenerated(e.target.value)} /><div className="check-list"><p className={bytes >= 500 ? "safe" : "warn"}><span>{bytes >= 500 ? "✓" : "!"}</span> UTF-8 {bytes} bytes <small>권장 500~550</small></p><p className="safe"><span>✓</span> 종결어미 검사 정상</p><p className="safe"><span>✓</span> 금지 내용 없음</p><p className="safe"><span>✓</span> 입력 근거 외 표현 없음</p></div><button className="confirm-result">검토 후 최종 확정</button></> : <div className="empty-result"><span>✦</span><h3>관찰 사실을 바탕으로 초안을 만들어요</h3><p>왼쪽 내용을 확인한 뒤 생성 버튼을 눌러 주세요.</p></div>}
+        </div>
+      </div>
+    </section>
+  );
+}
+
+export default function Home() {
+  const [view, setView] = useState<View>("dashboard");
+  return (
+    <div className="app-shell">
+      <aside className="sidebar">
+        <button className="brand" onClick={() => setView("dashboard")}><span>기록</span>샘<i>교사의 기록을 더 가치 있게</i></button>
+        <nav>{navItems.map((item) => <button className={view === item.id ? "active" : ""} key={item.id} onClick={() => setView(item.id)}><span>{item.icon}</span>{item.label}</button>)}</nav>
+        <div className="nav-divider" />
+        <nav><button><span>♙</span>학생 관리</button><button><span>⇧</span>결과 내보내기</button></nav>
+        <div className="sidebar-bottom"><div className="storage"><span>이번 달 AI 생성</span><strong>128 / 300</strong><div><i /></div></div><button className="profile"><span className="avatar">홍</span><span><b>홍현진 선생님</b><small>서울하늘초등학교</small></span><i>⋯</i></button></div>
+      </aside>
+      <main>
+        <header className="mobile-header"><button className="brand" onClick={() => setView("dashboard")}><span>기록</span>샘</button><select value={view} onChange={(e) => setView(e.target.value as View)}>{navItems.map((item) => <option value={item.id} key={item.id}>{item.label}</option>)}</select></header>
+        <div className="content">
+          {view === "dashboard" && <Dashboard move={setView} />}
+          {view === "assessments" && <Assessments goComments={() => setView("comments")} />}
+          {view === "comments" && <Comments />}
+          {view === "behavior" && <Behavior />}
+        </div>
+      </main>
+    </div>
+  );
+}

@@ -1,0 +1,8 @@
+allowBuilds:
+  esbuild: true
+  sharp: true
+  unrs-resolver: true
+  workerd: true
+verifyDepsBeforeRun: false
+trustLockfile: true
+nodeLinker: hoisted
