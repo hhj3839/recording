@@ -163,7 +163,17 @@ function Comments({ assessmentDataBySubject, plan }: { assessmentDataBySubject: 
   const [confirmed, setConfirmed] = useState<Record<string, boolean>>({});
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
-  const visiblePlan = plan.filter((item) => item.subject === selectedSubject);
+  const [copied, setCopied] = useState(false);
+  const copySubjectComments = async () => {
+    const text = students.map((student) => comments[`${student.id}|${selectedSubject}`] ?? "").join("\n");
+    try {
+      await navigator.clipboard.writeText(text);
+      setCopied(true);
+      window.setTimeout(() => setCopied(false), 1800);
+    } catch {
+      setError("클립보드 복사 권한을 확인해 주세요.");
+    }
+  };
   const generateAllComments = async () => {
     setLoading(true);
     setError("");
@@ -184,6 +194,7 @@ function Comments({ assessmentDataBySubject, plan }: { assessmentDataBySubject: 
         ...current,
         ...Object.fromEntries(result.comments!.map((item) => [`${item.studentId}|${item.subject}`, item.comment])),
       }));
+      setCopied(false);
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : "전 과목 교과 평어를 생성하지 못했습니다.");
     } finally {
@@ -200,22 +211,27 @@ function Comments({ assessmentDataBySubject, plan }: { assessmentDataBySubject: 
           {students.map((student, index) => <button className={selected === index ? "active" : ""} onClick={() => { setSelected(index); setError(""); document.getElementById(`comment-${student.id}`)?.scrollIntoView({ behavior: "smooth", block: "center" }); }} key={student.id}><span className="avatar">{student.name[0]}</span><span><b>{student.id}. {student.name}</b><small>{comments[`${student.id}|${selectedSubject}`] ? "평어 생성됨" : "미생성"}</small></span><i>›</i></button>)}
         </aside>
         <div className="review-content">
-          <div className="subject-tabs review-subject-tabs">{subjects.map((subject) => <button className={subject === selectedSubject ? "active" : ""} onClick={() => setSelectedSubject(subject)} key={subject}>{subject}<small>{students.filter((student) => comments[`${student.id}|${subject}`]).length}/{students.length}</small></button>)}</div>
+          <div className="comments-toolbar">
+            <div className="subject-tabs review-subject-tabs">{subjects.map((subject) => <button className={subject === selectedSubject ? "active" : ""} onClick={() => { setSelectedSubject(subject); setCopied(false); }} key={subject}>{subject}<small>{students.filter((student) => comments[`${student.id}|${subject}`]).length}/{students.length}</small></button>)}</div>
+            <button className="copy-comments" onClick={() => void copySubjectComments()} disabled={!students.some((student) => comments[`${student.id}|${selectedSubject}`])}>{copied ? "복사됨 ✓" : "평어만 복사하기"}</button>
+          </div>
           {error && <p className="generation-error">! {error}</p>}
           {loading && <div className="comment-loading class-loading"><span>✦</span><p>모든 학생의 전 과목 평어를 생성하고 있어요.</p></div>}
-          <div className="class-comments">
-            {students.map((student, index) => {
-              const key = `${student.id}|${selectedSubject}`;
-              const text = comments[key] ?? "";
-              const assessment = assessmentDataBySubject[selectedSubject]?.[index];
-              const hasLevel = assessment?.assessments.some((level) => level !== "-");
-              return <article className={`student-comment-card ${selected === index ? "selected" : ""}`} id={`comment-${student.id}`} key={student.id}>
-                <div className="review-head"><div><span className="avatar large">{student.name[0]}</span><div><h2>{student.id}. {student.name}</h2><p>{selectedSubject} · {visiblePlan.map((item) => item.domain).join(" · ")}</p></div></div><span className={`status ${confirmed[key] ? "done" : ""}`}>{confirmed[key] ? "최종 확정" : text ? "검토 필요" : hasLevel ? "생성 대기" : "수준 미입력"}</span></div>
-                <div className="compact-levels">{visiblePlan.map((item, levelIndex) => <span key={`${item.unit}-${levelIndex}`}>{item.domain} <b>{assessment?.assessments[levelIndex] ?? "-"}</b></span>)}</div>
-                <textarea value={text} onChange={(event) => { setComments((current) => ({ ...current, [key]: event.target.value })); setConfirmed((current) => ({ ...current, [key]: false })); }} placeholder={hasLevel ? "AI 평어 생성 버튼을 누르면 결과가 표시됩니다." : "평가 수준이 입력되지 않았습니다."} />
-                <div className="student-comment-actions"><span>{new TextEncoder().encode(text).length} bytes</span><label><input type="checkbox" checked={Boolean(confirmed[key])} disabled={!text} onChange={(event) => setConfirmed((current) => ({ ...current, [key]: event.target.checked }))} /> 확인 완료</label></div>
-              </article>;
-            })}
+          <div className="comments-table-wrap">
+            <table className="comments-table">
+              <thead><tr><th>번호</th><th>이름</th><th>평어</th></tr></thead>
+              <tbody>{students.map((student, index) => {
+                const key = `${student.id}|${selectedSubject}`;
+                const text = comments[key] ?? "";
+                const assessment = assessmentDataBySubject[selectedSubject]?.[index];
+                const hasLevel = assessment?.assessments.some((level) => level !== "-");
+                return <tr className={selected === index ? "selected" : ""} id={`comment-${student.id}`} key={student.id}>
+                  <td>{student.id}</td>
+                  <td><strong>{student.name}</strong><small>{confirmed[key] ? "확정" : text ? `${new TextEncoder().encode(text).length}B` : hasLevel ? "생성 대기" : "수준 미입력"}</small></td>
+                  <td><textarea value={text} onChange={(event) => { setComments((current) => ({ ...current, [key]: event.target.value })); setConfirmed((current) => ({ ...current, [key]: false })); setCopied(false); }} placeholder={hasLevel ? "AI 평어 생성 버튼을 누르면 결과가 표시됩니다." : "평가 수준이 입력되지 않았습니다."} /><label className="table-confirm"><input type="checkbox" checked={Boolean(confirmed[key])} disabled={!text} onChange={(event) => setConfirmed((current) => ({ ...current, [key]: event.target.checked }))} /> 확인 완료</label></td>
+                </tr>;
+              })}</tbody>
+            </table>
           </div>
         </div>
       </div>
