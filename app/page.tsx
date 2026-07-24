@@ -40,6 +40,26 @@ const students = [
   { id: 3, name: "박지후", assessments: ["하", "중", "-"] as Level[], status: "미생성", note: "교사의 도움을 받아 활동 과정을 차근차근 완성함" },
   { id: 4, name: "최하린", assessments: ["상", "상", "중"] as Level[], status: "확정", note: "상황에 알맞은 목소리와 표정으로 실감 나게 발표함" },
   { id: 5, name: "정시우", assessments: ["중", "상", "중"] as Level[], status: "검토 중", note: "새로운 문제에도 여러 방법을 시도하며 해결함" },
+  { id: 6, name: "한예준", assessments: ["-", "-", "-"] as Level[], status: "미생성", note: "" },
+  { id: 7, name: "윤서윤", assessments: ["-", "-", "-"] as Level[], status: "미생성", note: "" },
+  { id: 8, name: "강민재", assessments: ["-", "-", "-"] as Level[], status: "미생성", note: "" },
+  { id: 9, name: "조유나", assessments: ["-", "-", "-"] as Level[], status: "미생성", note: "" },
+  { id: 10, name: "임도현", assessments: ["-", "-", "-"] as Level[], status: "미생성", note: "" },
+  { id: 11, name: "신채원", assessments: ["-", "-", "-"] as Level[], status: "미생성", note: "" },
+  { id: 12, name: "오준서", assessments: ["-", "-", "-"] as Level[], status: "미생성", note: "" },
+  { id: 13, name: "서지아", assessments: ["-", "-", "-"] as Level[], status: "미생성", note: "" },
+  { id: 14, name: "권하준", assessments: ["-", "-", "-"] as Level[], status: "미생성", note: "" },
+  { id: 15, name: "황수빈", assessments: ["-", "-", "-"] as Level[], status: "미생성", note: "" },
+  { id: 16, name: "송지호", assessments: ["-", "-", "-"] as Level[], status: "미생성", note: "" },
+  { id: 17, name: "안다은", assessments: ["-", "-", "-"] as Level[], status: "미생성", note: "" },
+  { id: 18, name: "류건우", assessments: ["-", "-", "-"] as Level[], status: "미생성", note: "" },
+  { id: 19, name: "전소율", assessments: ["-", "-", "-"] as Level[], status: "미생성", note: "" },
+  { id: 20, name: "홍현우", assessments: ["-", "-", "-"] as Level[], status: "미생성", note: "" },
+  { id: 21, name: "문예린", assessments: ["-", "-", "-"] as Level[], status: "미생성", note: "" },
+  { id: 22, name: "배도경", assessments: ["-", "-", "-"] as Level[], status: "미생성", note: "" },
+  { id: 23, name: "백나윤", assessments: ["-", "-", "-"] as Level[], status: "미생성", note: "" },
+  { id: 24, name: "남태윤", assessments: ["-", "-", "-"] as Level[], status: "미생성", note: "" },
+  { id: 25, name: "노가은", assessments: ["-", "-", "-"] as Level[], status: "미생성", note: "" },
 ];
 
 const navItems: { id: View; label: string; icon: string }[] = [
@@ -51,10 +71,10 @@ const navItems: { id: View; label: string; icon: string }[] = [
 
 function Dashboard({ move }: { move: (view: View) => void }) {
   const cards = [
-    { label: "학생", value: "22명", detail: "재적 학생", tone: "blue" },
+    { label: "학생", value: "25명", detail: "재적 학생", tone: "blue" },
     { label: "평가 입력", value: "82%", detail: "108 / 132개", tone: "mint" },
     { label: "교과 평어 확정", value: "61%", detail: "67 / 110건", tone: "amber" },
-    { label: "행동특성 확정", value: "45%", detail: "10 / 22명", tone: "violet" },
+    { label: "행동특성 확정", value: "40%", detail: "10 / 25명", tone: "violet" },
   ];
   const tasks = [
     { title: "국어 평가 수준 입력", detail: "5명이 아직 입력되지 않았어요", action: "이어하기", view: "assessments" as View, progress: 78 },
