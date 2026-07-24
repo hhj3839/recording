@@ -1,9 +1,27 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { ChangeEvent, useEffect, useMemo, useRef, useState } from "react";
 
 type View = "dashboard" | "assessments" | "comments" | "behavior";
 type Level = "상" | "중" | "하" | "-";
+type AssessmentPlan = {
+  subject: string;
+  unit: string;
+  goal: string;
+  domain: string;
+  type: string;
+  perspective: string;
+  high: string;
+  middle: string;
+  low: string;
+  caution: string;
+};
+
+const defaultPlan: AssessmentPlan[] = [
+  { subject: "국어", unit: "1단원", goal: "상황과 인물의 마음을 살려 표현하기", domain: "듣기·말하기", type: "수행평가", perspective: "표정, 몸짓, 목소리 활용", high: "실감 나게 표현함", middle: "알맞게 표현함", low: "도움을 받아 표현함", caution: "" },
+  { subject: "국어", unit: "2단원", goal: "문장의 기본 짜임을 이해하기", domain: "문법", type: "서술형", perspective: "문장 짜임 이해", high: "정확히 나타냄", middle: "대체로 나타냄", low: "도움을 받아 나타냄", caution: "" },
+  { subject: "국어", unit: "3단원", goal: "작품의 느낌과 생각 표현하기", domain: "문학", type: "서술형", perspective: "근거를 들어 표현", high: "구체적으로 표현함", middle: "알맞게 표현함", low: "도움을 받아 표현함", caution: "" },
+];
 
 const students = [
   { id: 1, name: "김도윤", assessments: ["상", "중", "상"] as Level[], status: "확정", note: "친구의 발표를 경청하고 자신의 생각을 또렷하게 표현함" },
@@ -93,8 +111,70 @@ function Dashboard({ move }: { move: (view: View) => void }) {
 
 type AssessmentStudent = (typeof students)[number] & { assessments: Level[] };
 
-function Assessments({ data, setData, goComments }: { data: AssessmentStudent[]; setData: React.Dispatch<React.SetStateAction<AssessmentStudent[]>>; goComments: () => void }) {
+function Assessments({ data, setData, plan, setPlan, activeSubject, setActiveSubject, goComments }: {
+  data: AssessmentStudent[];
+  setData: React.Dispatch<React.SetStateAction<AssessmentStudent[]>>;
+  plan: AssessmentPlan[];
+  setPlan: React.Dispatch<React.SetStateAction<AssessmentPlan[]>>;
+  activeSubject: string;
+  setActiveSubject: (subject: string) => void;
+  goComments: () => void;
+}) {
   const [saved, setSaved] = useState(false);
+  const [uploadMessage, setUploadMessage] = useState("");
+  const [uploadError, setUploadError] = useState("");
+  const fileInput = useRef<HTMLInputElement>(null);
+  const subjects = [...new Set(plan.map((item) => item.subject))];
+  const visiblePlan = plan.filter((item) => item.subject === activeSubject);
+
+  const uploadPlan = async (event: ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    event.target.value = "";
+    if (!file) return;
+    setUploadMessage("");
+    setUploadError("");
+    try {
+      const XLSX = await import("xlsx");
+      const workbook = XLSX.read(await file.arrayBuffer(), { type: "array" });
+      const sheet = workbook.Sheets[workbook.SheetNames[0]];
+      const rows = XLSX.utils.sheet_to_json<Record<string, unknown>>(sheet, { defval: "" });
+      const required = ["과목", "단원", "평가목표", "영역", "평가 유형", "평가 관점", "상", "중", "하"];
+      const headers = rows.length ? Object.keys(rows[0]) : [];
+      const missing = required.filter((header) => !headers.includes(header));
+      if (!rows.length) throw new Error("첫 번째 시트에 평가 항목이 없습니다.");
+      if (missing.length) throw new Error(`필수 열이 없습니다: ${missing.join(", ")}`);
+      const parsed = rows.map((row, index) => {
+        const value = (header: string) => String(row[header] ?? "").trim();
+        if (!value("과목") || !value("단원") || !value("평가목표") || !value("영역") || !value("상") || !value("중") || !value("하")) {
+          throw new Error(`${index + 2}행의 필수 내용이 비어 있습니다.`);
+        }
+        return {
+          subject: value("과목"), unit: value("단원"), goal: value("평가목표"), domain: value("영역"),
+          type: value("평가 유형"), perspective: value("평가 관점"), high: value("상"),
+          middle: value("중"), low: value("하"), caution: value("평가상의 유의점"),
+        };
+      });
+      const firstSubject = parsed[0].subject;
+      const firstCount = parsed.filter((item) => item.subject === firstSubject).length;
+      setPlan(parsed);
+      setActiveSubject(firstSubject);
+      setData((current) => current.map((student) => ({ ...student, assessments: Array(firstCount).fill("-") as Level[] })));
+      setUploadMessage(`${file.name} · ${parsed.length}개 평가 항목을 불러왔습니다.`);
+      setSaved(false);
+    } catch (reason) {
+      setUploadError(reason instanceof Error ? reason.message : "파일을 읽지 못했습니다.");
+    }
+  };
+
+  const changeSubject = (subject: string) => {
+    setActiveSubject(subject);
+    const count = plan.filter((item) => item.subject === subject).length;
+    setData((current) => current.map((student) => ({
+      ...student,
+      assessments: Array.from({ length: count }, (_, index) => student.assessments[index] ?? "-"),
+    })));
+    setSaved(false);
+  };
   const cycle = (row: number, col: number) => {
     const order: Level[] = ["-", "상", "중", "하"];
     setData((current) => current.map((student, r) => r !== row ? student : {
@@ -106,25 +186,31 @@ function Assessments({ data, setData, goComments }: { data: AssessmentStudent[];
   return (
     <section>
       <div className="page-heading">
-        <div><p className="eyebrow">국어 · 1학기</p><h1>평가 수준 입력</h1><p>셀을 눌러 학생별 성취 수준을 빠르게 입력하세요.</p></div>
-        <div className="heading-actions"><button className="secondary">평가계획 업로드</button><button onClick={() => setSaved(true)}>{saved ? "저장됨 ✓" : "변경사항 저장"}</button></div>
+        <div><p className="eyebrow">{activeSubject} · 1학기</p><h1>평가 수준 입력</h1><p>셀을 눌러 학생별 성취 수준을 빠르게 입력하세요.</p></div>
+        <div className="heading-actions">
+          <input ref={fileInput} className="visually-hidden" type="file" accept=".xlsx,.xls,.csv" onChange={(event) => void uploadPlan(event)} />
+          <button className="secondary" onClick={() => fileInput.current?.click()}>평가계획 업로드</button>
+          <button onClick={() => setSaved(true)}>{saved ? "저장됨 ✓" : "변경사항 저장"}</button>
+        </div>
       </div>
+      {uploadMessage && <p className="upload-message">✓ {uploadMessage}</p>}
+      {uploadError && <p className="generation-error">! {uploadError}</p>}
       <div className="table-tools">
-        <div className="subject-tabs"><button className="active">국어</button><button>수학</button><button>사회</button><button>과학</button></div>
+        <div className="subject-tabs">{subjects.map((subject) => <button className={subject === activeSubject ? "active" : ""} onClick={() => changeSubject(subject)} key={subject}>{subject}</button>)}</div>
         <span><i className="level high" /> 상 <i className="level middle" /> 중 <i className="level low" /> 하</span>
       </div>
       <div className="assessment-wrap">
         <table className="assessment-table">
-          <thead><tr><th>번호</th><th>학생</th><th><b>1단원</b><small>듣기·말하기</small></th><th><b>2단원</b><small>문법</small></th><th><b>3단원</b><small>문학</small></th></tr></thead>
+          <thead><tr><th>번호</th><th>학생</th>{visiblePlan.map((item, index) => <th key={`${item.unit}-${item.domain}-${index}`} title={item.goal}><b>{item.unit}</b><small>{item.domain}</small></th>)}</tr></thead>
           <tbody>{data.map((student, row) => <tr key={student.id}><td>{student.id}</td><td><strong>{student.name}</strong></td>{student.assessments.map((level, col) => <td key={col}><button aria-label={`${student.name} ${col + 1}단원 수준 ${level}`} className={`level-button level-${level}`} onClick={() => cycle(row, col)}>{level}</button></td>)}</tr>)}</tbody>
         </table>
       </div>
-      <div className="bottom-action"><span>입력 완료 <strong>{data.reduce((count, student) => count + student.assessments.filter((level) => level !== "-").length, 0)} / {data.length * 3}</strong></span><button onClick={goComments}>교과 평어 작성 <b>→</b></button></div>
+      <div className="bottom-action"><span>입력 완료 <strong>{data.reduce((count, student) => count + student.assessments.filter((level) => level !== "-").length, 0)} / {data.length * visiblePlan.length}</strong></span><button onClick={goComments}>교과 평어 작성 <b>→</b></button></div>
     </section>
   );
 }
 
-function Comments({ assessmentData, generateSignal }: { assessmentData: AssessmentStudent[]; generateSignal: number }) {
+function Comments({ assessmentData, plan, activeSubject, generateSignal }: { assessmentData: AssessmentStudent[]; plan: AssessmentPlan[]; activeSubject: string; generateSignal: number }) {
   const [selected, setSelected] = useState(0);
   const [confirmed, setConfirmed] = useState(false);
   const [comments, setComments] = useState<Record<number, string>>({});
@@ -143,7 +229,7 @@ function Comments({ assessmentData, generateSignal }: { assessmentData: Assessme
       const response = await fetch("/api/generate-comment", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ studentId: selectedAssessment.id, levels: selectedAssessment.assessments }),
+        body: JSON.stringify({ studentId: selectedAssessment.id, levels: selectedAssessment.assessments, plan: plan.filter((item) => item.subject === activeSubject) }),
       });
       const result = await response.json() as { comment?: string; error?: string };
       if (!response.ok || !result.comment) throw new Error(result.error || "교과 평어를 생성하지 못했습니다.");
@@ -170,9 +256,9 @@ function Comments({ assessmentData, generateSignal }: { assessmentData: Assessme
           {students.map((student, index) => <button className={selected === index ? "active" : ""} onClick={() => { setSelected(index); setConfirmed(false); setError(""); }} key={student.id}><span className="avatar">{student.name[0]}</span><span><b>{student.id}. {student.name}</b><small>{comments[index] ? "검토 중" : "미생성"}</small></span><i>›</i></button>)}
         </aside>
         <div className="review-content">
-          <div className="review-head"><div><span className="avatar large">{person.name[0]}</span><div><h2>{person.name}</h2><p>국어 · 교과학습발달상황</p></div></div><span className={`status ${confirmed ? "done" : ""}`}>{confirmed ? "최종 확정" : "검토 필요"}</span></div>
+          <div className="review-head"><div><span className="avatar large">{person.name[0]}</span><div><h2>{person.name}</h2><p>{activeSubject} · 교과학습발달상황</p></div></div><span className={`status ${confirmed ? "done" : ""}`}>{confirmed ? "최종 확정" : "검토 필요"}</span></div>
           <div className="evidence">
-            <h3>평가 수준</h3><div className="evidence-grid"><p><span>듣기·말하기</span><b className={`tag ${selectedAssessment.assessments[0] === "상" ? "high" : "middle"}`}>{selectedAssessment.assessments[0]}</b></p><p><span>문법</span><b className={`tag ${selectedAssessment.assessments[1] === "상" ? "high" : "middle"}`}>{selectedAssessment.assessments[1]}</b></p><p><span>문학</span><b className={`tag ${selectedAssessment.assessments[2] === "상" ? "high" : "middle"}`}>{selectedAssessment.assessments[2]}</b></p></div>
+            <h3>평가 수준</h3><div className="evidence-grid">{plan.filter((item) => item.subject === activeSubject).map((item, index) => <p key={`${item.unit}-${item.domain}-${index}`}><span>{item.domain}</span><b className={`tag ${selectedAssessment.assessments[index] === "상" ? "high" : "middle"}`}>{selectedAssessment.assessments[index] ?? "-"}</b></p>)}</div>
           </div>
           <div className="editor-card">
             <div className="editor-title"><div><span className="spark">✦</span><strong>AI 생성 초안</strong><small>학생 이름을 제외한 평가 수준만 전송해요</small></div><button onClick={() => void generateComment()} disabled={loading}>{loading ? "생성 중…" : "↻ 다시 생성"}</button></div>
@@ -254,6 +340,8 @@ export default function Home() {
   const [view, setView] = useState<View>("dashboard");
   const [assessmentData, setAssessmentData] = useState<AssessmentStudent[]>(students.map((student) => ({ ...student, assessments: [...student.assessments] })));
   const [generateSignal, setGenerateSignal] = useState(0);
+  const [plan, setPlan] = useState<AssessmentPlan[]>(defaultPlan);
+  const [activeSubject, setActiveSubject] = useState("국어");
   const openGeneratedComments = () => {
     setGenerateSignal((current) => current + 1);
     setView("comments");
@@ -271,8 +359,8 @@ export default function Home() {
         <header className="mobile-header"><button className="brand" onClick={() => setView("dashboard")}><span>기록</span>샘</button><select value={view} onChange={(e) => setView(e.target.value as View)}>{navItems.map((item) => <option value={item.id} key={item.id}>{item.label}</option>)}</select></header>
         <div className="content">
           {view === "dashboard" && <Dashboard move={setView} />}
-          {view === "assessments" && <Assessments data={assessmentData} setData={setAssessmentData} goComments={openGeneratedComments} />}
-          {view === "comments" && <Comments assessmentData={assessmentData} generateSignal={generateSignal} />}
+          {view === "assessments" && <Assessments data={assessmentData} setData={setAssessmentData} plan={plan} setPlan={setPlan} activeSubject={activeSubject} setActiveSubject={setActiveSubject} goComments={openGeneratedComments} />}
+          {view === "comments" && <Comments assessmentData={assessmentData} plan={plan} activeSubject={activeSubject} generateSignal={generateSignal} />}
           {view === "behavior" && <Behavior />}
         </div>
       </main>

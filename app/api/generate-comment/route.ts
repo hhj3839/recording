@@ -1,6 +1,6 @@
 type Level = "상" | "중" | "하" | "-";
 
-const assessmentPlan = [
+const defaultAssessmentPlan = [
   {
     unit: "1. 생생하게 표현해요",
     domain: "듣기·말하기",
@@ -33,6 +33,30 @@ const assessmentPlan = [
   },
 ] as const;
 
+type UploadedPlanItem = {
+  subject: string;
+  unit: string;
+  goal: string;
+  domain: string;
+  perspective: string;
+  high: string;
+  middle: string;
+  low: string;
+  caution: string;
+};
+
+function parsePlan(value: unknown): UploadedPlanItem[] | null {
+  if (!Array.isArray(value) || value.length < 1 || value.length > 30) return null;
+  const fields: (keyof UploadedPlanItem)[] = ["subject", "unit", "goal", "domain", "perspective", "high", "middle", "low", "caution"];
+  const parsed = value.map((item) => {
+    if (!item || typeof item !== "object") return null;
+    const record = item as Record<string, unknown>;
+    const result = Object.fromEntries(fields.map((field) => [field, typeof record[field] === "string" ? record[field].slice(0, 2000).trim() : ""])) as UploadedPlanItem;
+    return result.subject && result.unit && result.goal && result.domain && result.high && result.middle && result.low ? result : null;
+  });
+  return parsed.every(Boolean) ? parsed as UploadedPlanItem[] : null;
+}
+
 function extractOutputText(payload: unknown): string {
   if (!payload || typeof payload !== "object") return "";
   const response = payload as { output_text?: unknown; output?: Array<{ content?: Array<{ type?: string; text?: string }> }> };
@@ -47,20 +71,26 @@ function extractOutputText(payload: unknown): string {
 
 export async function POST(request: Request) {
   try {
-    const body = await request.json() as { studentId?: unknown; levels?: unknown };
+    const body = await request.json() as { studentId?: unknown; levels?: unknown; plan?: unknown };
+    const uploadedPlan = parsePlan(body.plan);
+    const plan = uploadedPlan ?? defaultAssessmentPlan.map((item) => ({
+      subject: "국어", unit: item.unit, goal: item.goal, domain: item.domain, perspective: "",
+      high: item.criteria.상, middle: item.criteria.중, low: item.criteria.하, caution: "",
+    }));
     const levels = Array.isArray(body.levels) ? body.levels : [];
-    const validLevels = levels.length === assessmentPlan.length && levels.every((level): level is Level => ["상", "중", "하", "-"].includes(String(level)));
+    const validLevels = levels.length === plan.length && levels.every((level): level is Level => ["상", "중", "하", "-"].includes(String(level)));
     if (!validLevels) return Response.json({ error: "평가 수준을 다시 확인해 주세요." }, { status: 400 });
     if (levels.every((level) => level === "-")) return Response.json({ error: "평가 수준을 한 개 이상 입력해 주세요." }, { status: 400 });
 
     const apiKey = process.env.OPENAI_API_KEY;
     if (!apiKey) return Response.json({ error: "AI 생성 설정이 아직 완료되지 않았습니다." }, { status: 503 });
 
-    const evidence = assessmentPlan
+    const evidence = plan
       .map((item, index) => {
         const level = levels[index];
         if (level === "-") return null;
-        return `- 단원: ${item.unit}\n  영역: ${item.domain}\n  평가목표: ${item.goal}\n  수준: ${level}\n  수준 기준: ${item.criteria[level]}`;
+        const criteria = level === "상" ? item.high : level === "중" ? item.middle : item.low;
+        return `- 과목: ${item.subject}\n  단원: ${item.unit}\n  영역: ${item.domain}\n  평가목표: ${item.goal}\n  평가 관점: ${item.perspective}\n  수준: ${level}\n  수준 기준: ${criteria}\n  유의점: ${item.caution}`;
       })
       .filter(Boolean)
       .join("\n");
@@ -88,7 +118,7 @@ export async function POST(request: Request) {
             role: "user",
             content: [{
               type: "input_text",
-              text: `다음 국어 평가 근거를 종합하여 교과 평어를 작성해 줘.\n${evidence}`,
+              text: `다음 평가 근거를 종합하여 교과 평어를 작성해 줘.\n${evidence}`,
             }],
           },
         ],
