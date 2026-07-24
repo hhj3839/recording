@@ -580,7 +580,7 @@ export default function Home() {
         <nav>{navItems.map((item) => <button className={view === item.id ? "active" : ""} key={item.id} onClick={() => setView(item.id)}><span>{item.icon}</span>{item.label}</button>)}</nav>
         <div className="nav-divider" />
         <nav><button><span>♙</span>학생 관리</button><button><span>⇧</span>결과 내보내기</button></nav>
-        <div className="sidebar-bottom"><div className="storage"><span>이번 달 AI 생성</span><strong>128 / 300</strong><div><i /></div></div><div className="profile"><span className="avatar">{currentUser.slice(0, 1)}</span><span><b>{currentUser}</b><small>서울하늘초등학교</small></span><a href="/signout-with-chatgpt?return_to=%2F">로그아웃</a></div></div>
+        <div className="sidebar-bottom"><div className="storage"><span>이번 달 AI 생성</span><strong>128 / 300</strong><div><i /></div></div><div className="profile"><span className="avatar">{currentUser.slice(0, 1)}</span><span><b>{currentUser}</b><small>서울하늘초등학교</small></span><form action="/api/auth/logout" method="post"><button type="submit">로그아웃</button></form></div></div>
       </aside>
       <main>
         <header className="mobile-header"><button className="brand" onClick={() => setView("dashboard")}><span>기록</span>샘</button><select value={view} onChange={(e) => setView(e.target.value as View)}>{navItems.map((item) => <option value={item.id} key={item.id}>{item.label}</option>)}</select></header>

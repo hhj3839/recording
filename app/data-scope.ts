@@ -9,7 +9,7 @@ import {
   students as d1Students,
 } from "../db/schema";
 import { eq, insertRows, selectRows, upsertRows } from "../db/supabase";
-import { getChatGPTUser } from "./chatgpt-auth";
+import { getAuthUser } from "./supabase-auth";
 
 type SupabaseClassroom = {
   id: number;
@@ -96,26 +96,26 @@ async function migrateD1Data(ownerEmail: string, classId: number) {
 }
 
 export async function getDataScope() {
-  const user = await getChatGPTUser();
+  const user = await getAuthUser();
   if (!user) throw new AuthenticationRequiredError("로그인이 필요합니다.");
   const now = new Date().toISOString();
   await upsertRows("teachers", [{ email: user.email, display_name: user.displayName, created_at: now }], "email");
   let classroom = (await selectRows<SupabaseClassroom>("classrooms", {
     owner_email: eq(user.email),
-    school_year: eq(2026),
-    semester: eq(1),
-    grade: eq(3),
-    class_number: eq(5),
+    school_year: eq(user.schoolYear),
+    semester: eq(user.semester),
+    grade: eq(user.grade),
+    class_number: eq(user.classNumber),
     limit: 1,
   }))[0];
   if (!classroom) {
     classroom = (await upsertRows<SupabaseClassroom>("classrooms", [{
       owner_email: user.email,
-      school_name: "서울하늘초등학교",
-      school_year: 2026,
-      semester: 1,
-      grade: 3,
-      class_number: 5,
+      school_name: user.schoolName,
+      school_year: user.schoolYear,
+      semester: user.semester,
+      grade: user.grade,
+      class_number: user.classNumber,
       created_at: now,
     }], "owner_email,school_year,semester,grade,class_number"))[0];
   }
