@@ -151,6 +151,25 @@ button.secondary { color: #526171; border: 1px solid #dce1e6; background: #fff; 
 .behavior-table th:nth-child(4), .behavior-table td:nth-child(4) { width: auto; }
 .behavior-table textarea { min-height: 132px; }
 .behavior-table td:last-child small { display: block; text-align: right; margin-top: 4px; color: #8792a0; font-size: 8px; }
+.behavior-table tr.active-reference-row td { background: #f8fbff; }
+.behavior-reference { margin-top: 14px; }
+.reference-toggle { width: 100%; border: 1px solid #d7e1eb; background: #f8fafc; color: #34465a; border-radius: 9px; padding: 12px; text-align: left; font-size: 11px; font-weight: 800; }
+.reference-panel { margin-top: 10px; border: 1px solid #dfe6ed; border-radius: 10px; padding: 16px; background: #fff; }
+.reference-guide { display: flex; justify-content: space-between; gap: 16px; align-items: center; margin-bottom: 14px; }
+.reference-guide strong { font-size: 13px; color: #26394d; }
+.reference-guide p { margin: 4px 0 0; color: #7b8795; font-size: 9px; }
+.reference-guide > span { border-radius: 7px; background: #edf5ff; color: #326da9; padding: 7px 10px; font-size: 9px; font-weight: 800; }
+.reference-tabs { display: flex; flex-wrap: wrap; gap: 5px; margin-bottom: 15px; }
+.reference-tabs button { border: 1px solid #dce3ea; background: #fff; color: #687586; border-radius: 7px; padding: 7px 9px; font-size: 9px; font-weight: 700; }
+.reference-tabs button.active { border-color: #4383c4; background: #eaf4ff; color: #2f6da9; }
+.reference-groups { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+.reference-groups section { border-radius: 9px; background: #f2f8f5; padding: 12px; }
+.reference-groups section.growth { background: #fff7ed; }
+.reference-groups h3 { margin: 0 0 9px; color: #397256; font-size: 10px; }
+.reference-groups .growth h3 { color: #a66a28; }
+.reference-groups section > div { display: flex; flex-wrap: wrap; gap: 6px; }
+.reference-groups section button { border: 1px solid #cfe2d6; background: #fff; color: #3f6651; border-radius: 999px; padding: 6px 9px; font-size: 9px; }
+.reference-groups .growth button { border-color: #ecd7b8; color: #8a622e; }
 .review-head { display: flex; justify-content: space-between; align-items: center; padding-bottom: 18px; border-bottom: 1px solid #edf0f2; }
 .review-head > div { display: flex; gap: 11px; align-items: center; }
 .avatar.large { width: 43px; height: 43px; font-size: 14px; }
