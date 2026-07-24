@@ -125,11 +125,6 @@ function Assessments({ data, setData, plan, activeSubject, setActiveSubject, goC
 
   const changeSubject = (subject: string) => {
     setActiveSubject(subject);
-    const count = plan.filter((item) => item.subject === subject).length;
-    setData((current) => current.map((student) => ({
-      ...student,
-      assessments: Array.from({ length: count }, (_, index) => student.assessments[index] ?? "-"),
-    })));
     setSaved(false);
   };
   const cycle = (row: number, col: number) => {
@@ -161,63 +156,75 @@ function Assessments({ data, setData, plan, activeSubject, setActiveSubject, goC
   );
 }
 
-function Comments({ assessmentData, plan, activeSubject, generateSignal }: { assessmentData: AssessmentStudent[]; plan: AssessmentPlan[]; activeSubject: string; generateSignal: number }) {
+function Comments({ assessmentDataBySubject, plan, generateSignal }: { assessmentDataBySubject: Record<string, AssessmentStudent[]>; plan: AssessmentPlan[]; generateSignal: number }) {
   const [selected, setSelected] = useState(0);
+  const subjects = [...new Set(plan.map((item) => item.subject))];
+  const [selectedSubject, setSelectedSubject] = useState(subjects[0] ?? "국어");
   const [confirmed, setConfirmed] = useState(false);
-  const [comments, setComments] = useState<Record<number, string>>({});
+  const [comments, setComments] = useState<Record<string, string>>({});
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
-  const text = comments[selected] ?? "";
-  const setText = (value: string) => setComments((current) => ({ ...current, [selected]: value }));
+  const commentKey = `${students[selected].id}|${selectedSubject}`;
+  const text = comments[commentKey] ?? "";
+  const setText = (value: string) => setComments((current) => ({ ...current, [commentKey]: value }));
   const bytes = useMemo(() => new TextEncoder().encode(text).length, [text]);
   const person = students[selected];
-  const selectedAssessment = assessmentData[selected];
-  const generateComment = async () => {
+  const selectedAssessment = assessmentDataBySubject[selectedSubject]?.[selected] ?? { ...person, assessments: [] };
+  const visiblePlan = plan.filter((item) => item.subject === selectedSubject);
+  const generateAllComments = async () => {
     setLoading(true);
     setError("");
     setConfirmed(false);
     try {
-      const response = await fetch("/api/generate-comment", {
+      const scores = Object.fromEntries(Object.entries(assessmentDataBySubject).map(([subject, data]) => [
+        subject,
+        data.map((student) => ({ studentId: student.id, levels: student.assessments })),
+      ]));
+      const response = await fetch("/api/generate-all-comments", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ studentId: selectedAssessment.id, levels: selectedAssessment.assessments, plan: plan.filter((item) => item.subject === activeSubject) }),
+        body: JSON.stringify({ scores }),
       });
-      const result = await response.json() as { comment?: string; error?: string };
-      if (!response.ok || !result.comment) throw new Error(result.error || "교과 평어를 생성하지 못했습니다.");
-      setText(result.comment);
+      const result = await response.json() as { comments?: Array<{ studentId: number; subject: string; comment: string }>; error?: string };
+      if (!response.ok || !result.comments?.length) throw new Error(result.error || "전 과목 교과 평어를 생성하지 못했습니다.");
+      setComments((current) => ({
+        ...current,
+        ...Object.fromEntries(result.comments!.map((item) => [`${item.studentId}|${item.subject}`, item.comment])),
+      }));
     } catch (reason) {
-      setError(reason instanceof Error ? reason.message : "교과 평어를 생성하지 못했습니다.");
+      setError(reason instanceof Error ? reason.message : "전 과목 교과 평어를 생성하지 못했습니다.");
     } finally {
       setLoading(false);
     }
   };
 
   useEffect(() => {
-    if (generateSignal > 0) void generateComment();
+    if (generateSignal > 0) void generateAllComments();
     // 평가 수준 입력 화면에서 교과 평어 작성 버튼을 누를 때만 자동 실행함.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [generateSignal]);
 
   return (
     <section>
-      <div className="page-heading"><div><p className="eyebrow">AI DRAFT</p><h1>교과 평어 검토</h1><p>입력한 평가 수준을 바탕으로 AI가 작성한 문장을 검토해 주세요.</p></div><button className="secondary">학급 전체 생성</button></div>
+      <div className="page-heading"><div><p className="eyebrow">AI DRAFT</p><h1>전 과목 교과 평어 검토</h1><p>DB의 평가계획과 입력한 수준을 바탕으로 생성한 문장을 검토해 주세요.</p></div><button className="secondary" onClick={() => void generateAllComments()} disabled={loading}>{loading ? "전 과목 생성 중…" : "학급 전 과목 생성"}</button></div>
       <div className="review-layout">
         <aside className="student-list">
           <div className="student-list-head"><strong>3학년 5반</strong><span>5명</span></div>
-          {students.map((student, index) => <button className={selected === index ? "active" : ""} onClick={() => { setSelected(index); setConfirmed(false); setError(""); }} key={student.id}><span className="avatar">{student.name[0]}</span><span><b>{student.id}. {student.name}</b><small>{comments[index] ? "검토 중" : "미생성"}</small></span><i>›</i></button>)}
+          {students.map((student, index) => <button className={selected === index ? "active" : ""} onClick={() => { setSelected(index); setConfirmed(false); setError(""); }} key={student.id}><span className="avatar">{student.name[0]}</span><span><b>{student.id}. {student.name}</b><small>{subjects.some((subject) => comments[`${student.id}|${subject}`]) ? "검토 중" : "미생성"}</small></span><i>›</i></button>)}
         </aside>
         <div className="review-content">
-          <div className="review-head"><div><span className="avatar large">{person.name[0]}</span><div><h2>{person.name}</h2><p>{activeSubject} · 교과학습발달상황</p></div></div><span className={`status ${confirmed ? "done" : ""}`}>{confirmed ? "최종 확정" : "검토 필요"}</span></div>
+          <div className="review-head"><div><span className="avatar large">{person.name[0]}</span><div><h2>{person.name}</h2><p>{selectedSubject} · 교과학습발달상황</p></div></div><span className={`status ${confirmed ? "done" : ""}`}>{confirmed ? "최종 확정" : "검토 필요"}</span></div>
+          <div className="subject-tabs review-subject-tabs">{subjects.map((subject) => <button className={subject === selectedSubject ? "active" : ""} onClick={() => { setSelectedSubject(subject); setConfirmed(false); }} key={subject}>{subject}{comments[`${person.id}|${subject}`] ? " ✓" : ""}</button>)}</div>
           <div className="evidence">
-            <h3>평가 수준</h3><div className="evidence-grid">{plan.filter((item) => item.subject === activeSubject).map((item, index) => <p key={`${item.unit}-${item.domain}-${index}`}><span>{item.domain}</span><b className={`tag ${selectedAssessment.assessments[index] === "상" ? "high" : "middle"}`}>{selectedAssessment.assessments[index] ?? "-"}</b></p>)}</div>
+            <h3>평가 수준</h3><div className="evidence-grid">{visiblePlan.map((item, index) => <p key={`${item.unit}-${item.domain}-${index}`}><span>{item.domain}</span><b className={`tag ${selectedAssessment.assessments[index] === "상" ? "high" : "middle"}`}>{selectedAssessment.assessments[index] ?? "-"}</b></p>)}</div>
           </div>
           <div className="editor-card">
-            <div className="editor-title"><div><span className="spark">✦</span><strong>AI 생성 초안</strong><small>학생 이름을 제외한 평가 수준만 전송해요</small></div><button onClick={() => void generateComment()} disabled={loading}>{loading ? "생성 중…" : "↻ 다시 생성"}</button></div>
-            {loading ? <div className="comment-loading"><span>✦</span><p>평가 수준을 분석해 교과 평어를 작성하고 있어요.</p></div> : <textarea value={text} onChange={(e) => { setText(e.target.value); setConfirmed(false); }} placeholder="AI 생성 버튼을 누르면 교과 평어가 표시됩니다." />}
+            <div className="editor-title"><div><span className="spark">✦</span><strong>AI 생성 초안</strong><small>학생 이름을 제외한 평가 수준만 전송해요</small></div><button onClick={() => void generateAllComments()} disabled={loading}>{loading ? "생성 중…" : "↻ 전 과목 다시 생성"}</button></div>
+            {loading ? <div className="comment-loading"><span>✦</span><p>학생들의 전 과목 평가 수준을 분석하고 있어요.</p></div> : <textarea value={text} onChange={(e) => { setText(e.target.value); setConfirmed(false); }} placeholder="평가 수준이 입력된 과목의 평어가 표시됩니다." />}
             <div className="editor-meta"><span>{bytes} bytes</span>{text && <><span className="safe">✓ 종결어미 정상</span><span className="safe">✓ 학생 이름 미전송</span></>}</div>
           </div>
           {error && <p className="generation-error">! {error}</p>}
-          <div className="suggestions"><button disabled={!text} onClick={() => setText(text.slice(0, Math.max(65, text.length - 18)) + "함.")}>짧게</button><button disabled={!text} onClick={() => void generateComment()}>다른 표현으로 생성</button></div>
+          <div className="suggestions"><button disabled={!text} onClick={() => setText(text.slice(0, Math.max(65, text.length - 18)) + "함.")}>짧게</button><button disabled={!text || loading} onClick={() => void generateAllComments()}>다른 표현으로 생성</button></div>
           <div className="confirm-box"><label><input type="checkbox" checked={confirmed} onChange={(e) => setConfirmed(e.target.checked)} /> 입력한 평가 수준에 맞는 문장인지 확인했습니다.</label><button disabled={!confirmed}>{confirmed ? "확정 완료 ✓" : "최종 확정"}</button></div>
         </div>
       </div>
@@ -289,7 +296,9 @@ function Behavior() {
 
 export default function Home() {
   const [view, setView] = useState<View>("dashboard");
-  const [assessmentData, setAssessmentData] = useState<AssessmentStudent[]>(students.map((student) => ({ ...student, assessments: [...student.assessments] })));
+  const [assessmentDataBySubject, setAssessmentDataBySubject] = useState<Record<string, AssessmentStudent[]>>({
+    국어: students.map((student) => ({ ...student, assessments: [...student.assessments] })),
+  });
   const [generateSignal, setGenerateSignal] = useState(0);
   const [plan, setPlan] = useState<AssessmentPlan[]>(defaultPlan);
   const [activeSubject, setActiveSubject] = useState("국어");
@@ -303,7 +312,15 @@ export default function Home() {
         const firstSubject = result.plan[0].subject;
         const count = result.plan.filter((item) => item.subject === firstSubject).length;
         setActiveSubject(firstSubject);
-        setAssessmentData((current) => current.map((student) => ({ ...student, assessments: Array(count).fill("-") as Level[] })));
+        const subjects = [...new Set(result.plan.map((item) => item.subject))];
+        setAssessmentDataBySubject((current) => Object.fromEntries(subjects.map((subject) => {
+          const subjectCount = result.plan!.filter((item) => item.subject === subject).length;
+          const existing = current[subject];
+          return [subject, students.map((student, index) => ({
+            ...student,
+            assessments: Array.from({ length: subjectCount }, (_, levelIndex) => existing?.[index]?.assessments[levelIndex] ?? "-") as Level[],
+          }))];
+        })));
       } catch {
         // 배포 초기화 중에는 내장 기본 평가계획을 유지함.
       }
@@ -327,8 +344,8 @@ export default function Home() {
         <header className="mobile-header"><button className="brand" onClick={() => setView("dashboard")}><span>기록</span>샘</button><select value={view} onChange={(e) => setView(e.target.value as View)}>{navItems.map((item) => <option value={item.id} key={item.id}>{item.label}</option>)}</select></header>
         <div className="content">
           {view === "dashboard" && <Dashboard move={setView} />}
-          {view === "assessments" && <Assessments data={assessmentData} setData={setAssessmentData} plan={plan} activeSubject={activeSubject} setActiveSubject={setActiveSubject} goComments={openGeneratedComments} />}
-          {view === "comments" && <Comments assessmentData={assessmentData} plan={plan} activeSubject={activeSubject} generateSignal={generateSignal} />}
+          {view === "assessments" && <Assessments data={assessmentDataBySubject[activeSubject] ?? []} setData={(updater) => setAssessmentDataBySubject((current) => ({ ...current, [activeSubject]: typeof updater === "function" ? updater(current[activeSubject] ?? []) : updater }))} plan={plan} activeSubject={activeSubject} setActiveSubject={setActiveSubject} goComments={openGeneratedComments} />}
+          {view === "comments" && <Comments assessmentDataBySubject={assessmentDataBySubject} plan={plan} generateSignal={generateSignal} />}
           {view === "behavior" && <Behavior />}
         </div>
       </main>
