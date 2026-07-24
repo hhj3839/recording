@@ -17,6 +17,27 @@ export const assessmentPlans = sqliteTable("assessment_plans", {
   uniqueIndex("assessment_plans_content_idx").on(table.subject, table.unit, table.goal),
 ]);
 
+export const students = sqliteTable("students", {
+  id: integer("id").primaryKey({ autoIncrement: true }),
+  number: integer("number").notNull(),
+  name: text("name").notNull(),
+  active: integer("active", { mode: "boolean" }).notNull().default(true),
+  createdAt: text("created_at").notNull(),
+}, (table) => [
+  uniqueIndex("students_number_idx").on(table.number),
+]);
+
+export const assessmentLevels = sqliteTable("assessment_levels", {
+  id: integer("id").primaryKey({ autoIncrement: true }),
+  studentId: integer("student_id").notNull(),
+  subject: text("subject").notNull(),
+  assessmentIndex: integer("assessment_index").notNull(),
+  level: text("level").notNull(),
+  updatedAt: text("updated_at").notNull(),
+}, (table) => [
+  uniqueIndex("assessment_levels_student_subject_item_idx").on(table.studentId, table.subject, table.assessmentIndex),
+]);
+
 export const generatedComments = sqliteTable("generated_comments", {
   id: integer("id").primaryKey({ autoIncrement: true }),
   studentId: integer("student_id").notNull(),

@@ -153,7 +153,7 @@ function Dashboard({ move }: { move: (view: View) => void }) {
 
 type AssessmentStudent = (typeof students)[number] & { assessments: Level[] };
 
-function Assessments({ data, setData, plan, activeSubject, setActiveSubject, onAddStudent, onDeleteStudent }: {
+function Assessments({ data, setData, plan, activeSubject, setActiveSubject, onAddStudent, onDeleteStudent, onSave }: {
   data: AssessmentStudent[];
   setData: React.Dispatch<React.SetStateAction<AssessmentStudent[]>>;
   plan: AssessmentPlan[];
@@ -161,8 +161,10 @@ function Assessments({ data, setData, plan, activeSubject, setActiveSubject, onA
   setActiveSubject: (subject: string) => void;
   onAddStudent: () => void;
   onDeleteStudent: (id: number) => void;
+  onSave: () => Promise<void>;
 }) {
   const [saved, setSaved] = useState(false);
+  const [saving, setSaving] = useState(false);
   const subjects = [...new Set(plan.map((item) => item.subject))];
   const visiblePlan = plan.filter((item) => item.subject === activeSubject);
 
@@ -178,11 +180,20 @@ function Assessments({ data, setData, plan, activeSubject, setActiveSubject, onA
     }));
     setSaved(false);
   };
+  const save = async () => {
+    setSaving(true);
+    try {
+      await onSave();
+      setSaved(true);
+    } finally {
+      setSaving(false);
+    }
+  };
   return (
     <section>
       <div className="page-heading">
         <div><p className="eyebrow">{activeSubject} · 1학기</p><h1>평가 수준 입력</h1><p>셀을 눌러 학생별 성취 수준을 빠르게 입력하세요.</p></div>
-        <div className="heading-actions"><button className="secondary" onClick={onAddStudent}>＋ 학생 추가</button><button onClick={() => setSaved(true)}>{saved ? "저장됨 ✓" : "변경사항 저장"}</button></div>
+        <div className="heading-actions"><button className="secondary" onClick={onAddStudent}>＋ 학생 추가</button><button onClick={() => void save()} disabled={saving}>{saving ? "저장 중…" : saved ? "저장됨 ✓" : "변경사항 저장"}</button></div>
       </div>
       <div className="table-tools">
         <div className="subject-tabs">{subjects.map((subject) => <button className={subject === activeSubject ? "active" : ""} onClick={() => changeSubject(subject)} key={subject}>{subject}</button>)}</div>
@@ -270,6 +281,18 @@ function Comments({ assessmentDataBySubject, plan, roster }: { assessmentDataByS
       setLoading(false);
     }
   };
+  const saveComment = async (studentId: number, subject: string, comment: string) => {
+    try {
+      const response = await fetch("/api/generated-comments", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ studentId, subject, comment }),
+      });
+      if (!response.ok) throw new Error();
+    } catch {
+      setError("수정한 평어를 저장하지 못했습니다. 잠시 후 다시 시도해 주세요.");
+    }
+  };
 
   return (
     <section>
@@ -293,7 +316,7 @@ function Comments({ assessmentDataBySubject, plan, roster }: { assessmentDataByS
                 return <tr id={`comment-${student.id}`} key={student.id}>
                   <td>{student.id}</td>
                   <td><strong>{student.name}</strong><small>{text ? `${new TextEncoder().encode(text).length}B` : hasLevel ? "생성 대기" : "수준 미입력"}</small></td>
-                  <td><textarea value={text} onChange={(event) => { setComments((current) => ({ ...current, [key]: event.target.value })); setCopied(false); }} placeholder={hasLevel ? "AI 평어 생성 버튼을 누르면 결과가 표시됩니다." : "평가 수준이 입력되지 않았습니다."} /></td>
+                  <td><textarea value={text} onChange={(event) => { setComments((current) => ({ ...current, [key]: event.target.value })); setCopied(false); }} onBlur={(event) => void saveComment(student.id, selectedSubject, event.target.value)} placeholder={hasLevel ? "AI 평어 생성 버튼을 누르면 결과가 표시됩니다." : "평가 수준이 입력되지 않았습니다."} /></td>
                 </tr>;
               })}</tbody>
             </table>
@@ -372,6 +395,18 @@ function Behavior({ roster }: { roster: AssessmentStudent[] }) {
       setError("클립보드 복사 권한을 확인해 주세요.");
     }
   };
+  const saveRecord = async (studentId: number, record: { characteristic: string; behavior: string }) => {
+    try {
+      const response = await fetch("/api/student-behaviors", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ studentId, ...record }),
+      });
+      if (!response.ok) throw new Error();
+    } catch {
+      setError("수정한 행동특성 내용을 저장하지 못했습니다. 잠시 후 다시 시도해 주세요.");
+    }
+  };
   const formattedLastGeneratedAt = lastGeneratedAt
     ? new Intl.DateTimeFormat("ko-KR", { month: "numeric", day: "numeric", hour: "numeric", minute: "2-digit" }).format(new Date(lastGeneratedAt))
     : "";
@@ -392,7 +427,7 @@ function Behavior({ roster }: { roster: AssessmentStudent[] }) {
               <thead><tr><th>번호</th><th>이름</th><th>특성</th><th>행동특성</th></tr></thead>
               <tbody>{roster.map((student) => {
                 const record = records[student.id] ?? { characteristic: "", behavior: "" };
-                return <tr className={activeStudentId === student.id ? "active-reference-row" : ""} key={student.id}><td>{student.id}</td><td><strong>{student.name}</strong></td><td><textarea value={record.characteristic} onFocus={() => setActiveStudentId(student.id)} onChange={(event) => updateRecord(student.id, { characteristic: event.target.value })} placeholder="관찰한 행동과 변화 모습을 입력하세요." /></td><td><textarea value={record.behavior} onChange={(event) => updateRecord(student.id, { behavior: event.target.value })} placeholder={record.characteristic ? "AI 행특 생성 버튼을 누르면 결과가 표시됩니다." : "특성을 먼저 입력해 주세요."} /><small>{record.behavior ? `${new TextEncoder().encode(record.behavior).length} bytes` : ""}</small></td></tr>;
+                return <tr className={activeStudentId === student.id ? "active-reference-row" : ""} key={student.id}><td>{student.id}</td><td><strong>{student.name}</strong></td><td><textarea value={record.characteristic} onFocus={() => setActiveStudentId(student.id)} onChange={(event) => updateRecord(student.id, { characteristic: event.target.value })} onBlur={() => void saveRecord(student.id, records[student.id] ?? record)} placeholder="관찰한 행동과 변화 모습을 입력하세요." /></td><td><textarea value={record.behavior} onChange={(event) => updateRecord(student.id, { behavior: event.target.value })} onBlur={() => void saveRecord(student.id, records[student.id] ?? record)} placeholder={record.characteristic ? "AI 행특 생성 버튼을 누르면 결과가 표시됩니다." : "특성을 먼저 입력해 주세요."} /><small>{record.behavior ? `${new TextEncoder().encode(record.behavior).length} bytes` : ""}</small></td></tr>;
               })}</tbody>
             </table>
           </div>
@@ -420,42 +455,79 @@ export default function Home() {
   const [plan, setPlan] = useState<AssessmentPlan[]>(defaultPlan);
   const [activeSubject, setActiveSubject] = useState("국어");
   useEffect(() => {
-    const loadPlan = async () => {
+    const loadClassData = async () => {
       try {
-        const response = await fetch("/api/assessment-plan");
-        const result = await response.json() as { plan?: AssessmentPlan[] };
-        if (!response.ok || !result.plan?.length) return;
-        setPlan(result.plan);
-        const firstSubject = result.plan[0].subject;
-        const count = result.plan.filter((item) => item.subject === firstSubject).length;
+        const [planResponse, classResponse] = await Promise.all([fetch("/api/assessment-plan"), fetch("/api/class-data")]);
+        const planResult = await planResponse.json() as { plan?: AssessmentPlan[] };
+        const classResult = await classResponse.json() as {
+          students?: Array<{ id: number; number: number; name: string }>;
+          levels?: Array<{ studentId: number; subject: string; assessmentIndex: number; level: Level }>;
+        };
+        if (!planResponse.ok || !planResult.plan?.length) return;
+        const loadedPlan = planResult.plan;
+        const loadedRoster: AssessmentStudent[] = classResponse.ok && classResult.students?.length
+          ? classResult.students.map((student) => ({ id: student.id, name: student.name, assessments: [], status: "미생성", note: "" }))
+          : students.map((student) => withSampleLevels(student, 0, defaultPlan.length));
+        const savedLevels = new Map((classResult.levels ?? []).map((item) => [`${item.studentId}|${item.subject}|${item.assessmentIndex}`, item.level]));
+        setPlan(loadedPlan);
+        setRoster(loadedRoster);
+        const firstSubject = loadedPlan[0].subject;
         setActiveSubject(firstSubject);
-        const subjects = [...new Set(result.plan.map((item) => item.subject))];
-        setAssessmentDataBySubject(() => Object.fromEntries(subjects.map((subject, subjectIndex) => {
-          const subjectCount = result.plan!.filter((item) => item.subject === subject).length;
-          return [subject, roster.map((student) => withSampleLevels(student, subjectIndex, subjectCount))];
+        const subjects = [...new Set(loadedPlan.map((item) => item.subject))];
+        setAssessmentDataBySubject(Object.fromEntries(subjects.map((subject, subjectIndex) => {
+          const subjectCount = loadedPlan.filter((item) => item.subject === subject).length;
+          return [subject, loadedRoster.map((student) => ({
+            ...student,
+            assessments: Array.from({ length: subjectCount }, (_, assessmentIndex) =>
+              savedLevels.get(`${student.id}|${subject}|${assessmentIndex}`) ?? seededLevel(student.id, subjectIndex, assessmentIndex)),
+          }))];
         })));
       } catch {
         // 배포 초기화 중에는 내장 기본 평가계획을 유지함.
       }
     };
-    void loadPlan();
+    void loadClassData();
   }, []);
-  const addStudent = () => {
+  const addStudent = async () => {
     const name = window.prompt("추가할 학생 이름을 입력해 주세요.");
     if (!name?.trim()) return;
-    const id = roster.length ? Math.max(...roster.map((student) => student.id)) + 1 : 1;
-    const newStudent: AssessmentStudent = { id, name: name.trim(), assessments: [], status: "미생성", note: "" };
+    const number = roster.length ? Math.max(...roster.map((student) => student.id)) + 1 : 1;
+    const response = await fetch("/api/students", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ name: name.trim(), number }),
+    });
+    const result = await response.json() as { student?: { id: number; name: string }; error?: string };
+    if (!response.ok || !result.student) return window.alert(result.error || "학생을 추가하지 못했습니다.");
+    const newStudent: AssessmentStudent = { id: result.student.id, name: result.student.name, assessments: [], status: "미생성", note: "" };
     setRoster((current) => [...current, newStudent]);
     setAssessmentDataBySubject((current) => Object.fromEntries(Object.entries(current).map(([subject, data]) => [
       subject,
       [...data, { ...newStudent, assessments: Array(plan.filter((item) => item.subject === subject).length).fill("-") as Level[] }],
     ])));
   };
-  const deleteStudent = (id: number) => {
+  const deleteStudent = async (id: number) => {
     const student = roster.find((item) => item.id === id);
     if (!student || !window.confirm(`${student.name} 학생을 삭제할까요?`)) return;
+    const response = await fetch(`/api/students?id=${id}`, { method: "DELETE" });
+    if (!response.ok) return window.alert("학생을 삭제하지 못했습니다.");
     setRoster((current) => current.filter((item) => item.id !== id));
     setAssessmentDataBySubject((current) => Object.fromEntries(Object.entries(current).map(([subject, data]) => [subject, data.filter((item) => item.id !== id)])));
+  };
+  const saveAssessmentLevels = async () => {
+    const levels = Object.entries(assessmentDataBySubject).flatMap(([subject, data]) => data.flatMap((student) =>
+      student.assessments.map((level, assessmentIndex) => ({ studentId: student.id, subject, assessmentIndex, level })),
+    ));
+    const response = await fetch("/api/assessment-levels", {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ levels }),
+    });
+    if (!response.ok) {
+      const result = await response.json() as { error?: string };
+      window.alert(result.error || "평가수준을 저장하지 못했습니다.");
+      throw new Error("Assessment level save failed");
+    }
   };
   return (
     <div className="app-shell">
@@ -470,7 +542,7 @@ export default function Home() {
         <header className="mobile-header"><button className="brand" onClick={() => setView("dashboard")}><span>기록</span>샘</button><select value={view} onChange={(e) => setView(e.target.value as View)}>{navItems.map((item) => <option value={item.id} key={item.id}>{item.label}</option>)}</select></header>
         <div className="content">
           {view === "dashboard" && <Dashboard move={setView} />}
-          {view === "assessments" && <Assessments data={assessmentDataBySubject[activeSubject] ?? []} setData={(updater) => setAssessmentDataBySubject((current) => ({ ...current, [activeSubject]: typeof updater === "function" ? updater(current[activeSubject] ?? []) : updater }))} plan={plan} activeSubject={activeSubject} setActiveSubject={setActiveSubject} onAddStudent={addStudent} onDeleteStudent={deleteStudent} />}
+          {view === "assessments" && <Assessments data={assessmentDataBySubject[activeSubject] ?? []} setData={(updater) => setAssessmentDataBySubject((current) => ({ ...current, [activeSubject]: typeof updater === "function" ? updater(current[activeSubject] ?? []) : updater }))} plan={plan} activeSubject={activeSubject} setActiveSubject={setActiveSubject} onAddStudent={() => void addStudent()} onDeleteStudent={(id) => void deleteStudent(id)} onSave={saveAssessmentLevels} />}
           {view === "comments" && <Comments assessmentDataBySubject={assessmentDataBySubject} plan={plan} roster={roster} />}
           {view === "behavior" && <Behavior roster={roster} />}
         </div>
