@@ -84,6 +84,8 @@ h1, h2, h3, p { margin-top: 0; }
 .page-heading button, .heading-actions button, .bottom-action button, .confirm-box button, .confirm-result { border: 0; background: var(--navy); color: white; border-radius: 8px; padding: 11px 16px; font-size: 12px; font-weight: 750; }
 button.secondary { color: #526171; border: 1px solid #dce1e6; background: #fff; }
 .heading-actions { display: flex; gap: 8px; }
+.ai-generate-actions { display: flex; align-items: center; gap: 10px; }
+.ai-generate-actions > span { color: #7b8592; font-size: 9px; white-space: nowrap; }
 .table-tools { display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; }
 .subject-tabs { display: flex; gap: 4px; background: #e9edf2; padding: 4px; border-radius: 8px; }
 .subject-tabs button { border: 0; background: transparent; color: #7c8795; padding: 7px 16px; border-radius: 6px; font-size: 11px; font-weight: 700; }

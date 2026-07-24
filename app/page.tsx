@@ -164,6 +164,13 @@ function Comments({ assessmentDataBySubject, plan }: { assessmentDataBySubject: 
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const [copied, setCopied] = useState(false);
+  const [lastGeneratedAt, setLastGeneratedAt] = useState("");
+  useEffect(() => {
+    setLastGeneratedAt(window.localStorage.getItem("giroksam:last-generated-at") ?? "");
+  }, []);
+  const formattedLastGeneratedAt = lastGeneratedAt
+    ? new Intl.DateTimeFormat("ko-KR", { month: "numeric", day: "numeric", hour: "numeric", minute: "2-digit" }).format(new Date(lastGeneratedAt))
+    : "";
   const copySubjectComments = async () => {
     const text = students.map((student) => comments[`${student.id}|${selectedSubject}`] ?? "").join("\n");
     try {
@@ -194,6 +201,9 @@ function Comments({ assessmentDataBySubject, plan }: { assessmentDataBySubject: 
         ...current,
         ...Object.fromEntries(result.comments!.map((item) => [`${item.studentId}|${item.subject}`, item.comment])),
       }));
+      const generatedAt = new Date().toISOString();
+      setLastGeneratedAt(generatedAt);
+      window.localStorage.setItem("giroksam:last-generated-at", generatedAt);
       setCopied(false);
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : "전 과목 교과 평어를 생성하지 못했습니다.");
@@ -204,7 +214,7 @@ function Comments({ assessmentDataBySubject, plan }: { assessmentDataBySubject: 
 
   return (
     <section>
-      <div className="page-heading"><div><p className="eyebrow">AI DRAFT</p><h1>전 과목 교과 평어</h1><p>과목을 선택하면 해당 과목의 학생별 평어를 한 화면에서 확인할 수 있습니다.</p></div><button onClick={() => void generateAllComments()} disabled={loading}>{loading ? "전 과목 생성 중…" : "✦ AI 평어 생성"}</button></div>
+      <div className="page-heading"><div><p className="eyebrow">AI DRAFT</p><h1>전 과목 교과 평어</h1><p>과목을 선택하면 해당 과목의 학생별 평어를 한 화면에서 확인할 수 있습니다.</p></div><div className="ai-generate-actions">{formattedLastGeneratedAt && <span>마지막 사용 {formattedLastGeneratedAt}</span>}<button onClick={() => void generateAllComments()} disabled={loading}>{loading ? "전 과목 생성 중…" : "✦ AI 평어 생성"}</button></div></div>
       <div className="review-layout">
         <aside className="student-list">
           <div className="student-list-head"><strong>3학년 5반</strong><span>5명</span></div>
