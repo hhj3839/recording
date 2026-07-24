@@ -111,12 +111,14 @@ function Dashboard({ move }: { move: (view: View) => void }) {
 
 type AssessmentStudent = (typeof students)[number] & { assessments: Level[] };
 
-function Assessments({ data, setData, plan, activeSubject, setActiveSubject }: {
+function Assessments({ data, setData, plan, activeSubject, setActiveSubject, onAddStudent, onDeleteStudent }: {
   data: AssessmentStudent[];
   setData: React.Dispatch<React.SetStateAction<AssessmentStudent[]>>;
   plan: AssessmentPlan[];
   activeSubject: string;
   setActiveSubject: (subject: string) => void;
+  onAddStudent: () => void;
+  onDeleteStudent: (id: number) => void;
 }) {
   const [saved, setSaved] = useState(false);
   const subjects = [...new Set(plan.map((item) => item.subject))];
@@ -138,7 +140,7 @@ function Assessments({ data, setData, plan, activeSubject, setActiveSubject }: {
     <section>
       <div className="page-heading">
         <div><p className="eyebrow">{activeSubject} · 1학기</p><h1>평가 수준 입력</h1><p>셀을 눌러 학생별 성취 수준을 빠르게 입력하세요.</p></div>
-        <div className="heading-actions"><button onClick={() => setSaved(true)}>{saved ? "저장됨 ✓" : "변경사항 저장"}</button></div>
+        <div className="heading-actions"><button className="secondary" onClick={onAddStudent}>＋ 학생 추가</button><button onClick={() => setSaved(true)}>{saved ? "저장됨 ✓" : "변경사항 저장"}</button></div>
       </div>
       <div className="table-tools">
         <div className="subject-tabs">{subjects.map((subject) => <button className={subject === activeSubject ? "active" : ""} onClick={() => changeSubject(subject)} key={subject}>{subject}</button>)}</div>
@@ -146,8 +148,8 @@ function Assessments({ data, setData, plan, activeSubject, setActiveSubject }: {
       </div>
       <div className="assessment-wrap">
         <table className="assessment-table">
-          <thead><tr><th>번호</th><th>학생</th>{visiblePlan.map((item, index) => <th key={`${item.unit}-${item.domain}-${index}`} title={item.goal}><b>{item.unit}</b><small>{item.domain}</small></th>)}</tr></thead>
-          <tbody>{data.map((student, row) => <tr key={student.id}><td>{student.id}</td><td><strong>{student.name}</strong></td>{student.assessments.map((level, col) => <td key={col}><button aria-label={`${student.name} ${col + 1}단원 수준 ${level}`} className={`level-button level-${level}`} onClick={() => cycle(row, col)}>{level}</button></td>)}</tr>)}</tbody>
+          <thead><tr><th>번호</th><th>학생</th>{visiblePlan.map((item, index) => <th key={`${item.unit}-${item.domain}-${index}`} title={item.goal}><b>{item.unit}</b><small>{item.domain}</small></th>)}<th>관리</th></tr></thead>
+          <tbody>{data.map((student, row) => <tr key={student.id}><td>{student.id}</td><td><strong>{student.name}</strong></td>{student.assessments.map((level, col) => <td key={col}><button aria-label={`${student.name} ${col + 1}단원 수준 ${level}`} className={`level-button level-${level}`} onClick={() => cycle(row, col)}>{level}</button></td>)}<td><button className="delete-student" onClick={() => onDeleteStudent(student.id)} aria-label={`${student.name} 삭제`}>삭제</button></td></tr>)}</tbody>
         </table>
       </div>
       <div className="bottom-action"><span>입력 완료 <strong>{data.reduce((count, student) => count + student.assessments.filter((level) => level !== "-").length, 0)} / {data.length * visiblePlan.length}</strong></span></div>
@@ -155,11 +157,10 @@ function Assessments({ data, setData, plan, activeSubject, setActiveSubject }: {
   );
 }
 
-function Comments({ assessmentDataBySubject, plan }: { assessmentDataBySubject: Record<string, AssessmentStudent[]>; plan: AssessmentPlan[] }) {
+function Comments({ assessmentDataBySubject, plan, roster }: { assessmentDataBySubject: Record<string, AssessmentStudent[]>; plan: AssessmentPlan[]; roster: AssessmentStudent[] }) {
   const subjects = [...new Set(plan.map((item) => item.subject))];
   const [selectedSubject, setSelectedSubject] = useState(subjects[0] ?? "국어");
   const [comments, setComments] = useState<Record<string, string>>({});
-  const [confirmed, setConfirmed] = useState<Record<string, boolean>>({});
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const [copied, setCopied] = useState(false);
@@ -171,7 +172,7 @@ function Comments({ assessmentDataBySubject, plan }: { assessmentDataBySubject: 
     ? new Intl.DateTimeFormat("ko-KR", { month: "numeric", day: "numeric", hour: "numeric", minute: "2-digit" }).format(new Date(lastGeneratedAt))
     : "";
   const copySubjectComments = async () => {
-    const text = students.map((student) => comments[`${student.id}|${selectedSubject}`] ?? "").join("\n");
+    const text = roster.map((student) => comments[`${student.id}|${selectedSubject}`] ?? "").join("\n");
     try {
       await navigator.clipboard.writeText(text);
       setCopied(true);
@@ -183,7 +184,6 @@ function Comments({ assessmentDataBySubject, plan }: { assessmentDataBySubject: 
   const generateAllComments = async () => {
     setLoading(true);
     setError("");
-    setConfirmed({});
     try {
       const scores = Object.fromEntries(Object.entries(assessmentDataBySubject).map(([subject, data]) => [
         subject,
@@ -217,23 +217,23 @@ function Comments({ assessmentDataBySubject, plan }: { assessmentDataBySubject: 
       <div className="review-layout comments-review-layout">
         <div className="review-content">
           <div className="comments-toolbar">
-            <div className="subject-tabs review-subject-tabs">{subjects.map((subject) => <button className={subject === selectedSubject ? "active" : ""} onClick={() => { setSelectedSubject(subject); setCopied(false); }} key={subject}>{subject}<small>{students.filter((student) => comments[`${student.id}|${subject}`]).length}/{students.length}</small></button>)}</div>
-            <button className="copy-comments" onClick={() => void copySubjectComments()} disabled={!students.some((student) => comments[`${student.id}|${selectedSubject}`])}>{copied ? "복사됨 ✓" : "평어만 복사하기"}</button>
+            <div className="subject-tabs review-subject-tabs">{subjects.map((subject) => <button className={subject === selectedSubject ? "active" : ""} onClick={() => { setSelectedSubject(subject); setCopied(false); }} key={subject}>{subject}<small>{roster.filter((student) => comments[`${student.id}|${subject}`]).length}/{roster.length}</small></button>)}</div>
+            <button className="copy-comments" onClick={() => void copySubjectComments()} disabled={!roster.some((student) => comments[`${student.id}|${selectedSubject}`])}>{copied ? "복사됨 ✓" : "평어만 복사하기"}</button>
           </div>
           {error && <p className="generation-error">! {error}</p>}
           {loading && <div className="comment-loading class-loading"><span>✦</span><p>모든 학생의 전 과목 평어를 생성하고 있어요.</p></div>}
           <div className="comments-table-wrap">
             <table className="comments-table">
               <thead><tr><th>번호</th><th>이름</th><th>평어</th></tr></thead>
-              <tbody>{students.map((student, index) => {
+              <tbody>{roster.map((student, index) => {
                 const key = `${student.id}|${selectedSubject}`;
                 const text = comments[key] ?? "";
                 const assessment = assessmentDataBySubject[selectedSubject]?.[index];
                 const hasLevel = assessment?.assessments.some((level) => level !== "-");
                 return <tr id={`comment-${student.id}`} key={student.id}>
                   <td>{student.id}</td>
-                  <td><strong>{student.name}</strong><small>{confirmed[key] ? "확정" : text ? `${new TextEncoder().encode(text).length}B` : hasLevel ? "생성 대기" : "수준 미입력"}</small></td>
-                  <td><textarea value={text} onChange={(event) => { setComments((current) => ({ ...current, [key]: event.target.value })); setConfirmed((current) => ({ ...current, [key]: false })); setCopied(false); }} placeholder={hasLevel ? "AI 평어 생성 버튼을 누르면 결과가 표시됩니다." : "평가 수준이 입력되지 않았습니다."} /><label className="table-confirm"><input type="checkbox" checked={Boolean(confirmed[key])} disabled={!text} onChange={(event) => setConfirmed((current) => ({ ...current, [key]: event.target.checked }))} /> 확인 완료</label></td>
+                  <td><strong>{student.name}</strong><small>{text ? `${new TextEncoder().encode(text).length}B` : hasLevel ? "생성 대기" : "수준 미입력"}</small></td>
+                  <td><textarea value={text} onChange={(event) => { setComments((current) => ({ ...current, [key]: event.target.value })); setCopied(false); }} placeholder={hasLevel ? "AI 평어 생성 버튼을 누르면 결과가 표시됩니다." : "평가 수준이 입력되지 않았습니다."} /></td>
                 </tr>;
               })}</tbody>
             </table>
@@ -308,6 +308,7 @@ function Behavior() {
 
 export default function Home() {
   const [view, setView] = useState<View>("dashboard");
+  const [roster, setRoster] = useState<AssessmentStudent[]>(students.map((student) => ({ ...student, assessments: [...student.assessments] })));
   const [assessmentDataBySubject, setAssessmentDataBySubject] = useState<Record<string, AssessmentStudent[]>>({
     국어: students.map((student) => ({ ...student, assessments: [...student.assessments] })),
   });
@@ -327,9 +328,9 @@ export default function Home() {
         setAssessmentDataBySubject((current) => Object.fromEntries(subjects.map((subject) => {
           const subjectCount = result.plan!.filter((item) => item.subject === subject).length;
           const existing = current[subject];
-          return [subject, students.map((student, index) => ({
+          return [subject, roster.map((student, index) => ({
             ...student,
-            assessments: Array.from({ length: subjectCount }, (_, levelIndex) => existing?.[index]?.assessments[levelIndex] ?? "-") as Level[],
+            assessments: Array.from({ length: subjectCount }, (_, levelIndex) => existing?.[index]?.assessments[levelIndex] ?? student.assessments[levelIndex % student.assessments.length] ?? "중") as Level[],
           }))];
         })));
       } catch {
@@ -338,6 +339,23 @@ export default function Home() {
     };
     void loadPlan();
   }, []);
+  const addStudent = () => {
+    const name = window.prompt("추가할 학생 이름을 입력해 주세요.");
+    if (!name?.trim()) return;
+    const id = roster.length ? Math.max(...roster.map((student) => student.id)) + 1 : 1;
+    const newStudent: AssessmentStudent = { id, name: name.trim(), assessments: [], status: "미생성", note: "" };
+    setRoster((current) => [...current, newStudent]);
+    setAssessmentDataBySubject((current) => Object.fromEntries(Object.entries(current).map(([subject, data]) => [
+      subject,
+      [...data, { ...newStudent, assessments: Array(plan.filter((item) => item.subject === subject).length).fill("-") as Level[] }],
+    ])));
+  };
+  const deleteStudent = (id: number) => {
+    const student = roster.find((item) => item.id === id);
+    if (!student || !window.confirm(`${student.name} 학생을 삭제할까요?`)) return;
+    setRoster((current) => current.filter((item) => item.id !== id));
+    setAssessmentDataBySubject((current) => Object.fromEntries(Object.entries(current).map(([subject, data]) => [subject, data.filter((item) => item.id !== id)])));
+  };
   return (
     <div className="app-shell">
       <aside className="sidebar">
@@ -351,8 +369,8 @@ export default function Home() {
         <header className="mobile-header"><button className="brand" onClick={() => setView("dashboard")}><span>기록</span>샘</button><select value={view} onChange={(e) => setView(e.target.value as View)}>{navItems.map((item) => <option value={item.id} key={item.id}>{item.label}</option>)}</select></header>
         <div className="content">
           {view === "dashboard" && <Dashboard move={setView} />}
-          {view === "assessments" && <Assessments data={assessmentDataBySubject[activeSubject] ?? []} setData={(updater) => setAssessmentDataBySubject((current) => ({ ...current, [activeSubject]: typeof updater === "function" ? updater(current[activeSubject] ?? []) : updater }))} plan={plan} activeSubject={activeSubject} setActiveSubject={setActiveSubject} />}
-          {view === "comments" && <Comments assessmentDataBySubject={assessmentDataBySubject} plan={plan} />}
+          {view === "assessments" && <Assessments data={assessmentDataBySubject[activeSubject] ?? []} setData={(updater) => setAssessmentDataBySubject((current) => ({ ...current, [activeSubject]: typeof updater === "function" ? updater(current[activeSubject] ?? []) : updater }))} plan={plan} activeSubject={activeSubject} setActiveSubject={setActiveSubject} onAddStudent={addStudent} onDeleteStudent={deleteStudent} />}
+          {view === "comments" && <Comments assessmentDataBySubject={assessmentDataBySubject} plan={plan} roster={roster} />}
           {view === "behavior" && <Behavior />}
         </div>
       </main>
