@@ -1,18 +1,17 @@
-import { and, asc, eq } from "drizzle-orm";
-import { assessmentLevels, students } from "../../../db/schema";
+import { eq, selectRows } from "../../../db/supabase";
 import { dataError, getDataScope } from "../../data-scope";
 
 export async function GET() {
   try {
-    const { db, user, classId, classroom } = await getDataScope();
+    const { user, classId, classroom } = await getDataScope();
     const [studentRows, levelRows] = await Promise.all([
-      db.select().from(students).where(and(eq(students.ownerEmail, user.email), eq(students.classId, classId), eq(students.active, true))).orderBy(asc(students.number)),
-      db.select().from(assessmentLevels).where(and(eq(assessmentLevels.ownerEmail, user.email), eq(assessmentLevels.classId, classId))).orderBy(asc(assessmentLevels.studentId), asc(assessmentLevels.subject), asc(assessmentLevels.assessmentIndex)),
+      selectRows<Record<string, string | number | boolean>>("students", { owner_email: eq(user.email), class_id: eq(classId), active: eq(true), order: "number.asc" }),
+      selectRows<Record<string, string | number>>("assessment_levels", { owner_email: eq(user.email), class_id: eq(classId), order: "student_id.asc,subject.asc,assessment_index.asc" }),
     ]);
     return Response.json({
       students: studentRows.map((student) => ({ id: student.id, number: student.number, name: student.name })),
-      levels: levelRows.map(({ studentId, subject, assessmentIndex, level }) => ({ studentId, subject, assessmentIndex, level })),
-      classroom: { schoolName: classroom.schoolName, schoolYear: classroom.schoolYear, semester: classroom.semester, grade: classroom.grade, classNumber: classroom.classNumber },
+      levels: levelRows.map((row) => ({ studentId: row.student_id, subject: row.subject, assessmentIndex: row.assessment_index, level: row.level })),
+      classroom: { schoolName: classroom.school_name, schoolYear: classroom.school_year, semester: classroom.semester, grade: classroom.grade, classNumber: classroom.class_number },
       user: { displayName: user.displayName },
     });
   } catch (error) {

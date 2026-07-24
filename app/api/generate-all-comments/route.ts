@@ -1,5 +1,4 @@
-import { and, asc, eq } from "drizzle-orm";
-import { assessmentPlans, generatedComments } from "../../../db/schema";
+import { eq, selectRows, upsertRows } from "../../../db/supabase";
 import { dataError, getDataScope } from "../../data-scope";
 
 type Level = "상" | "중" | "하" | "-";
@@ -20,8 +19,14 @@ export async function POST(request: Request) {
     if (!body.scores || typeof body.scores !== "object" || Array.isArray(body.scores)) {
       return Response.json({ error: "평가 수준을 다시 확인해 주세요." }, { status: 400 });
     }
-    const { db, user, classId } = await getDataScope();
-    const plan = await db.select().from(assessmentPlans).where(and(eq(assessmentPlans.ownerEmail, user.email), eq(assessmentPlans.classId, classId))).orderBy(asc(assessmentPlans.sortOrder));
+    const { user, classId } = await getDataScope();
+    const rows = await selectRows<Record<string, string | number>>("assessment_plans", {
+      owner_email: eq(user.email), class_id: eq(classId), order: "sort_order.asc",
+    });
+    const plan = rows.map((row) => ({
+      subject: String(row.subject), unit: String(row.unit), goal: String(row.goal), domain: String(row.domain),
+      perspective: String(row.perspective), high: String(row.high), middle: String(row.middle), low: String(row.low),
+    }));
     const scores = body.scores as Record<string, ScoreStudent[]>;
     const evidence: Array<{ studentId: number; subject: string; items: string[] }> = [];
 
@@ -77,12 +82,14 @@ export async function POST(request: Request) {
     }) : [];
     if (!comments.length) return Response.json({ error: "AI가 평어를 반환하지 않았습니다." }, { status: 502 });
     const updatedAt = new Date().toISOString();
-    await Promise.all(comments.map((item) => db.insert(generatedComments)
-      .values({ ...item, updatedAt, ownerEmail: user.email, classId })
-      .onConflictDoUpdate({
-        target: [generatedComments.classId, generatedComments.studentId, generatedComments.subject],
-        set: { comment: item.comment, updatedAt },
-      })));
+    await upsertRows("generated_comments", comments.map((item) => ({
+      student_id: item.studentId,
+      subject: item.subject,
+      comment: item.comment,
+      updated_at: updatedAt,
+      owner_email: user.email,
+      class_id: classId,
+    })), "class_id,student_id,subject");
     return Response.json({ comments });
   } catch (error) {
     return dataError(error, "전 과목 교과 평어 생성 중 오류가 발생했습니다.");

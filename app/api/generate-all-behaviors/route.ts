@@ -1,4 +1,4 @@
-import { studentBehaviors } from "../../../db/schema";
+import { upsertRows } from "../../../db/supabase";
 import { dataError, getDataScope } from "../../data-scope";
 
 function extractOutputText(payload: unknown): string {
@@ -12,7 +12,7 @@ function extractOutputText(payload: unknown): string {
 
 export async function POST(request: Request) {
   try {
-    const { db, user, classId } = await getDataScope();
+    const { user, classId } = await getDataScope();
     const body = await request.json() as { students?: unknown };
     if (!Array.isArray(body.students)) return Response.json({ error: "학생 특성을 다시 확인해 주세요." }, { status: 400 });
     const inputs = body.students.flatMap((item) => {
@@ -52,11 +52,14 @@ export async function POST(request: Request) {
     }) : [];
     if (!behaviors.length) return Response.json({ error: "AI가 행동특성을 반환하지 않았습니다." }, { status: 502 });
     const updatedAt = new Date().toISOString();
-    await Promise.all(behaviors.map((item) => db.insert(studentBehaviors).values({ ...item, updatedAt, ownerEmail: user.email, classId })
-      .onConflictDoUpdate({
-        target: [studentBehaviors.classId, studentBehaviors.studentId],
-        set: { characteristic: item.characteristic, behavior: item.behavior, updatedAt },
-      })));
+    await upsertRows("student_behaviors", behaviors.map((item) => ({
+      student_id: item.studentId,
+      characteristic: item.characteristic,
+      behavior: item.behavior,
+      updated_at: updatedAt,
+      owner_email: user.email,
+      class_id: classId,
+    })), "class_id,student_id");
     return Response.json({ behaviors, updatedAt });
   } catch (error) {
     return dataError(error, "행동특성 일괄 생성 중 오류가 발생했습니다.");

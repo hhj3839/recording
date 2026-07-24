@@ -1,18 +1,19 @@
-import { and, asc, eq } from "drizzle-orm";
-import { assessmentPlans } from "../../../db/schema";
+import { eq, selectRows } from "../../../db/supabase";
 import { dataError, getDataScope } from "../../data-scope";
 
 export async function GET() {
   try {
-    const { db, user, classId } = await getDataScope();
-    const rows = await db.select().from(assessmentPlans).where(and(eq(assessmentPlans.ownerEmail, user.email), eq(assessmentPlans.classId, classId))).orderBy(asc(assessmentPlans.sortOrder));
+    const { user, classId } = await getDataScope();
+    const rows = await selectRows<Record<string, string | number>>("assessment_plans", {
+      owner_email: eq(user.email), class_id: eq(classId), order: "sort_order.asc",
+    });
     return Response.json({
       plan: rows.map((row) => ({
         subject: row.subject,
         unit: row.unit,
         goal: row.goal,
         domain: row.domain,
-        type: row.assessmentType,
+        type: row.assessment_type,
         perspective: row.perspective,
         high: row.high,
         middle: row.middle,
