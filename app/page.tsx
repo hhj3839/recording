@@ -62,6 +62,17 @@ const students = [
   { id: 25, name: "노가은", assessments: ["-", "-", "-"] as Level[], status: "미생성", note: "" },
 ];
 
+const seededLevel = (studentId: number, subjectIndex: number, assessmentIndex: number): Level => {
+  const levels: Level[] = ["상", "중", "하"];
+  const mixed = (studentId * 17 + subjectIndex * 11 + assessmentIndex * 7 + studentId * assessmentIndex) % levels.length;
+  return levels[mixed];
+};
+
+const withSampleLevels = (student: (typeof students)[number], subjectIndex: number, count: number): AssessmentStudent => ({
+  ...student,
+  assessments: Array.from({ length: count }, (_, assessmentIndex) => seededLevel(student.id, subjectIndex, assessmentIndex)),
+});
+
 const navItems: { id: View; label: string; icon: string }[] = [
   { id: "dashboard", label: "대시보드", icon: "⌂" },
   { id: "assessments", label: "평가 수준 입력", icon: "▦" },
@@ -402,9 +413,9 @@ function Behavior({ roster }: { roster: AssessmentStudent[] }) {
 
 export default function Home() {
   const [view, setView] = useState<View>("dashboard");
-  const [roster, setRoster] = useState<AssessmentStudent[]>(students.map((student) => ({ ...student, assessments: [...student.assessments] })));
+  const [roster, setRoster] = useState<AssessmentStudent[]>(students.map((student) => withSampleLevels(student, 0, defaultPlan.length)));
   const [assessmentDataBySubject, setAssessmentDataBySubject] = useState<Record<string, AssessmentStudent[]>>({
-    국어: students.map((student) => ({ ...student, assessments: [...student.assessments] })),
+    국어: students.map((student) => withSampleLevels(student, 0, defaultPlan.length)),
   });
   const [plan, setPlan] = useState<AssessmentPlan[]>(defaultPlan);
   const [activeSubject, setActiveSubject] = useState("국어");
@@ -419,13 +430,9 @@ export default function Home() {
         const count = result.plan.filter((item) => item.subject === firstSubject).length;
         setActiveSubject(firstSubject);
         const subjects = [...new Set(result.plan.map((item) => item.subject))];
-        setAssessmentDataBySubject((current) => Object.fromEntries(subjects.map((subject) => {
+        setAssessmentDataBySubject(() => Object.fromEntries(subjects.map((subject, subjectIndex) => {
           const subjectCount = result.plan!.filter((item) => item.subject === subject).length;
-          const existing = current[subject];
-          return [subject, roster.map((student, index) => ({
-            ...student,
-            assessments: Array.from({ length: subjectCount }, (_, levelIndex) => existing?.[index]?.assessments[levelIndex] ?? student.assessments[levelIndex % student.assessments.length] ?? "중") as Level[],
-          }))];
+          return [subject, roster.map((student) => withSampleLevels(student, subjectIndex, subjectCount))];
         })));
       } catch {
         // 배포 초기화 중에는 내장 기본 평가계획을 유지함.
