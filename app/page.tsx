@@ -181,7 +181,7 @@ function Comments({ assessmentData, generateSignal }: { assessmentData: Assessme
           </div>
           {error && <p className="generation-error">! {error}</p>}
           <div className="suggestions"><button disabled={!text} onClick={() => setText(text.slice(0, Math.max(65, text.length - 18)) + "함.")}>짧게</button><button disabled={!text} onClick={() => void generateComment()}>다른 표현으로 생성</button></div>
-          <div className="confirm-box"><label><input type="checkbox" checked={confirmed} onChange={(e) => setConfirmed(e.target.checked)} /> 평가 결과와 관찰 사실에 맞는 문장인지 확인했습니다.</label><button disabled={!confirmed}>{confirmed ? "확정 완료 ✓" : "최종 확정"}</button></div>
+          <div className="confirm-box"><label><input type="checkbox" checked={confirmed} onChange={(e) => setConfirmed(e.target.checked)} /> 입력한 평가 수준에 맞는 문장인지 확인했습니다.</label><button disabled={!confirmed}>{confirmed ? "확정 완료 ✓" : "최종 확정"}</button></div>
         </div>
       </div>
     </section>
