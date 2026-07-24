@@ -109,7 +109,7 @@ export async function getDataScope() {
     limit: 1,
   }))[0];
   if (!classroom) {
-    classroom = (await insertRows<SupabaseClassroom>("classrooms", [{
+    classroom = (await upsertRows<SupabaseClassroom>("classrooms", [{
       owner_email: user.email,
       school_name: "서울하늘초등학교",
       school_year: 2026,
@@ -117,9 +117,13 @@ export async function getDataScope() {
       grade: 3,
       class_number: 5,
       created_at: now,
-    }]))[0];
-    await migrateD1Data(user.email, classroom.id);
+    }], "owner_email,school_year,semester,grade,class_number"))[0];
   }
+  const [plans, students] = await Promise.all([
+    selectRows<{ id: number }>("assessment_plans", { class_id: eq(classroom.id), owner_email: eq(user.email), limit: 1 }),
+    selectRows<{ id: number }>("students", { class_id: eq(classroom.id), owner_email: eq(user.email), limit: 1 }),
+  ]);
+  if (!plans.length || !students.length) await migrateD1Data(user.email, classroom.id);
   return { user, classId: classroom.id, classroom };
 }
 
