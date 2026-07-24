@@ -1,11 +1,13 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-async function render() {
+async function render(authenticated = true) {
   const workerUrl = new URL("../dist/server/index.js", import.meta.url);
   workerUrl.searchParams.set("test", `${process.pid}-${Date.now()}`);
   const { default: worker } = await import(workerUrl.href);
-  return worker.fetch(new Request("http://localhost/", { headers: { accept: "text/html" } }), {
+  const headers = { accept: "text/html" };
+  if (authenticated) headers["oai-authenticated-user-email"] = "teacher@example.com";
+  return worker.fetch(new Request("http://localhost/", { headers }), {
     ASSETS: { fetch: async () => new Response("Not found", { status: 404 }) },
   }, { waitUntil() {}, passThroughOnException() {} });
 }
@@ -19,4 +21,10 @@ test("renders the 기록샘 application shell", async () => {
   assert.match(html, /평가 수준 입력/);
   assert.match(html, /학생 정보는 안전하게 보호됩니다/);
   assert.doesNotMatch(html, /codex-preview|react-loading-skeleton/);
+});
+
+test("redirects unauthenticated users to ChatGPT sign-in", async () => {
+  const response = await render(false);
+  assert.equal(response.status, 307);
+  assert.match(response.headers.get("location") ?? "", /\/signin-with-chatgpt\?/);
 });

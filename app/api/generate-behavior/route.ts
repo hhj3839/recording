@@ -1,3 +1,5 @@
+import { dataError, getDataScope } from "../../data-scope";
+
 function extractOutputText(payload: unknown): string {
   if (!payload || typeof payload !== "object") return "";
   const response = payload as { output_text?: unknown; output?: Array<{ content?: Array<{ type?: string; text?: string }> }> };
@@ -9,6 +11,7 @@ function extractOutputText(payload: unknown): string {
 
 export async function POST(request: Request) {
   try {
+    await getDataScope();
     const body = await request.json() as { observation?: unknown };
     const observation = typeof body.observation === "string" ? body.observation.trim().slice(0, 4000) : "";
     if (!observation) return Response.json({ error: "관찰 사실을 입력해 주세요." }, { status: 400 });
@@ -35,7 +38,6 @@ export async function POST(request: Request) {
     if (!behavior) return Response.json({ error: "AI가 문장을 반환하지 않았습니다." }, { status: 502 });
     return Response.json({ behavior });
   } catch (error) {
-    console.error("Behavior generation failed", error instanceof Error ? error.message : "unknown");
-    return Response.json({ error: "행동특성 생성 중 오류가 발생했습니다." }, { status: 500 });
+    return dataError(error, "행동특성 생성 중 오류가 발생했습니다.");
   }
 }

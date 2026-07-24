@@ -1,6 +1,6 @@
-import { asc } from "drizzle-orm";
-import { getDb } from "../../../db";
+import { and, asc, eq } from "drizzle-orm";
 import { assessmentPlans, generatedComments } from "../../../db/schema";
+import { dataError, getDataScope } from "../../data-scope";
 
 type Level = "상" | "중" | "하" | "-";
 type ScoreStudent = { studentId: number; levels: Level[] };
@@ -20,8 +20,8 @@ export async function POST(request: Request) {
     if (!body.scores || typeof body.scores !== "object" || Array.isArray(body.scores)) {
       return Response.json({ error: "평가 수준을 다시 확인해 주세요." }, { status: 400 });
     }
-    const db = await getDb();
-    const plan = await db.select().from(assessmentPlans).orderBy(asc(assessmentPlans.sortOrder));
+    const { db, user, classId } = await getDataScope();
+    const plan = await db.select().from(assessmentPlans).where(and(eq(assessmentPlans.ownerEmail, user.email), eq(assessmentPlans.classId, classId))).orderBy(asc(assessmentPlans.sortOrder));
     const scores = body.scores as Record<string, ScoreStudent[]>;
     const evidence: Array<{ studentId: number; subject: string; items: string[] }> = [];
 
@@ -78,14 +78,13 @@ export async function POST(request: Request) {
     if (!comments.length) return Response.json({ error: "AI가 평어를 반환하지 않았습니다." }, { status: 502 });
     const updatedAt = new Date().toISOString();
     await Promise.all(comments.map((item) => db.insert(generatedComments)
-      .values({ ...item, updatedAt })
+      .values({ ...item, updatedAt, ownerEmail: user.email, classId })
       .onConflictDoUpdate({
-        target: [generatedComments.studentId, generatedComments.subject],
+        target: [generatedComments.classId, generatedComments.studentId, generatedComments.subject],
         set: { comment: item.comment, updatedAt },
       })));
     return Response.json({ comments });
   } catch (error) {
-    console.error("All comments generation failed", error instanceof Error ? error.message : "unknown");
-    return Response.json({ error: "전 과목 교과 평어 생성 중 오류가 발생했습니다." }, { status: 500 });
+    return dataError(error, "전 과목 교과 평어 생성 중 오류가 발생했습니다.");
   }
 }

@@ -151,7 +151,14 @@ function Dashboard({ move }: { move: (view: View) => void }) {
   );
 }
 
-type AssessmentStudent = (typeof students)[number] & { assessments: Level[] };
+type AssessmentStudent = {
+  id: number;
+  number?: number;
+  name: string;
+  assessments: Level[];
+  status: string;
+  note: string;
+};
 
 function Assessments({ data, setData, plan, activeSubject, setActiveSubject, onAddStudent, onDeleteStudent, onSave }: {
   data: AssessmentStudent[];
@@ -202,7 +209,7 @@ function Assessments({ data, setData, plan, activeSubject, setActiveSubject, onA
       <div className="assessment-wrap">
         <table className="assessment-table">
           <thead><tr><th>번호</th><th>학생</th>{visiblePlan.map((item, index) => <th key={`${item.unit}-${item.domain}-${index}`} title={item.goal}><b>{item.unit}</b><small>{item.domain}</small></th>)}<th>관리</th></tr></thead>
-          <tbody>{data.map((student, row) => <tr key={student.id}><td>{student.id}</td><td><strong>{student.name}</strong></td>{student.assessments.map((level, col) => <td key={col}><button aria-label={`${student.name} ${col + 1}단원 수준 ${level}`} className={`level-button level-${level}`} onClick={() => cycle(row, col)}>{level}</button></td>)}<td><button className="delete-student" onClick={() => onDeleteStudent(student.id)} aria-label={`${student.name} 삭제`}>삭제</button></td></tr>)}</tbody>
+          <tbody>{data.map((student, row) => <tr key={student.id}><td>{student.number ?? student.id}</td><td><strong>{student.name}</strong></td>{student.assessments.map((level, col) => <td key={col}><button aria-label={`${student.name} ${col + 1}단원 수준 ${level}`} className={`level-button level-${level}`} onClick={() => cycle(row, col)}>{level}</button></td>)}<td><button className="delete-student" onClick={() => onDeleteStudent(student.id)} aria-label={`${student.name} 삭제`}>삭제</button></td></tr>)}</tbody>
         </table>
       </div>
       <div className="bottom-action"><span>입력 완료 <strong>{data.reduce((count, student) => count + student.assessments.filter((level) => level !== "-").length, 0)} / {data.length * visiblePlan.length}</strong></span></div>
@@ -348,7 +355,7 @@ function Comments({ assessmentDataBySubject, plan, roster }: { assessmentDataByS
                 const assessment = assessmentDataBySubject[selectedSubject]?.[index];
                 const hasLevel = assessment?.assessments.some((level) => level !== "-");
                 return <tr id={`comment-${student.id}`} key={student.id}>
-                  <td>{student.id}</td>
+                  <td>{student.number ?? student.id}</td>
                   <td><strong>{student.name}</strong><small>{text ? `${new TextEncoder().encode(text).length}B` : hasLevel ? "생성 대기" : "수준 미입력"}</small></td>
                   <td><textarea value={text} onChange={(event) => { setComments((current) => ({ ...current, [key]: event.target.value })); setCopied(false); }} onBlur={(event) => void saveComment(student.id, selectedSubject, event.target.value)} placeholder={hasLevel ? "AI 평어 생성 버튼을 누르면 결과가 표시됩니다." : "평가 수준이 입력되지 않았습니다."} /></td>
                 </tr>;
@@ -461,13 +468,13 @@ function Behavior({ roster }: { roster: AssessmentStudent[] }) {
               <thead><tr><th>번호</th><th>이름</th><th>특성</th><th>행동특성</th></tr></thead>
               <tbody>{roster.map((student) => {
                 const record = records[student.id] ?? { characteristic: "", behavior: "" };
-                return <tr className={activeStudentId === student.id ? "active-reference-row" : ""} key={student.id}><td>{student.id}</td><td><strong>{student.name}</strong></td><td><textarea value={record.characteristic} onFocus={() => setActiveStudentId(student.id)} onChange={(event) => updateRecord(student.id, { characteristic: event.target.value })} onBlur={() => void saveRecord(student.id, records[student.id] ?? record)} placeholder="관찰한 행동과 변화 모습을 입력하세요." /></td><td><textarea value={record.behavior} onChange={(event) => updateRecord(student.id, { behavior: event.target.value })} onBlur={() => void saveRecord(student.id, records[student.id] ?? record)} placeholder={record.characteristic ? "AI 행특 생성 버튼을 누르면 결과가 표시됩니다." : "특성을 먼저 입력해 주세요."} /><small>{record.behavior ? `${new TextEncoder().encode(record.behavior).length} bytes` : ""}</small></td></tr>;
+                return <tr className={activeStudentId === student.id ? "active-reference-row" : ""} key={student.id}><td>{student.number ?? student.id}</td><td><strong>{student.name}</strong></td><td><textarea value={record.characteristic} onFocus={() => setActiveStudentId(student.id)} onChange={(event) => updateRecord(student.id, { characteristic: event.target.value })} onBlur={() => void saveRecord(student.id, records[student.id] ?? record)} placeholder="관찰한 행동과 변화 모습을 입력하세요." /></td><td><textarea value={record.behavior} onChange={(event) => updateRecord(student.id, { behavior: event.target.value })} onBlur={() => void saveRecord(student.id, records[student.id] ?? record)} placeholder={record.characteristic ? "AI 행특 생성 버튼을 누르면 결과가 표시됩니다." : "특성을 먼저 입력해 주세요."} /><small>{record.behavior ? `${new TextEncoder().encode(record.behavior).length} bytes` : ""}</small></td></tr>;
               })}</tbody>
             </table>
           </div>
           {referenceOpen && <aside className="behavior-reference-drawer">
             <button className="drawer-close" onClick={() => setReferenceOpen(false)} aria-label="참고자료 닫기">×</button>
-            <div className="reference-guide"><div><strong>작성 참고자료</strong><p>실제로 관찰한 행동과 변화에 맞는 표현만 선택해 주세요.</p></div><span>현재 입력 대상: {activeStudentId ? `${roster.find((student) => student.id === activeStudentId)?.id}번 ${roster.find((student) => student.id === activeStudentId)?.name}` : "특성 입력칸을 선택하세요"}</span></div>
+            <div className="reference-guide"><div><strong>작성 참고자료</strong><p>실제로 관찰한 행동과 변화에 맞는 표현만 선택해 주세요.</p></div><span>현재 입력 대상: {activeStudentId ? `${roster.find((student) => student.id === activeStudentId)?.number ?? roster.find((student) => student.id === activeStudentId)?.id}번 ${roster.find((student) => student.id === activeStudentId)?.name}` : "특성 입력칸을 선택하세요"}</span></div>
             <div className="reference-tabs">{behaviorReferences.map((group) => <button className={activeCategory === group.category ? "active" : ""} onClick={() => setActiveCategory(group.category)} key={group.category}>{group.category}</button>)}</div>
             {behaviorReferences.filter((group) => group.category === activeCategory).map((group) => <div className="reference-groups" key={group.category}>
               <section><h3>강점 키워드</h3><div>{group.strengths.map((phrase) => <button onClick={() => addReferencePhrase(phrase)} key={phrase}>{phrase}</button>)}</div></section>
@@ -482,6 +489,7 @@ function Behavior({ roster }: { roster: AssessmentStudent[] }) {
 
 export default function Home() {
   const [view, setView] = useState<View>("dashboard");
+  const [currentUser, setCurrentUser] = useState("선생님");
   const [roster, setRoster] = useState<AssessmentStudent[]>(students.map((student) => withSampleLevels(student, 0, defaultPlan.length)));
   const [assessmentDataBySubject, setAssessmentDataBySubject] = useState<Record<string, AssessmentStudent[]>>({
     국어: students.map((student) => withSampleLevels(student, 0, defaultPlan.length)),
@@ -496,15 +504,17 @@ export default function Home() {
         const classResult = await classResponse.json() as {
           students?: Array<{ id: number; number: number; name: string }>;
           levels?: Array<{ studentId: number; subject: string; assessmentIndex: number; level: Level }>;
+          user?: { displayName: string };
         };
         if (!planResponse.ok || !planResult.plan?.length) return;
         const loadedPlan = planResult.plan;
         const loadedRoster: AssessmentStudent[] = classResponse.ok && classResult.students?.length
-          ? classResult.students.map((student) => ({ id: student.id, name: student.name, assessments: [], status: "미생성", note: "" }))
+          ? classResult.students.map((student) => ({ id: student.id, number: student.number, name: student.name, assessments: [], status: "미생성", note: "" }))
           : students.map((student) => withSampleLevels(student, 0, defaultPlan.length));
         const savedLevels = new Map((classResult.levels ?? []).map((item) => [`${item.studentId}|${item.subject}|${item.assessmentIndex}`, item.level]));
         setPlan(loadedPlan);
         setRoster(loadedRoster);
+        if (classResult.user?.displayName) setCurrentUser(classResult.user.displayName);
         const firstSubject = loadedPlan[0].subject;
         setActiveSubject(firstSubject);
         const subjects = [...new Set(loadedPlan.map((item) => item.subject))];
@@ -525,15 +535,15 @@ export default function Home() {
   const addStudent = async () => {
     const name = window.prompt("추가할 학생 이름을 입력해 주세요.");
     if (!name?.trim()) return;
-    const number = roster.length ? Math.max(...roster.map((student) => student.id)) + 1 : 1;
+    const number = roster.length ? Math.max(...roster.map((student) => student.number ?? student.id)) + 1 : 1;
     const response = await fetch("/api/students", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ name: name.trim(), number }),
     });
-    const result = await response.json() as { student?: { id: number; name: string }; error?: string };
+    const result = await response.json() as { student?: { id: number; number: number; name: string }; error?: string };
     if (!response.ok || !result.student) return window.alert(result.error || "학생을 추가하지 못했습니다.");
-    const newStudent: AssessmentStudent = { id: result.student.id, name: result.student.name, assessments: [], status: "미생성", note: "" };
+    const newStudent: AssessmentStudent = { id: result.student.id, number: result.student.number, name: result.student.name, assessments: [], status: "미생성", note: "" };
     setRoster((current) => [...current, newStudent]);
     setAssessmentDataBySubject((current) => Object.fromEntries(Object.entries(current).map(([subject, data]) => [
       subject,
@@ -570,7 +580,7 @@ export default function Home() {
         <nav>{navItems.map((item) => <button className={view === item.id ? "active" : ""} key={item.id} onClick={() => setView(item.id)}><span>{item.icon}</span>{item.label}</button>)}</nav>
         <div className="nav-divider" />
         <nav><button><span>♙</span>학생 관리</button><button><span>⇧</span>결과 내보내기</button></nav>
-        <div className="sidebar-bottom"><div className="storage"><span>이번 달 AI 생성</span><strong>128 / 300</strong><div><i /></div></div><button className="profile"><span className="avatar">홍</span><span><b>홍현진 선생님</b><small>서울하늘초등학교</small></span><i>⋯</i></button></div>
+        <div className="sidebar-bottom"><div className="storage"><span>이번 달 AI 생성</span><strong>128 / 300</strong><div><i /></div></div><div className="profile"><span className="avatar">{currentUser.slice(0, 1)}</span><span><b>{currentUser}</b><small>서울하늘초등학교</small></span><a href="/signout-with-chatgpt?return_to=%2F">로그아웃</a></div></div>
       </aside>
       <main>
         <header className="mobile-header"><button className="brand" onClick={() => setView("dashboard")}><span>기록</span>샘</button><select value={view} onChange={(e) => setView(e.target.value as View)}>{navItems.map((item) => <option value={item.id} key={item.id}>{item.label}</option>)}</select></header>

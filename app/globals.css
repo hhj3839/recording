@@ -35,6 +35,7 @@ nav button.active span { color: #176bc9; }
 .profile b { display: block; font-size: 12px; }
 .profile small { display: block; color: #8b95a3; margin-top: 3px; font-size: 10px; }
 .profile i { font-style: normal; color: #9aa3b0; }
+.profile a { color: #738093; font-size: 9px; text-decoration: none; }
 .avatar { width: 34px; height: 34px; border-radius: 50%; display: inline-flex; align-items: center; justify-content: center; background: #dfeaf7; color: #315a83; font-weight: 800; font-size: 12px; }
 main { min-width: 0; }
 .content { max-width: 1260px; margin: 0 auto; padding: 55px 55px 70px; }

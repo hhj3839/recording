@@ -1,5 +1,5 @@
-import { getDb } from "../../../db";
 import { assessmentLevels } from "../../../db/schema";
+import { dataError, getDataScope } from "../../data-scope";
 
 type LevelInput = { studentId?: unknown; subject?: unknown; assessmentIndex?: unknown; level?: unknown };
 
@@ -17,16 +17,14 @@ export async function PUT(request: Request) {
         : [];
     });
     if (!levels.length) return Response.json({ error: "저장할 평가수준이 없습니다." }, { status: 400 });
-    const db = await getDb();
+    const { db, user, classId } = await getDataScope();
     const updatedAt = new Date().toISOString();
-    await Promise.all(levels.map((item) => db.insert(assessmentLevels).values({ ...item, updatedAt }).onConflictDoUpdate({
-      target: [assessmentLevels.studentId, assessmentLevels.subject, assessmentLevels.assessmentIndex],
+    await Promise.all(levels.map((item) => db.insert(assessmentLevels).values({ ...item, updatedAt, ownerEmail: user.email, classId }).onConflictDoUpdate({
+      target: [assessmentLevels.classId, assessmentLevels.studentId, assessmentLevels.subject, assessmentLevels.assessmentIndex],
       set: { level: item.level, updatedAt },
     })));
     return Response.json({ ok: true, updatedAt });
   } catch (error) {
-    console.error("Assessment levels save failed", error instanceof Error ? error.message : "unknown");
-    return Response.json({ error: "평가수준을 저장하지 못했습니다." }, { status: 500 });
+    return dataError(error, "평가수준을 저장하지 못했습니다.");
   }
 }
-

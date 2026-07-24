@@ -1,3 +1,5 @@
+import { dataError, getDataScope } from "../../data-scope";
+
 type Level = "상" | "중" | "하" | "-";
 
 const defaultAssessmentPlan = [
@@ -71,6 +73,7 @@ function extractOutputText(payload: unknown): string {
 
 export async function POST(request: Request) {
   try {
+    await getDataScope();
     const body = await request.json() as { studentId?: unknown; levels?: unknown; plan?: unknown };
     const uploadedPlan = parsePlan(body.plan);
     const plan = uploadedPlan ?? defaultAssessmentPlan.map((item) => ({
@@ -137,7 +140,6 @@ export async function POST(request: Request) {
     if (!comment) return Response.json({ error: "AI가 문장을 반환하지 않았습니다. 다시 시도해 주세요." }, { status: 502 });
     return Response.json({ comment });
   } catch (error) {
-    console.error("Comment generation failed", error instanceof Error ? error.message : "unknown");
-    return Response.json({ error: "교과 평어 생성 중 오류가 발생했습니다." }, { status: 500 });
+    return dataError(error, "교과 평어 생성 중 오류가 발생했습니다.");
   }
 }

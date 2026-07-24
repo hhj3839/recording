@@ -1,11 +1,11 @@
-import { asc } from "drizzle-orm";
-import { getDb } from "../../../db";
+import { and, asc, eq } from "drizzle-orm";
 import { assessmentPlans } from "../../../db/schema";
+import { dataError, getDataScope } from "../../data-scope";
 
 export async function GET() {
   try {
-    const db = await getDb();
-    const rows = await db.select().from(assessmentPlans).orderBy(asc(assessmentPlans.sortOrder));
+    const { db, user, classId } = await getDataScope();
+    const rows = await db.select().from(assessmentPlans).where(and(eq(assessmentPlans.ownerEmail, user.email), eq(assessmentPlans.classId, classId))).orderBy(asc(assessmentPlans.sortOrder));
     return Response.json({
       plan: rows.map((row) => ({
         subject: row.subject,
@@ -21,7 +21,6 @@ export async function GET() {
       })),
     });
   } catch (error) {
-    console.error("Assessment plan load failed", error instanceof Error ? error.message : "unknown");
-    return Response.json({ error: "평가계획을 불러오지 못했습니다." }, { status: 500 });
+    return dataError(error, "평가계획을 불러오지 못했습니다.");
   }
 }

@@ -1,5 +1,5 @@
-import { getDb } from "../../../db";
 import { studentBehaviors } from "../../../db/schema";
+import { dataError, getDataScope } from "../../data-scope";
 
 function extractOutputText(payload: unknown): string {
   if (!payload || typeof payload !== "object") return "";
@@ -12,6 +12,7 @@ function extractOutputText(payload: unknown): string {
 
 export async function POST(request: Request) {
   try {
+    const { db, user, classId } = await getDataScope();
     const body = await request.json() as { students?: unknown };
     if (!Array.isArray(body.students)) return Response.json({ error: "학생 특성을 다시 확인해 주세요." }, { status: 400 });
     const inputs = body.students.flatMap((item) => {
@@ -50,16 +51,14 @@ export async function POST(request: Request) {
       return inputMap.has(studentId) && behavior ? [{ studentId, characteristic: inputMap.get(studentId)!, behavior }] : [];
     }) : [];
     if (!behaviors.length) return Response.json({ error: "AI가 행동특성을 반환하지 않았습니다." }, { status: 502 });
-    const db = await getDb();
     const updatedAt = new Date().toISOString();
-    await Promise.all(behaviors.map((item) => db.insert(studentBehaviors).values({ ...item, updatedAt })
+    await Promise.all(behaviors.map((item) => db.insert(studentBehaviors).values({ ...item, updatedAt, ownerEmail: user.email, classId })
       .onConflictDoUpdate({
-        target: studentBehaviors.studentId,
+        target: [studentBehaviors.classId, studentBehaviors.studentId],
         set: { characteristic: item.characteristic, behavior: item.behavior, updatedAt },
       })));
     return Response.json({ behaviors, updatedAt });
   } catch (error) {
-    console.error("All behaviors generation failed", error instanceof Error ? error.message : "unknown");
-    return Response.json({ error: "행동특성 일괄 생성 중 오류가 발생했습니다." }, { status: 500 });
+    return dataError(error, "행동특성 일괄 생성 중 오류가 발생했습니다.");
   }
 }
