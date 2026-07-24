@@ -16,3 +16,13 @@ export const assessmentPlans = sqliteTable("assessment_plans", {
 }, (table) => [
   uniqueIndex("assessment_plans_content_idx").on(table.subject, table.unit, table.goal),
 ]);
+
+export const generatedComments = sqliteTable("generated_comments", {
+  id: integer("id").primaryKey({ autoIncrement: true }),
+  studentId: integer("student_id").notNull(),
+  subject: text("subject").notNull(),
+  comment: text("comment").notNull(),
+  updatedAt: text("updated_at").notNull(),
+}, (table) => [
+  uniqueIndex("generated_comments_student_subject_idx").on(table.studentId, table.subject),
+]);

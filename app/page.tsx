@@ -168,6 +168,24 @@ function Comments({ assessmentDataBySubject, plan, roster }: { assessmentDataByS
   useEffect(() => {
     setLastGeneratedAt(window.localStorage.getItem("giroksam:last-generated-at") ?? "");
   }, []);
+  useEffect(() => {
+    const loadGeneratedComments = async () => {
+      try {
+        const response = await fetch("/api/generated-comments");
+        const result = await response.json() as { comments?: Array<{ studentId: number; subject: string; comment: string; updatedAt: string }> };
+        if (!response.ok || !result.comments?.length) return;
+        setComments(Object.fromEntries(result.comments.map((item) => [`${item.studentId}|${item.subject}`, item.comment])));
+        const latest = result.comments.map((item) => item.updatedAt).sort().at(-1);
+        if (latest) {
+          setLastGeneratedAt(latest);
+          window.localStorage.setItem("giroksam:last-generated-at", latest);
+        }
+      } catch {
+        // 저장된 결과를 불러오지 못해도 새 생성은 계속 사용할 수 있음.
+      }
+    };
+    void loadGeneratedComments();
+  }, []);
   const formattedLastGeneratedAt = lastGeneratedAt
     ? new Intl.DateTimeFormat("ko-KR", { month: "numeric", day: "numeric", hour: "numeric", minute: "2-digit" }).format(new Date(lastGeneratedAt))
     : "";

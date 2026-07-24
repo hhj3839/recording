@@ -1,6 +1,6 @@
 import { asc } from "drizzle-orm";
 import { getDb } from "../../../db";
-import { assessmentPlans } from "../../../db/schema";
+import { assessmentPlans, generatedComments } from "../../../db/schema";
 
 type Level = "상" | "중" | "하" | "-";
 type ScoreStudent = { studentId: number; levels: Level[] };
@@ -76,6 +76,13 @@ export async function POST(request: Request) {
       return allowed.has(`${studentId}|${subject}`) && comment ? [{ studentId, subject, comment }] : [];
     }) : [];
     if (!comments.length) return Response.json({ error: "AI가 평어를 반환하지 않았습니다." }, { status: 502 });
+    const updatedAt = new Date().toISOString();
+    await Promise.all(comments.map((item) => db.insert(generatedComments)
+      .values({ ...item, updatedAt })
+      .onConflictDoUpdate({
+        target: [generatedComments.studentId, generatedComments.subject],
+        set: { comment: item.comment, updatedAt },
+      })));
     return Response.json({ comments });
   } catch (error) {
     console.error("All comments generation failed", error instanceof Error ? error.message : "unknown");

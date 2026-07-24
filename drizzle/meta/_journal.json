@@ -8,6 +8,13 @@
       "when": 1784897374160,
       "tag": "0000_uneven_red_ghost",
       "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "6",
+      "when": 1784899564143,
+      "tag": "0001_wooden_the_hunter",
+      "breakpoints": true
     }
   ]
 }
