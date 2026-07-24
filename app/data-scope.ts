@@ -119,11 +119,6 @@ export async function getDataScope() {
       created_at: now,
     }], "owner_email,school_year,semester,grade,class_number"))[0];
   }
-  const [plans, students] = await Promise.all([
-    selectRows<{ id: number }>("assessment_plans", { class_id: eq(classroom.id), owner_email: eq(user.email), limit: 1 }),
-    selectRows<{ id: number }>("students", { class_id: eq(classroom.id), owner_email: eq(user.email), limit: 1 }),
-  ]);
-  if (!plans.length || !students.length) await migrateD1Data(user.email, classroom.id);
   return { user, classId: classroom.id, classroom };
 }
 

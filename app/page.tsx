@@ -87,16 +87,19 @@ const navItems: { id: View; label: string; icon: string }[] = [
   { id: "behavior", label: "행동특성", icon: "◎" },
 ];
 
-function Dashboard({ move, teacherName, classroom }: {
+function Dashboard({ move, teacherName, classroom, studentCount, completedLevels, totalLevels }: {
   move: (view: View) => void;
   teacherName: string;
   classroom: ClassroomInfo | null;
+  studentCount: number;
+  completedLevels: number;
+  totalLevels: number;
 }) {
   const cards = [
-    { label: "학생", value: "25명", detail: "재적 학생", tone: "blue" },
-    { label: "평가 입력", value: "82%", detail: "108 / 132개", tone: "mint" },
-    { label: "교과 평어 확정", value: "61%", detail: "67 / 110건", tone: "amber" },
-    { label: "행동특성 확정", value: "40%", detail: "10 / 25명", tone: "violet" },
+    { label: "학생", value: `${studentCount}명`, detail: "재적 학생", tone: "blue" },
+    { label: "평가 입력", value: totalLevels ? `${Math.round((completedLevels / totalLevels) * 100)}%` : "0%", detail: `${completedLevels} / ${totalLevels}개`, tone: "mint" },
+    { label: "교과 평어", value: "0건", detail: "생성 결과", tone: "amber" },
+    { label: "행동특성", value: "0명", detail: `전체 ${studentCount}명`, tone: "violet" },
   ];
   const tasks = [
     { title: "국어 평가 수준 입력", detail: "5명이 아직 입력되지 않았어요", action: "이어하기", view: "assessments" as View, progress: 78 },
@@ -502,12 +505,10 @@ export default function Home() {
   const [view, setView] = useState<View>("dashboard");
   const [currentUser, setCurrentUser] = useState("선생님");
   const [classroom, setClassroom] = useState<ClassroomInfo | null>(null);
-  const [roster, setRoster] = useState<AssessmentStudent[]>(students.map((student) => withSampleLevels(student, 0, defaultPlan.length)));
-  const [assessmentDataBySubject, setAssessmentDataBySubject] = useState<Record<string, AssessmentStudent[]>>({
-    국어: students.map((student) => withSampleLevels(student, 0, defaultPlan.length)),
-  });
-  const [plan, setPlan] = useState<AssessmentPlan[]>(defaultPlan);
-  const [activeSubject, setActiveSubject] = useState("국어");
+  const [roster, setRoster] = useState<AssessmentStudent[]>([]);
+  const [assessmentDataBySubject, setAssessmentDataBySubject] = useState<Record<string, AssessmentStudent[]>>({});
+  const [plan, setPlan] = useState<AssessmentPlan[]>([]);
+  const [activeSubject, setActiveSubject] = useState("");
   useEffect(() => {
     const loadClassData = async () => {
       try {
@@ -519,25 +520,25 @@ export default function Home() {
           user?: { displayName: string };
           classroom?: ClassroomInfo;
         };
-        if (!planResponse.ok || !planResult.plan?.length) return;
-        const loadedPlan = planResult.plan;
+        if (!planResponse.ok || !classResponse.ok) return;
+        const loadedPlan = planResult.plan ?? [];
         const loadedRoster: AssessmentStudent[] = classResponse.ok && classResult.students?.length
           ? classResult.students.map((student) => ({ id: student.id, number: student.number, name: student.name, assessments: [], status: "미생성", note: "" }))
-          : students.map((student) => withSampleLevels(student, 0, defaultPlan.length));
+          : [];
         const savedLevels = new Map((classResult.levels ?? []).map((item) => [`${item.studentId}|${item.subject}|${item.assessmentIndex}`, item.level]));
         setPlan(loadedPlan);
         setRoster(loadedRoster);
         if (classResult.user?.displayName) setCurrentUser(classResult.user.displayName);
         if (classResult.classroom) setClassroom(classResult.classroom);
-        const firstSubject = loadedPlan[0].subject;
+        const firstSubject = loadedPlan[0]?.subject ?? "";
         setActiveSubject(firstSubject);
         const subjects = [...new Set(loadedPlan.map((item) => item.subject))];
-        setAssessmentDataBySubject(Object.fromEntries(subjects.map((subject, subjectIndex) => {
+        setAssessmentDataBySubject(Object.fromEntries(subjects.map((subject) => {
           const subjectCount = loadedPlan.filter((item) => item.subject === subject).length;
           return [subject, loadedRoster.map((student) => ({
             ...student,
             assessments: Array.from({ length: subjectCount }, (_, assessmentIndex) =>
-              savedLevels.get(`${student.id}|${subject}|${assessmentIndex}`) ?? seededLevel(student.id, subjectIndex, assessmentIndex)),
+              savedLevels.get(`${student.id}|${subject}|${assessmentIndex}`) ?? "-"),
           }))];
         })));
       } catch {
@@ -587,6 +588,9 @@ export default function Home() {
       throw new Error("Assessment level save failed");
     }
   };
+  const allAssessmentRows = Object.values(assessmentDataBySubject).flat();
+  const totalLevels = allAssessmentRows.reduce((sum, student) => sum + student.assessments.length, 0);
+  const completedLevels = allAssessmentRows.reduce((sum, student) => sum + student.assessments.filter((level) => level !== "-").length, 0);
   return (
     <div className="app-shell">
       <aside className="sidebar">
@@ -599,7 +603,7 @@ export default function Home() {
       <main>
         <header className="mobile-header"><button className="brand" onClick={() => setView("dashboard")}><span>기록</span>샘</button><select value={view} onChange={(e) => setView(e.target.value as View)}>{navItems.map((item) => <option value={item.id} key={item.id}>{item.label}</option>)}</select></header>
         <div className="content">
-          {view === "dashboard" && <Dashboard move={setView} teacherName={currentUser} classroom={classroom} />}
+          {view === "dashboard" && <Dashboard move={setView} teacherName={currentUser} classroom={classroom} studentCount={roster.length} completedLevels={completedLevels} totalLevels={totalLevels} />}
           {view === "assessments" && <Assessments data={assessmentDataBySubject[activeSubject] ?? []} setData={(updater) => setAssessmentDataBySubject((current) => ({ ...current, [activeSubject]: typeof updater === "function" ? updater(current[activeSubject] ?? []) : updater }))} plan={plan} activeSubject={activeSubject} setActiveSubject={setActiveSubject} onAddStudent={() => void addStudent()} onDeleteStudent={(id) => void deleteStudent(id)} onSave={saveAssessmentLevels} />}
           {view === "comments" && <Comments assessmentDataBySubject={assessmentDataBySubject} plan={plan} roster={roster} />}
           {view === "behavior" && <Behavior roster={roster} />}
