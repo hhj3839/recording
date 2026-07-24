@@ -262,66 +262,87 @@ function Comments({ assessmentDataBySubject, plan, roster }: { assessmentDataByS
   );
 }
 
-function Behavior() {
-  const [selected, setSelected] = useState(0);
-  const [records, setRecords] = useState(() => students.map((student, index) => ({
-    observation: index === 0 ? "수업에 성실하게 참여하고 궁금한 점을 질문으로 해결하며, 친구의 이야기를 잘 듣고 맡은 역할을 끝까지 수행함. 최근에는 모둠 앞에서 자신의 생각을 자신 있게 말함." : "",
-    generated: "",
-    loading: false,
-    error: "",
-  })));
-  const record = records[selected];
-  const person = students[selected];
-  const updateRecord = (patch: Partial<(typeof records)[number]>) => setRecords((current) => current.map((item, index) => index === selected ? { ...item, ...patch } : item));
-  const generate = async () => {
-    if (!record.observation.trim()) return updateRecord({ error: "관찰 사실을 먼저 입력해 주세요." });
-    updateRecord({ loading: true, error: "" });
+function Behavior({ roster }: { roster: AssessmentStudent[] }) {
+  const [records, setRecords] = useState<Record<number, { characteristic: string; behavior: string }>>({});
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState("");
+  const [copied, setCopied] = useState(false);
+  const [lastGeneratedAt, setLastGeneratedAt] = useState("");
+
+  useEffect(() => {
+    const load = async () => {
+      try {
+        const response = await fetch("/api/student-behaviors");
+        const result = await response.json() as { behaviors?: Array<{ studentId: number; characteristic: string; behavior: string; updatedAt: string }> };
+        if (!response.ok || !result.behaviors) return;
+        setRecords(Object.fromEntries(result.behaviors.map((item) => [item.studentId, { characteristic: item.characteristic, behavior: item.behavior }])));
+        setLastGeneratedAt(result.behaviors.map((item) => item.updatedAt).sort().at(-1) ?? "");
+      } catch {
+        setError("저장된 행동특성을 불러오지 못했습니다.");
+      }
+    };
+    void load();
+  }, []);
+
+  const updateRecord = (studentId: number, patch: Partial<{ characteristic: string; behavior: string }>) => {
+    setRecords((current) => ({ ...current, [studentId]: { characteristic: "", behavior: "", ...current[studentId], ...patch } }));
+    setCopied(false);
+  };
+  const generateAll = async () => {
+    const inputs = roster.map((student) => ({ studentId: student.id, characteristic: records[student.id]?.characteristic ?? "" })).filter((item) => item.characteristic.trim());
+    if (!inputs.length) return setError("한 명 이상의 특성을 입력해 주세요.");
+    setLoading(true);
+    setError("");
     try {
-      const response = await fetch("/api/generate-behavior", {
+      const response = await fetch("/api/generate-all-behaviors", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ observation: record.observation }),
+        body: JSON.stringify({ students: inputs }),
       });
-      const result = await response.json() as { behavior?: string; error?: string };
-      if (!response.ok || !result.behavior) throw new Error(result.error || "행동특성을 생성하지 못했습니다.");
-      updateRecord({ generated: result.behavior, loading: false });
+      const result = await response.json() as { behaviors?: Array<{ studentId: number; characteristic: string; behavior: string }>; updatedAt?: string; error?: string };
+      if (!response.ok || !result.behaviors?.length) throw new Error(result.error || "행동특성을 생성하지 못했습니다.");
+      setRecords((current) => ({
+        ...current,
+        ...Object.fromEntries(result.behaviors!.map((item) => [item.studentId, { characteristic: item.characteristic, behavior: item.behavior }])),
+      }));
+      setLastGeneratedAt(result.updatedAt ?? new Date().toISOString());
     } catch (reason) {
-      updateRecord({ loading: false, error: reason instanceof Error ? reason.message : "행동특성을 생성하지 못했습니다." });
+      setError(reason instanceof Error ? reason.message : "행동특성을 생성하지 못했습니다.");
+    } finally {
+      setLoading(false);
     }
   };
-  const bytes = new TextEncoder().encode(record.generated).length;
-  const move = (direction: number) => setSelected((current) => (current + direction + students.length) % students.length);
+  const copyBehaviors = async () => {
+    try {
+      await navigator.clipboard.writeText(roster.map((student) => records[student.id]?.behavior ?? "").join("\n"));
+      setCopied(true);
+      window.setTimeout(() => setCopied(false), 1800);
+    } catch {
+      setError("클립보드 복사 권한을 확인해 주세요.");
+    }
+  };
+  const formattedLastGeneratedAt = lastGeneratedAt
+    ? new Intl.DateTimeFormat("ko-KR", { month: "numeric", day: "numeric", hour: "numeric", minute: "2-digit" }).format(new Date(lastGeneratedAt))
+    : "";
+
   return (
     <section>
       <div className="page-heading">
-        <div><p className="eyebrow">GROWTH NOTE</p><h1>행동특성 작성</h1><p>관찰 사실 하나를 입력하면 AI가 행동특성 초안을 바로 작성합니다.</p></div>
+        <div><p className="eyebrow">GROWTH NOTE</p><h1>행동특성 작성</h1><p>학생별 특성을 입력하고 한 번에 행동특성을 생성하세요.</p></div>
+        <div className="ai-generate-actions">{formattedLastGeneratedAt && <span>마지막 사용 {formattedLastGeneratedAt}</span>}<button onClick={() => void generateAll()} disabled={loading}>{loading ? "전체 생성 중…" : "✦ AI 행특 생성"}</button></div>
       </div>
-      <div className="behavior-workspace">
-        <aside className="student-list behavior-students">
-          <div className="student-list-head"><strong>3학년 5반</strong><span>{records.filter((item) => item.generated).length} / {students.length} 작성</span></div>
-          <div className="behavior-student-scroll">
-            {students.map((student, index) => {
-              const status = records[index].generated ? "작성됨" : records[index].observation ? "관찰 입력" : "미작성";
-              return <button className={selected === index ? "active" : ""} onClick={() => setSelected(index)} key={student.id}><span className="avatar">{student.name[0]}</span><span><b>{student.id}. {student.name}</b><small className={`behavior-status status-${status}`}>{status}{records[index].generated && ` · ${new TextEncoder().encode(records[index].generated).length}B`}</small></span><i>›</i></button>;
-            })}
-          </div>
-          <div className="student-nav"><button onClick={() => move(-1)}>← 이전</button><button onClick={() => move(1)}>다음 →</button></div>
-        </aside>
-        <div className="behavior-detail">
-          <div className="behavior-detail-head">
-            <div><span className="avatar large">{person.name[0]}</span><div><h2>{person.name}</h2><p>{person.id}번 · 행동특성 및 발달상황</p></div></div>
-            <span className={`status ${record.generated ? "done" : ""}`}>{record.generated ? "초안 생성됨" : "관찰 입력 중"}</span>
-          </div>
-          <div className="behavior-grid">
-            <div className="panel behavior-form single-observation"><div className="section-heading"><div><h2>관찰 사실 입력</h2><p>실제로 관찰한 행동과 변화 모습을 한 칸에 적어 주세요.</p></div></div>
-              <label><span>관찰 사실</span><textarea value={record.observation} onChange={(e) => updateRecord({ observation: e.target.value, error: "" })} placeholder="예: 수업에 성실히 참여하고 모둠 활동에서 친구의 의견을 경청하며 맡은 역할을 끝까지 수행함." /></label>
-              {record.error && <p className="generation-error">! {record.error}</p>}
-              <button className="generate-button" onClick={() => void generate()} disabled={record.loading}>{record.loading ? "AI 작성 중…" : "✦ 행동특성 바로 생성"}</button>
-            </div>
-            <div className="panel result-panel"><div className="section-heading"><div><h2>생성 결과</h2><p>입력한 관찰 사실만 바탕으로 작성됩니다.</p></div>{record.generated && <button className="regenerate" onClick={() => void generate()}>↻ 다시 생성</button>}</div>
-              {record.loading ? <div className="empty-result"><span>✦</span><h3>행동특성을 작성하고 있어요</h3></div> : record.generated ? <><textarea value={record.generated} onChange={(e) => updateRecord({ generated: e.target.value })} /><div className="check-list"><p className={bytes >= 500 ? "safe" : "warn"}><span>{bytes >= 500 ? "✓" : "!"}</span> UTF-8 {bytes} bytes <small>권장 500~550</small></p><p className="safe"><span>✓</span> 학생 이름 미전송</p><p className="safe"><span>✓</span> 입력 근거 중심 생성</p></div></> : <div className="empty-result"><span>✦</span><h3>관찰 사실을 바탕으로 초안을 만들어요</h3><p>왼쪽 관찰 사실을 입력하고 생성 버튼을 눌러 주세요.</p></div>}
-            </div>
-          </div>
+      <div className="review-content behavior-table-content">
+        <div className="behavior-table-toolbar"><span>특성 입력 {roster.filter((student) => records[student.id]?.characteristic.trim()).length} / {roster.length}명</span><button className="copy-comments" onClick={() => void copyBehaviors()} disabled={!roster.some((student) => records[student.id]?.behavior)}>{copied ? "복사됨 ✓" : "행동특성만 복사하기"}</button></div>
+        {error && <p className="generation-error">! {error}</p>}
+        {loading && <div className="comment-loading class-loading"><span>✦</span><p>입력된 모든 학생의 행동특성을 생성하고 있어요.</p></div>}
+        <div className="comments-table-wrap">
+          <table className="comments-table behavior-table">
+            <thead><tr><th>번호</th><th>이름</th><th>특성</th><th>행동특성</th></tr></thead>
+            <tbody>{roster.map((student) => {
+              const record = records[student.id] ?? { characteristic: "", behavior: "" };
+              return <tr key={student.id}><td>{student.id}</td><td><strong>{student.name}</strong></td><td><textarea value={record.characteristic} onChange={(event) => updateRecord(student.id, { characteristic: event.target.value })} placeholder="관찰한 행동과 변화 모습을 입력하세요." /></td><td><textarea value={record.behavior} onChange={(event) => updateRecord(student.id, { behavior: event.target.value })} placeholder={record.characteristic ? "AI 행특 생성 버튼을 누르면 결과가 표시됩니다." : "특성을 먼저 입력해 주세요."} /><small>{record.behavior ? `${new TextEncoder().encode(record.behavior).length} bytes` : ""}</small></td></tr>;
+            })}</tbody>
+          </table>
         </div>
       </div>
     </section>
@@ -393,7 +414,7 @@ export default function Home() {
           {view === "dashboard" && <Dashboard move={setView} />}
           {view === "assessments" && <Assessments data={assessmentDataBySubject[activeSubject] ?? []} setData={(updater) => setAssessmentDataBySubject((current) => ({ ...current, [activeSubject]: typeof updater === "function" ? updater(current[activeSubject] ?? []) : updater }))} plan={plan} activeSubject={activeSubject} setActiveSubject={setActiveSubject} onAddStudent={addStudent} onDeleteStudent={deleteStudent} />}
           {view === "comments" && <Comments assessmentDataBySubject={assessmentDataBySubject} plan={plan} roster={roster} />}
-          {view === "behavior" && <Behavior />}
+          {view === "behavior" && <Behavior roster={roster} />}
         </div>
       </main>
     </div>

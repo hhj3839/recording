@@ -15,6 +15,13 @@
       "when": 1784899564143,
       "tag": "0001_wooden_the_hunter",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "6",
+      "when": 1784899865445,
+      "tag": "0002_wealthy_firelord",
+      "breakpoints": true
     }
   ]
 }

@@ -26,3 +26,13 @@ export const generatedComments = sqliteTable("generated_comments", {
 }, (table) => [
   uniqueIndex("generated_comments_student_subject_idx").on(table.studentId, table.subject),
 ]);
+
+export const studentBehaviors = sqliteTable("student_behaviors", {
+  id: integer("id").primaryKey({ autoIncrement: true }),
+  studentId: integer("student_id").notNull(),
+  characteristic: text("characteristic").notNull(),
+  behavior: text("behavior").notNull(),
+  updatedAt: text("updated_at").notNull(),
+}, (table) => [
+  uniqueIndex("student_behaviors_student_idx").on(table.studentId),
+]);

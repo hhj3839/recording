@@ -144,6 +144,13 @@ button.secondary { color: #526171; border: 1px solid #dce1e6; background: #fff; 
 .comments-table textarea { width: 100%; min-height: 92px; border: 1px solid #dce3eb; border-radius: 7px; resize: vertical; padding: 10px; color: #364353; font-size: 11px; line-height: 1.75; outline: none; }
 .delete-student { border: 1px solid #e6caca; background: #fff; color: #ad5959; border-radius: 6px; padding: 6px 8px; font-size: 9px; font-weight: 700; }
 .single-observation textarea { min-height: 280px !important; }
+.behavior-table-content { width: 100%; }
+.behavior-table-toolbar { display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; color: #6f7b89; font-size: 10px; font-weight: 700; }
+.behavior-table th:nth-child(2), .behavior-table td:nth-child(2) { width: 90px; }
+.behavior-table th:nth-child(3), .behavior-table td:nth-child(3) { width: 34%; }
+.behavior-table th:nth-child(4), .behavior-table td:nth-child(4) { width: auto; }
+.behavior-table textarea { min-height: 132px; }
+.behavior-table td:last-child small { display: block; text-align: right; margin-top: 4px; color: #8792a0; font-size: 8px; }
 .review-head { display: flex; justify-content: space-between; align-items: center; padding-bottom: 18px; border-bottom: 1px solid #edf0f2; }
 .review-head > div { display: flex; gap: 11px; align-items: center; }
 .avatar.large { width: 43px; height: 43px; font-size: 14px; }
