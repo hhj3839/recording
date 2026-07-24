@@ -215,6 +215,7 @@ function Comments({ assessmentDataBySubject, plan, roster }: { assessmentDataByS
   const [selectedSubject, setSelectedSubject] = useState(subjects[0] ?? "국어");
   const [comments, setComments] = useState<Record<string, string>>({});
   const [loading, setLoading] = useState(false);
+  const [generationProgress, setGenerationProgress] = useState("");
   const [error, setError] = useState("");
   const [copied, setCopied] = useState(false);
   const [lastGeneratedAt, setLastGeneratedAt] = useState("");
@@ -255,22 +256,54 @@ function Comments({ assessmentDataBySubject, plan, roster }: { assessmentDataByS
   const generateAllComments = async () => {
     setLoading(true);
     setError("");
+    setGenerationProgress("");
     try {
-      const scores = Object.fromEntries(Object.entries(assessmentDataBySubject).map(([subject, data]) => [
-        subject,
-        data.map((student) => ({ studentId: student.id, levels: student.assessments })),
-      ]));
-      const response = await fetch("/api/generate-all-comments", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ scores }),
+      const jobs = Object.entries(assessmentDataBySubject).flatMap(([subject, data]) => {
+        const studentsWithLevels = data.filter((student) => student.assessments.some((level) => level !== "-"));
+        return Array.from({ length: Math.ceil(studentsWithLevels.length / 10) }, (_, index) => ({
+          subject,
+          students: studentsWithLevels.slice(index * 10, index * 10 + 10),
+        }));
       });
-      const result = await response.json() as { comments?: Array<{ studentId: number; subject: string; comment: string }>; error?: string };
-      if (!response.ok || !result.comments?.length) throw new Error(result.error || "전 과목 교과 평어를 생성하지 못했습니다.");
-      setComments((current) => ({
-        ...current,
-        ...Object.fromEntries(result.comments!.map((item) => [`${item.studentId}|${item.subject}`, item.comment])),
-      }));
+      if (!jobs.length) throw new Error("전 과목 중 평가 수준을 한 개 이상 입력해 주세요.");
+      let completed = 0;
+      let generatedCount = 0;
+      const failedSubjects = new Set<string>();
+      for (const job of jobs) {
+        setGenerationProgress(`${job.subject} · ${completed + 1}/${jobs.length}`);
+        try {
+          let pendingStudents = job.students;
+          for (let attempt = 0; attempt < 2 && pendingStudents.length; attempt += 1) {
+            const response = await fetch("/api/generate-all-comments", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({
+                scores: {
+                  [job.subject]: pendingStudents.map((student) => ({ studentId: student.id, levels: student.assessments })),
+                },
+              }),
+            });
+            const result = await response.json() as { comments?: Array<{ studentId: number; subject: string; comment: string }>; error?: string };
+            if (!response.ok || !result.comments?.length) {
+              if (attempt === 0) continue;
+              throw new Error(result.error || "생성 실패");
+            }
+            const returnedIds = new Set(result.comments.map((item) => item.studentId));
+            generatedCount += result.comments.length;
+            setComments((current) => ({
+              ...current,
+              ...Object.fromEntries(result.comments!.map((item) => [`${item.studentId}|${item.subject}`, item.comment])),
+            }));
+            pendingStudents = pendingStudents.filter((student) => !returnedIds.has(student.id));
+          }
+          if (pendingStudents.length) failedSubjects.add(job.subject);
+        } catch {
+          failedSubjects.add(job.subject);
+        }
+        completed += 1;
+      }
+      if (!generatedCount) throw new Error("전 과목 교과 평어를 생성하지 못했습니다.");
+      if (failedSubjects.size) setError(`${[...failedSubjects].join(", ")} 일부 평어가 생성되지 않았습니다. 버튼을 다시 눌러 재시도해 주세요.`);
       const generatedAt = new Date().toISOString();
       setLastGeneratedAt(generatedAt);
       window.localStorage.setItem("giroksam:last-generated-at", generatedAt);
@@ -279,6 +312,7 @@ function Comments({ assessmentDataBySubject, plan, roster }: { assessmentDataByS
       setError(reason instanceof Error ? reason.message : "전 과목 교과 평어를 생성하지 못했습니다.");
     } finally {
       setLoading(false);
+      setGenerationProgress("");
     }
   };
   const saveComment = async (studentId: number, subject: string, comment: string) => {
@@ -296,7 +330,7 @@ function Comments({ assessmentDataBySubject, plan, roster }: { assessmentDataByS
 
   return (
     <section>
-      <div className="page-heading"><div><p className="eyebrow">AI DRAFT</p><h1>전 과목 교과 평어</h1><p>과목을 선택하면 해당 과목의 학생별 평어를 한 화면에서 확인할 수 있습니다.</p></div><div className="ai-generate-actions">{formattedLastGeneratedAt && <span>마지막 사용 {formattedLastGeneratedAt}</span>}<button onClick={() => void generateAllComments()} disabled={loading}>{loading ? "전 과목 생성 중…" : "✦ AI 평어 생성"}</button></div></div>
+      <div className="page-heading"><div><p className="eyebrow">AI DRAFT</p><h1>전 과목 교과 평어</h1><p>과목을 선택하면 해당 과목의 학생별 평어를 한 화면에서 확인할 수 있습니다.</p></div><div className="ai-generate-actions">{formattedLastGeneratedAt && <span>마지막 사용 {formattedLastGeneratedAt}</span>}<button onClick={() => void generateAllComments()} disabled={loading}>{loading ? generationProgress || "전 과목 생성 중…" : "✦ AI 평어 생성"}</button></div></div>
       <div className="review-layout comments-review-layout">
         <div className="review-content">
           <div className="comments-toolbar">
