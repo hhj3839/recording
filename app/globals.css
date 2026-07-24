@@ -99,7 +99,6 @@ button.secondary { color: #526171; border: 1px solid #dce1e6; background: #fff; 
 .assessment-table td { padding: 11px 10px; border-bottom: 1px solid #eef0f2; text-align: center; color: #596474; }
 .assessment-table tbody tr:last-child td { border-bottom: 0; }
 .assessment-table td:nth-child(2) { text-align: left; color: #283445; }
-.assessment-table input { border: 1px solid #e1e5e9; border-radius: 7px; padding: 8px 10px; width: 100%; min-width: 270px; font-size: 10px; color: #647081; }
 .level-button { width: 34px; height: 30px; border-radius: 7px; font-weight: 800; border: 0; }
 .level-상 { background: #e7f1fc; color: #2472c3; }.level-중 { background: #e8f6ef; color: #2f8b61; }.level-하 { background: #fff1e3; color: #be6f25; }.level-- { background: #f1f3f5; color: #a4acb7; }
 .bottom-action { margin-top: 16px; display: flex; justify-content: flex-end; align-items: center; gap: 18px; font-size: 11px; color: #7b8592; }
@@ -135,10 +134,16 @@ button.secondary { color: #526171; border: 1px solid #dce1e6; background: #fff; 
 .spark { color: #3a83d3; }.editor-title strong { font-size: 11px; }.editor-title small { color: #8296ac; font-size: 9px; }
 .editor-title button { border: 0; background: none; color: #477db7; font-size: 10px; }
 .editor-card textarea { width: 100%; min-height: 135px; border: 0; resize: vertical; padding: 17px; color: #364353; font-size: 13px; line-height: 1.9; outline: none; }
+.comment-loading { min-height: 135px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 10px; color: #708398; }
+.comment-loading span { color: #3a83d3; font-size: 20px; animation: pulse 1.2s ease-in-out infinite; }
+.comment-loading p { margin: 0; font-size: 11px; }
+.generation-error { margin: 10px 0 0; border-radius: 7px; background: #fff1f0; color: #b85450; padding: 9px 11px; font-size: 10px; }
+@keyframes pulse { 50% { transform: scale(1.16); opacity: .55; } }
 .editor-meta { border-top: 1px solid #edf0f3; padding: 9px 13px; display: flex; gap: 15px; color: #8893a0; font-size: 9px; }
 .safe { color: #368360 !important; }.warn { color: #c07626 !important; }
 .suggestions { display: flex; gap: 7px; padding: 11px 0; }
 .suggestions button { border: 1px solid #dce2e8; background: #fff; border-radius: 6px; padding: 7px 10px; color: #657181; font-size: 9px; }
+.suggestions button:disabled { color: #a9b0b9; background: #f5f6f7; cursor: not-allowed; }
 .confirm-box { border-top: 1px solid #edf0f2; padding-top: 14px; display: flex; justify-content: space-between; align-items: center; font-size: 10px; color: #6f7a89; }
 .confirm-box input { margin-right: 7px; accent-color: #2d76c6; }
 .confirm-box button:disabled { background: #b9c0c8; cursor: not-allowed; }
