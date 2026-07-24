@@ -1,6 +1,6 @@
 "use client";
 
-import { ChangeEvent, useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 
 type View = "dashboard" | "assessments" | "comments" | "behavior";
 type Level = "상" | "중" | "하" | "-";
@@ -95,7 +95,7 @@ function Dashboard({ move }: { move: (view: View) => void }) {
 
         <aside className="panel quick-panel">
           <div className="section-heading"><div><p className="eyebrow">QUICK START</p><h2>빠른 시작</h2></div></div>
-          <button onClick={() => move("assessments")}><span className="quick-icon">⇧</span><span><b>평가계획 업로드</b><small>엑셀 파일로 시작하기</small></span><i>›</i></button>
+          <button onClick={() => move("assessments")}><span className="quick-icon">▦</span><span><b>평가 수준 입력</b><small>등록된 평가계획으로 시작하기</small></span><i>›</i></button>
           <button onClick={() => move("comments")}><span className="quick-icon">✦</span><span><b>교과 평어 생성</b><small>입력된 평가로 초안 만들기</small></span><i>›</i></button>
           <button onClick={() => move("behavior")}><span className="quick-icon">＋</span><span><b>학생 관찰 기록</b><small>특성과 성장 모습 남기기</small></span><i>›</i></button>
         </aside>
@@ -111,60 +111,17 @@ function Dashboard({ move }: { move: (view: View) => void }) {
 
 type AssessmentStudent = (typeof students)[number] & { assessments: Level[] };
 
-function Assessments({ data, setData, plan, setPlan, activeSubject, setActiveSubject, goComments }: {
+function Assessments({ data, setData, plan, activeSubject, setActiveSubject, goComments }: {
   data: AssessmentStudent[];
   setData: React.Dispatch<React.SetStateAction<AssessmentStudent[]>>;
   plan: AssessmentPlan[];
-  setPlan: React.Dispatch<React.SetStateAction<AssessmentPlan[]>>;
   activeSubject: string;
   setActiveSubject: (subject: string) => void;
   goComments: () => void;
 }) {
   const [saved, setSaved] = useState(false);
-  const [uploadMessage, setUploadMessage] = useState("");
-  const [uploadError, setUploadError] = useState("");
-  const fileInput = useRef<HTMLInputElement>(null);
   const subjects = [...new Set(plan.map((item) => item.subject))];
   const visiblePlan = plan.filter((item) => item.subject === activeSubject);
-
-  const uploadPlan = async (event: ChangeEvent<HTMLInputElement>) => {
-    const file = event.target.files?.[0];
-    event.target.value = "";
-    if (!file) return;
-    setUploadMessage("");
-    setUploadError("");
-    try {
-      const XLSX = await import("xlsx");
-      const workbook = XLSX.read(await file.arrayBuffer(), { type: "array" });
-      const sheet = workbook.Sheets[workbook.SheetNames[0]];
-      const rows = XLSX.utils.sheet_to_json<Record<string, unknown>>(sheet, { defval: "" });
-      const required = ["과목", "단원", "평가목표", "영역", "평가 유형", "평가 관점", "상", "중", "하"];
-      const headers = rows.length ? Object.keys(rows[0]) : [];
-      const missing = required.filter((header) => !headers.includes(header));
-      if (!rows.length) throw new Error("첫 번째 시트에 평가 항목이 없습니다.");
-      if (missing.length) throw new Error(`필수 열이 없습니다: ${missing.join(", ")}`);
-      const parsed = rows.map((row, index) => {
-        const value = (header: string) => String(row[header] ?? "").trim();
-        if (!value("과목") || !value("단원") || !value("평가목표") || !value("영역") || !value("상") || !value("중") || !value("하")) {
-          throw new Error(`${index + 2}행의 필수 내용이 비어 있습니다.`);
-        }
-        return {
-          subject: value("과목"), unit: value("단원"), goal: value("평가목표"), domain: value("영역"),
-          type: value("평가 유형"), perspective: value("평가 관점"), high: value("상"),
-          middle: value("중"), low: value("하"), caution: value("평가상의 유의점"),
-        };
-      });
-      const firstSubject = parsed[0].subject;
-      const firstCount = parsed.filter((item) => item.subject === firstSubject).length;
-      setPlan(parsed);
-      setActiveSubject(firstSubject);
-      setData((current) => current.map((student) => ({ ...student, assessments: Array(firstCount).fill("-") as Level[] })));
-      setUploadMessage(`${file.name} · ${parsed.length}개 평가 항목을 불러왔습니다.`);
-      setSaved(false);
-    } catch (reason) {
-      setUploadError(reason instanceof Error ? reason.message : "파일을 읽지 못했습니다.");
-    }
-  };
 
   const changeSubject = (subject: string) => {
     setActiveSubject(subject);
@@ -187,14 +144,8 @@ function Assessments({ data, setData, plan, setPlan, activeSubject, setActiveSub
     <section>
       <div className="page-heading">
         <div><p className="eyebrow">{activeSubject} · 1학기</p><h1>평가 수준 입력</h1><p>셀을 눌러 학생별 성취 수준을 빠르게 입력하세요.</p></div>
-        <div className="heading-actions">
-          <input ref={fileInput} className="visually-hidden" type="file" accept=".xlsx,.xls,.csv" onChange={(event) => void uploadPlan(event)} />
-          <button className="secondary" onClick={() => fileInput.current?.click()}>평가계획 업로드</button>
-          <button onClick={() => setSaved(true)}>{saved ? "저장됨 ✓" : "변경사항 저장"}</button>
-        </div>
+        <div className="heading-actions"><button onClick={() => setSaved(true)}>{saved ? "저장됨 ✓" : "변경사항 저장"}</button></div>
       </div>
-      {uploadMessage && <p className="upload-message">✓ {uploadMessage}</p>}
-      {uploadError && <p className="generation-error">! {uploadError}</p>}
       <div className="table-tools">
         <div className="subject-tabs">{subjects.map((subject) => <button className={subject === activeSubject ? "active" : ""} onClick={() => changeSubject(subject)} key={subject}>{subject}</button>)}</div>
         <span><i className="level high" /> 상 <i className="level middle" /> 중 <i className="level low" /> 하</span>
@@ -342,6 +293,23 @@ export default function Home() {
   const [generateSignal, setGenerateSignal] = useState(0);
   const [plan, setPlan] = useState<AssessmentPlan[]>(defaultPlan);
   const [activeSubject, setActiveSubject] = useState("국어");
+  useEffect(() => {
+    const loadPlan = async () => {
+      try {
+        const response = await fetch("/api/assessment-plan");
+        const result = await response.json() as { plan?: AssessmentPlan[] };
+        if (!response.ok || !result.plan?.length) return;
+        setPlan(result.plan);
+        const firstSubject = result.plan[0].subject;
+        const count = result.plan.filter((item) => item.subject === firstSubject).length;
+        setActiveSubject(firstSubject);
+        setAssessmentData((current) => current.map((student) => ({ ...student, assessments: Array(count).fill("-") as Level[] })));
+      } catch {
+        // 배포 초기화 중에는 내장 기본 평가계획을 유지함.
+      }
+    };
+    void loadPlan();
+  }, []);
   const openGeneratedComments = () => {
     setGenerateSignal((current) => current + 1);
     setView("comments");
@@ -359,7 +327,7 @@ export default function Home() {
         <header className="mobile-header"><button className="brand" onClick={() => setView("dashboard")}><span>기록</span>샘</button><select value={view} onChange={(e) => setView(e.target.value as View)}>{navItems.map((item) => <option value={item.id} key={item.id}>{item.label}</option>)}</select></header>
         <div className="content">
           {view === "dashboard" && <Dashboard move={setView} />}
-          {view === "assessments" && <Assessments data={assessmentData} setData={setAssessmentData} plan={plan} setPlan={setPlan} activeSubject={activeSubject} setActiveSubject={setActiveSubject} goComments={openGeneratedComments} />}
+          {view === "assessments" && <Assessments data={assessmentData} setData={setAssessmentData} plan={plan} activeSubject={activeSubject} setActiveSubject={setActiveSubject} goComments={openGeneratedComments} />}
           {view === "comments" && <Comments assessmentData={assessmentData} plan={plan} activeSubject={activeSubject} generateSignal={generateSignal} />}
           {view === "behavior" && <Behavior />}
         </div>

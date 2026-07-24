@@ -84,8 +84,6 @@ h1, h2, h3, p { margin-top: 0; }
 .page-heading button, .heading-actions button, .bottom-action button, .confirm-box button, .confirm-result { border: 0; background: var(--navy); color: white; border-radius: 8px; padding: 11px 16px; font-size: 12px; font-weight: 750; }
 button.secondary { color: #526171; border: 1px solid #dce1e6; background: #fff; }
 .heading-actions { display: flex; gap: 8px; }
-.visually-hidden { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0, 0, 0, 0); white-space: nowrap; border: 0; }
-.upload-message { margin: -14px 0 18px; border-radius: 7px; background: #ecf8f1; color: #277151; padding: 10px 12px; font-size: 11px; font-weight: 700; }
 .table-tools { display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; }
 .subject-tabs { display: flex; gap: 4px; background: #e9edf2; padding: 4px; border-radius: 8px; }
 .subject-tabs button { border: 0; background: transparent; color: #7c8795; padding: 7px 16px; border-radius: 6px; font-size: 11px; font-weight: 700; }
