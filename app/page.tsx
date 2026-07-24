@@ -16,6 +16,13 @@ type AssessmentPlan = {
   low: string;
   caution: string;
 };
+type ClassroomInfo = {
+  schoolName: string;
+  schoolYear: number;
+  semester: number;
+  grade: number;
+  classNumber: number;
+};
 
 const defaultPlan: AssessmentPlan[] = [
   { subject: "국어", unit: "1단원", goal: "상황과 인물의 마음을 살려 표현하기", domain: "듣기·말하기", type: "수행평가", perspective: "표정, 몸짓, 목소리 활용", high: "실감 나게 표현함", middle: "알맞게 표현함", low: "도움을 받아 표현함", caution: "" },
@@ -80,7 +87,11 @@ const navItems: { id: View; label: string; icon: string }[] = [
   { id: "behavior", label: "행동특성", icon: "◎" },
 ];
 
-function Dashboard({ move }: { move: (view: View) => void }) {
+function Dashboard({ move, teacherName, classroom }: {
+  move: (view: View) => void;
+  teacherName: string;
+  classroom: ClassroomInfo | null;
+}) {
   const cards = [
     { label: "학생", value: "25명", detail: "재적 학생", tone: "blue" },
     { label: "평가 입력", value: "82%", detail: "108 / 132개", tone: "mint" },
@@ -97,11 +108,11 @@ function Dashboard({ move }: { move: (view: View) => void }) {
     <>
       <section className="welcome">
         <div>
-          <p className="eyebrow">2026학년도 · 1학기</p>
-          <h1>홍현진 선생님, 안녕하세요.</h1>
+          <p className="eyebrow">{classroom ? `${classroom.schoolYear}학년도 · ${classroom.semester}학기` : "학급 정보를 불러오는 중"}</p>
+          <h1>{teacherName} 선생님, 안녕하세요.</h1>
           <p>오늘도 학생의 성장을 세심하게 기록해 볼까요?</p>
         </div>
-        <button className="class-button">서울하늘초 · 3학년 5반 <span>⌄</span></button>
+        <button className="class-button">{classroom ? `${classroom.schoolName} · ${classroom.grade}학년 ${classroom.classNumber}반` : "학급 정보 확인 중"} <span>⌄</span></button>
       </section>
 
       <section className="stats-grid" aria-label="학급 진행 현황">
@@ -490,6 +501,7 @@ function Behavior({ roster }: { roster: AssessmentStudent[] }) {
 export default function Home() {
   const [view, setView] = useState<View>("dashboard");
   const [currentUser, setCurrentUser] = useState("선생님");
+  const [classroom, setClassroom] = useState<ClassroomInfo | null>(null);
   const [roster, setRoster] = useState<AssessmentStudent[]>(students.map((student) => withSampleLevels(student, 0, defaultPlan.length)));
   const [assessmentDataBySubject, setAssessmentDataBySubject] = useState<Record<string, AssessmentStudent[]>>({
     국어: students.map((student) => withSampleLevels(student, 0, defaultPlan.length)),
@@ -505,6 +517,7 @@ export default function Home() {
           students?: Array<{ id: number; number: number; name: string }>;
           levels?: Array<{ studentId: number; subject: string; assessmentIndex: number; level: Level }>;
           user?: { displayName: string };
+          classroom?: ClassroomInfo;
         };
         if (!planResponse.ok || !planResult.plan?.length) return;
         const loadedPlan = planResult.plan;
@@ -515,6 +528,7 @@ export default function Home() {
         setPlan(loadedPlan);
         setRoster(loadedRoster);
         if (classResult.user?.displayName) setCurrentUser(classResult.user.displayName);
+        if (classResult.classroom) setClassroom(classResult.classroom);
         const firstSubject = loadedPlan[0].subject;
         setActiveSubject(firstSubject);
         const subjects = [...new Set(loadedPlan.map((item) => item.subject))];
@@ -580,12 +594,12 @@ export default function Home() {
         <nav>{navItems.map((item) => <button className={view === item.id ? "active" : ""} key={item.id} onClick={() => setView(item.id)}><span>{item.icon}</span>{item.label}</button>)}</nav>
         <div className="nav-divider" />
         <nav><button><span>♙</span>학생 관리</button><button><span>⇧</span>결과 내보내기</button></nav>
-        <div className="sidebar-bottom"><div className="storage"><span>이번 달 AI 생성</span><strong>128 / 300</strong><div><i /></div></div><div className="profile"><span className="avatar">{currentUser.slice(0, 1)}</span><span><b>{currentUser}</b><small>서울하늘초등학교</small></span><form action="/api/auth/logout" method="post"><button type="submit">로그아웃</button></form></div></div>
+        <div className="sidebar-bottom"><div className="storage"><span>이번 달 AI 생성</span><strong>128 / 300</strong><div><i /></div></div><div className="profile"><span className="avatar">{currentUser.slice(0, 1)}</span><span><b>{currentUser}</b><small>{classroom?.schoolName ?? "학교 정보 확인 중"}</small></span><form action="/api/auth/logout" method="post"><button type="submit">로그아웃</button></form></div></div>
       </aside>
       <main>
         <header className="mobile-header"><button className="brand" onClick={() => setView("dashboard")}><span>기록</span>샘</button><select value={view} onChange={(e) => setView(e.target.value as View)}>{navItems.map((item) => <option value={item.id} key={item.id}>{item.label}</option>)}</select></header>
         <div className="content">
-          {view === "dashboard" && <Dashboard move={setView} />}
+          {view === "dashboard" && <Dashboard move={setView} teacherName={currentUser} classroom={classroom} />}
           {view === "assessments" && <Assessments data={assessmentDataBySubject[activeSubject] ?? []} setData={(updater) => setAssessmentDataBySubject((current) => ({ ...current, [activeSubject]: typeof updater === "function" ? updater(current[activeSubject] ?? []) : updater }))} plan={plan} activeSubject={activeSubject} setActiveSubject={setActiveSubject} onAddStudent={() => void addStudent()} onDeleteStudent={(id) => void deleteStudent(id)} onSave={saveAssessmentLevels} />}
           {view === "comments" && <Comments assessmentDataBySubject={assessmentDataBySubject} plan={plan} roster={roster} />}
           {view === "behavior" && <Behavior roster={roster} />}
