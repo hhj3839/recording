@@ -106,6 +106,7 @@ button.secondary { color: #526171; border: 1px solid #dce1e6; background: #fff; 
 .bottom-action { margin-top: 16px; display: flex; justify-content: flex-end; align-items: center; gap: 18px; font-size: 11px; color: #7b8592; }
 .bottom-action button b { margin-left: 18px; }
 .review-layout { display: grid; grid-template-columns: 220px 1fr; gap: 15px; align-items: start; }
+.comments-review-layout { grid-template-columns: minmax(0, 1fr); }
 .student-list, .review-content { background: #fff; border: 1px solid var(--line); border-radius: 11px; overflow: hidden; }
 .student-list-head { display: flex; justify-content: space-between; padding: 16px; font-size: 11px; border-bottom: 1px solid #edf0f2; }
 .student-list-head span { color: #929ba7; }

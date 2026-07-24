@@ -156,7 +156,6 @@ function Assessments({ data, setData, plan, activeSubject, setActiveSubject }: {
 }
 
 function Comments({ assessmentDataBySubject, plan }: { assessmentDataBySubject: Record<string, AssessmentStudent[]>; plan: AssessmentPlan[] }) {
-  const [selected, setSelected] = useState(0);
   const subjects = [...new Set(plan.map((item) => item.subject))];
   const [selectedSubject, setSelectedSubject] = useState(subjects[0] ?? "국어");
   const [comments, setComments] = useState<Record<string, string>>({});
@@ -215,11 +214,7 @@ function Comments({ assessmentDataBySubject, plan }: { assessmentDataBySubject: 
   return (
     <section>
       <div className="page-heading"><div><p className="eyebrow">AI DRAFT</p><h1>전 과목 교과 평어</h1><p>과목을 선택하면 해당 과목의 학생별 평어를 한 화면에서 확인할 수 있습니다.</p></div><div className="ai-generate-actions">{formattedLastGeneratedAt && <span>마지막 사용 {formattedLastGeneratedAt}</span>}<button onClick={() => void generateAllComments()} disabled={loading}>{loading ? "전 과목 생성 중…" : "✦ AI 평어 생성"}</button></div></div>
-      <div className="review-layout">
-        <aside className="student-list">
-          <div className="student-list-head"><strong>3학년 5반</strong><span>5명</span></div>
-          {students.map((student, index) => <button className={selected === index ? "active" : ""} onClick={() => { setSelected(index); setError(""); document.getElementById(`comment-${student.id}`)?.scrollIntoView({ behavior: "smooth", block: "center" }); }} key={student.id}><span className="avatar">{student.name[0]}</span><span><b>{student.id}. {student.name}</b><small>{comments[`${student.id}|${selectedSubject}`] ? "평어 생성됨" : "미생성"}</small></span><i>›</i></button>)}
-        </aside>
+      <div className="review-layout comments-review-layout">
         <div className="review-content">
           <div className="comments-toolbar">
             <div className="subject-tabs review-subject-tabs">{subjects.map((subject) => <button className={subject === selectedSubject ? "active" : ""} onClick={() => { setSelectedSubject(subject); setCopied(false); }} key={subject}>{subject}<small>{students.filter((student) => comments[`${student.id}|${subject}`]).length}/{students.length}</small></button>)}</div>
@@ -235,7 +230,7 @@ function Comments({ assessmentDataBySubject, plan }: { assessmentDataBySubject: 
                 const text = comments[key] ?? "";
                 const assessment = assessmentDataBySubject[selectedSubject]?.[index];
                 const hasLevel = assessment?.assessments.some((level) => level !== "-");
-                return <tr className={selected === index ? "selected" : ""} id={`comment-${student.id}`} key={student.id}>
+                return <tr id={`comment-${student.id}`} key={student.id}>
                   <td>{student.id}</td>
                   <td><strong>{student.name}</strong><small>{confirmed[key] ? "확정" : text ? `${new TextEncoder().encode(text).length}B` : hasLevel ? "생성 대기" : "수준 미입력"}</small></td>
                   <td><textarea value={text} onChange={(event) => { setComments((current) => ({ ...current, [key]: event.target.value })); setConfirmed((current) => ({ ...current, [key]: false })); setCopied(false); }} placeholder={hasLevel ? "AI 평어 생성 버튼을 누르면 결과가 표시됩니다." : "평가 수준이 입력되지 않았습니다."} /><label className="table-confirm"><input type="checkbox" checked={Boolean(confirmed[key])} disabled={!text} onChange={(event) => setConfirmed((current) => ({ ...current, [key]: event.target.checked }))} /> 확인 완료</label></td>
