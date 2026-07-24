@@ -21,7 +21,7 @@ export async function POST(request: Request) {
         model: process.env.OPENAI_MODEL || "gpt-5.6-terra",
         reasoning: { effort: "low" },
         store: false,
-        max_output_tokens: 500,
+        max_output_tokens: 1200,
         input: [
           { role: "system", content: [{ type: "input_text", text: "대한민국 초등학교 담임교사로서 행동특성 및 발달상황을 작성한다. 입력된 관찰 사실만 활용하고 새로운 사실을 만들지 않는다. 학생 이름·성별·가정환경·수상·사교육·비교 표현을 포함하지 않는다. 장점과 성장 가능성을 구체적으로 연결하고 모든 문장을 명사형 종결어미로 끝낸다. 3~5문장, UTF-8 약 500~550바이트로 작성하며 제목이나 설명 없이 본문만 출력한다." }] },
           { role: "user", content: [{ type: "input_text", text: `다음 관찰 사실을 바탕으로 행동특성을 작성해 줘.\n${observation}` }] },
