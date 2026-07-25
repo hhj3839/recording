@@ -1,5 +1,6 @@
 import { eq, selectRows, supabaseRequest, updateRows, upsertRows } from "../../../db/supabase";
 import { dataError, getDataScope } from "../../data-scope";
+import { snapshotAssessmentPlan } from "../../assessment-plan-versions";
 
 type PlanInput = {
   id?: unknown;
@@ -89,6 +90,10 @@ export async function PUT(request: Request) {
       owner_id: user.id,
       class_id: classId,
     })), "class_id,subject,unit,goal");
+    await snapshotAssessmentPlan({
+      ownerId: user.id, ownerEmail: user.email, classId, source: "save",
+      label: `${rows.length}개 평가계획 저장`,
+    });
     return Response.json({ plan: rows.map(present) });
   } catch (error) {
     return dataError(error, "평가계획을 저장하지 못했습니다.");
@@ -107,6 +112,10 @@ export async function PATCH(request: Request) {
       id: eq(id), owner_id: eq(user.id), class_id: eq(classId),
     }, fields(item));
     if (!rows.length) return Response.json({ error: "수정 권한이 없거나 평가계획이 없습니다." }, { status: 404 });
+    await snapshotAssessmentPlan({
+      ownerId: user.id, ownerEmail: user.email, classId, source: "edit",
+      label: `${String(rows[0].subject)} ${String(rows[0].unit)} 수정`,
+    });
     return Response.json({ item: present(rows[0]) });
   } catch (error) {
     return dataError(error, "평가계획을 수정하지 못했습니다.");
@@ -130,6 +139,10 @@ export async function DELETE(request: Request) {
     }
     await supabaseRequest("assessment_plans", {
       method: "DELETE", query: { id: eq(id), owner_id: eq(user.id), class_id: eq(classId) },
+    });
+    await snapshotAssessmentPlan({
+      ownerId: user.id, ownerEmail: user.email, classId, source: "delete",
+      label: `${target.subject} 평가계획 삭제`,
     });
     return Response.json({ ok: true });
   } catch (error) {

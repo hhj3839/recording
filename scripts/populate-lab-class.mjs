@@ -66,6 +66,7 @@ const classTables = [
   "student_behaviors",
   "record_revisions",
   "generation_jobs",
+  "assessment_plan_versions",
   "assessment_plans",
   "students",
   "ai_usage_events",

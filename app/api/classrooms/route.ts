@@ -13,7 +13,7 @@ type ClassroomRow = {
   created_at: string;
 };
 
-const classTables = ["assessment_levels", "generated_comments", "student_behaviors", "record_revisions", "generation_jobs", "assessment_plans", "students", "ai_usage_events"] as const;
+const classTables = ["assessment_levels", "generated_comments", "student_behaviors", "record_revisions", "generation_jobs", "assessment_plan_versions", "assessment_plans", "students", "ai_usage_events"] as const;
 
 const present = (row: ClassroomRow) => ({
   id: Number(row.id),

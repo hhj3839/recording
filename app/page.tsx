@@ -532,6 +532,8 @@ function PlanManager({ plan, onChanged, current }: { plan: AssessmentPlan[]; onC
   const [busy, setBusy] = useState(false);
   const [classrooms, setClassrooms] = useState<ManagedClassroom[]>([]);
   const [targetClassId, setTargetClassId] = useState("");
+  const [versions, setVersions] = useState<Array<{ id: number; source: string; label: string; itemCount: number; createdAt: string }>>([]);
+  const [versionsOpen, setVersionsOpen] = useState(false);
   const columns: Array<[keyof AssessmentPlan, string]> = [
     ["subject", "과목"], ["unit", "단원"], ["goal", "평가목표"], ["domain", "영역"],
     ["type", "평가 유형"], ["perspective", "평가 관점"], ["high", "상"], ["middle", "중"],
@@ -686,6 +688,40 @@ function PlanManager({ plan, onChanged, current }: { plan: AssessmentPlan[]; onC
     anchor.click();
     URL.revokeObjectURL(anchor.href);
   };
+  const loadVersions = async () => {
+    setErrors([]);
+    try {
+      const response = await fetch("/api/assessment-plan/versions");
+      const result = await response.json() as { versions?: Array<{ id: number; source: string; label: string; itemCount: number; createdAt: string }>; error?: string };
+      if (!response.ok) throw new Error(result.error || "평가계획 버전 기록을 불러오지 못했습니다.");
+      setVersions(result.versions ?? []);
+      setVersionsOpen(true);
+    } catch (error) {
+      setErrors([error instanceof Error ? error.message : "평가계획 버전 기록을 불러오지 못했습니다."]);
+    }
+  };
+  const restoreVersion = async (version: { id: number; label: string; itemCount: number }) => {
+    if (!window.confirm(`‘${version.label}’ 버전의 평가계획 ${version.itemCount}개로 복원할까요?\n\n현재 계획은 복원 직전 상태로 다시 버전 보관됩니다.`)) return;
+    setBusy(true);
+    setErrors([]);
+    try {
+      const response = await fetch("/api/assessment-plan/versions", {
+        method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ versionId: version.id }),
+      });
+      const result = await response.json() as { restored?: number; error?: string };
+      if (!response.ok) throw new Error(result.error || "평가계획 버전을 복원하지 못했습니다.");
+      const planResponse = await fetch("/api/assessment-plan");
+      const planResult = await planResponse.json() as { plan?: AssessmentPlan[] };
+      if (!planResponse.ok || !planResult.plan) throw new Error("복원된 평가계획을 다시 불러오지 못했습니다.");
+      onChanged(planResult.plan);
+      setMessage(`평가계획 ${result.restored ?? version.itemCount}개를 이전 버전으로 복원했습니다.`);
+      await loadVersions();
+    } catch (error) {
+      setErrors([error instanceof Error ? error.message : "평가계획 버전을 복원하지 못했습니다."]);
+    } finally {
+      setBusy(false);
+    }
+  };
   const copyToClassroom = async () => {
     const target = classrooms.find((item) => item.id === Number(targetClassId));
     if (!target) return setErrors(["복사할 대상 학급을 선택해 주세요."]);
@@ -712,8 +748,16 @@ function PlanManager({ plan, onChanged, current }: { plan: AssessmentPlan[]; onC
   return <section>
     <div className="page-heading">
       <div><p className="eyebrow">학급별 평가 기준</p><h1>평가계획 관리</h1><p>직접 입력하거나 Excel·CSV를 검증한 뒤 저장하세요.</p></div>
-      <div className="heading-actions"><button className="secondary" onClick={downloadTemplate}>업로드 양식 받기</button><label className="file-upload-button">Excel/CSV 불러오기<input type="file" accept=".xlsx,.xls,.csv" onChange={(event) => { const file = event.target.files?.[0]; if (file) void upload(file); event.target.value = ""; }} /></label></div>
+      <div className="heading-actions"><button className="secondary" onClick={() => void loadVersions()}>버전 기록</button><button className="secondary" onClick={downloadTemplate}>업로드 양식 받기</button><label className="file-upload-button">Excel/CSV 불러오기<input type="file" accept=".xlsx,.xls,.csv" onChange={(event) => { const file = event.target.files?.[0]; if (file) void upload(file); event.target.value = ""; }} /></label></div>
     </div>
+    {versionsOpen && <section className="plan-version-panel">
+      <div className="section-heading"><div><p className="eyebrow">VERSION HISTORY</p><h2>평가계획 버전 기록</h2></div><button className="secondary" onClick={() => setVersionsOpen(false)}>닫기</button></div>
+      <p>평가수준이 입력된 학급은 평가 항목 구조 보호를 위해 이전 버전을 조회만 할 수 있습니다.</p>
+      <div>{versions.length ? versions.map((version) => <article key={version.id}>
+        <span><b>{version.label}</b><small>{new Intl.DateTimeFormat("ko-KR", { dateStyle: "short", timeStyle: "short" }).format(new Date(version.createdAt))} · {version.itemCount}개</small></span>
+        <button disabled={busy} onClick={() => void restoreVersion(version)}>이 버전 복원</button>
+      </article>) : <p className="empty-cell">저장된 평가계획 버전이 없습니다.</p>}</div>
+    </section>}
     <div className="plan-help"><strong>필수 열</strong> 과목 · 단원 · 평가목표 · 영역 · 평가 관점 · 상 · 중 · 하 <span>평가 유형과 유의점은 선택 항목입니다.</span></div>
     <section className="plan-copy">
       <div><strong>다른 학급에 적용</strong><span>현재 평가계획 {plan.length}개를 내가 관리하는 다른 학급으로 복사합니다.</span></div>

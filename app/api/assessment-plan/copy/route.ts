@@ -1,5 +1,6 @@
 import { eq, selectRows, upsertRows } from "../../../../db/supabase";
 import { dataError, getDataScope } from "../../../data-scope";
+import { snapshotAssessmentPlan } from "../../../assessment-plan-versions";
 
 type ClassroomRow = {
   id: number;
@@ -48,6 +49,10 @@ export async function POST(request: Request) {
       owner_id: user.id,
       class_id: targetClassId,
     })), "class_id,subject,unit,goal");
+    await snapshotAssessmentPlan({
+      ownerId: user.id, ownerEmail: user.email, classId: targetClassId, source: "copy",
+      label: `${source.length}개 평가계획 복사`,
+    });
     return Response.json({
       ok: true,
       copied: source.length,
