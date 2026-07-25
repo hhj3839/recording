@@ -309,12 +309,18 @@ function StudentManager({ roster, onAdded, onChanged, onDeleted, onImported }: {
   const [message, setMessage] = useState("");
   const [busy, setBusy] = useState(false);
   const [drafts, setDrafts] = useState<Record<number, { number: number; name: string }>>({});
+  const [inactiveStudents, setInactiveStudents] = useState<Array<{ id: number; number: number; name: string }>>([]);
+  const [studentTab, setStudentTab] = useState<"active" | "inactive">("active");
 
   useEffect(() => {
     setDrafts(Object.fromEntries(roster.map((student) => [student.id, {
       number: student.number ?? student.id,
       name: student.name,
     }])));
+    fetch("/api/students/status").then(async (response) => {
+      const result = await response.json() as { students?: Array<{ id: number; number: number; name: string }> };
+      if (response.ok) setInactiveStudents(result.students ?? []);
+    }).catch(() => undefined);
   }, [roster]);
 
   async function addStudent(event: React.FormEvent) {
@@ -396,6 +402,43 @@ function StudentManager({ roster, onAdded, onChanged, onDeleted, onImported }: {
     link.click();
     URL.revokeObjectURL(url);
   }
+  async function restoreStudent(student: { id: number; number: number; name: string }) {
+    setBusy(true);
+    setMessage("");
+    try {
+      const response = await fetch("/api/students/status", {
+        method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ id: student.id }),
+      });
+      const result = await response.json() as { student?: { id: number; number: number; name: string }; error?: string };
+      if (!response.ok || !result.student) throw new Error(result.error || "학생을 복귀시키지 못했습니다.");
+      setInactiveStudents((current) => current.filter((item) => item.id !== student.id));
+      onAdded(result.student);
+      setMessage(`${student.name} 학생을 재학생으로 복귀시켰습니다. 기존 평가 기록도 유지됩니다.`);
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : "학생을 복귀시키지 못했습니다.");
+    } finally {
+      setBusy(false);
+    }
+  }
+  async function purgeStudent(student: { id: number; number: number; name: string }) {
+    if (!window.confirm(`${student.name} 학생과 연결된 평가·평어·행동특성 기록을 모두 영구 삭제할까요?\n\n이 작업은 복구할 수 없습니다.`)) return;
+    setBusy(true);
+    setMessage("");
+    try {
+      const response = await fetch("/api/students/status", {
+        method: "DELETE", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ id: student.id, confirmation: "학생영구삭제" }),
+      });
+      const result = await response.json() as { error?: string };
+      if (!response.ok) throw new Error(result.error || "학생을 영구 삭제하지 못했습니다.");
+      setInactiveStudents((current) => current.filter((item) => item.id !== student.id));
+      setMessage(`${student.name} 학생과 연결 기록을 영구 삭제했습니다.`);
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : "학생을 영구 삭제하지 못했습니다.");
+    } finally {
+      setBusy(false);
+    }
+  }
 
   return <section>
     <div className="page-heading"><div><p className="eyebrow">CLASS ROSTER</p><h1>학생 관리</h1><p>번호와 이름만 등록하며, 업로드한 파일은 브라우저에서 읽은 뒤 현재 학급에 저장됩니다.</p></div></div>
@@ -411,6 +454,11 @@ function StudentManager({ roster, onAdded, onChanged, onDeleted, onImported }: {
       </div>
     </div>
     {message && <p className="student-message" role="status">{message}</p>}
+    <div className="student-status-tabs">
+      <button className={studentTab === "active" ? "active" : ""} onClick={() => setStudentTab("active")}>재학생 {roster.length}</button>
+      <button className={studentTab === "inactive" ? "active" : ""} onClick={() => setStudentTab("inactive")}>전출·비활성 {inactiveStudents.length}</button>
+    </div>
+    {studentTab === "active" ? (
     <div className="table-wrap student-table-wrap"><table className="students-table">
       <thead><tr><th>번호</th><th>이름</th><th>관리</th></tr></thead>
       <tbody>{roster.length ? roster.map((student) => {
@@ -422,6 +470,15 @@ function StudentManager({ roster, onAdded, onChanged, onDeleted, onImported }: {
         </tr>;
       }) : <tr><td colSpan={3} className="empty-cell">등록된 학생이 없습니다. 직접 추가하거나 명단을 업로드해 주세요.</td></tr>}</tbody>
     </table></div>
+    ) : (
+      <div className="table-wrap student-table-wrap"><table className="students-table inactive-students-table">
+        <thead><tr><th>번호</th><th>이름</th><th>관리</th></tr></thead>
+        <tbody>{inactiveStudents.length ? inactiveStudents.map((student) => <tr key={student.id}>
+          <td>{student.number}</td><td><strong>{student.name}</strong><small>평가·평어 기록 보관 중</small></td>
+          <td><button disabled={busy} onClick={() => void restoreStudent(student)}>재학생 복귀</button><button disabled={busy} className="danger-text" onClick={() => void purgeStudent(student)}>영구 삭제</button></td>
+        </tr>) : <tr><td colSpan={3} className="empty-cell">전출·비활성 학생이 없습니다.</td></tr>}</tbody>
+      </table></div>
+    )}
   </section>;
 }
 
@@ -1474,7 +1531,7 @@ export default function Home() {
   };
   const deleteStudent = async (id: number) => {
     const student = roster.find((item) => item.id === id);
-    if (!student || !window.confirm(`${student.name} 학생을 삭제할까요?`)) return;
+    if (!student || !window.confirm(`${student.name} 학생을 전출·비활성 처리할까요?\n\n기존 평가와 생성 기록은 보존됩니다.`)) return;
     const response = await fetch(`/api/students?id=${id}`, { method: "DELETE" });
     if (!response.ok) return window.alert("학생을 삭제하지 못했습니다.");
     setRoster((current) => current.filter((item) => item.id !== id));
