@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 
-type View = "dashboard" | "students" | "plans" | "assessments" | "comments" | "behavior";
+type View = "dashboard" | "students" | "plans" | "assessments" | "comments" | "behavior" | "export";
 type Level = "상" | "중" | "하" | "-";
 type AssessmentPlan = {
   id?: number;
@@ -784,6 +784,136 @@ function Behavior({ roster }: { roster: AssessmentStudent[] }) {
   );
 }
 
+type ExportComment = { studentId: number; subject: string; comment: string; updatedAt: string };
+type ExportBehavior = { studentId: number; characteristic: string; behavior: string; updatedAt: string };
+
+function ExportResults({ roster, plan, classroom }: { roster: AssessmentStudent[]; plan: AssessmentPlan[]; classroom: ClassroomInfo | null }) {
+  const [comments, setComments] = useState<ExportComment[]>([]);
+  const [behaviors, setBehaviors] = useState<ExportBehavior[]>([]);
+  const [selectedSubject, setSelectedSubject] = useState("");
+  const [loading, setLoading] = useState(true);
+  const [message, setMessage] = useState("");
+  const subjects = [...new Set([...plan.map((item) => item.subject), ...comments.map((item) => item.subject)].filter(Boolean))];
+  useEffect(() => {
+    const load = async () => {
+      try {
+        const [commentResponse, behaviorResponse] = await Promise.all([fetch("/api/generated-comments"), fetch("/api/student-behaviors")]);
+        const commentResult = await commentResponse.json() as { comments?: ExportComment[]; error?: string };
+        const behaviorResult = await behaviorResponse.json() as { behaviors?: ExportBehavior[]; error?: string };
+        if (!commentResponse.ok || !behaviorResponse.ok) throw new Error(commentResult.error || behaviorResult.error || "결과를 불러오지 못했습니다.");
+        setComments(commentResult.comments ?? []);
+        setBehaviors(behaviorResult.behaviors ?? []);
+        const first = commentResult.comments?.[0]?.subject ?? plan[0]?.subject ?? "";
+        setSelectedSubject(first);
+      } catch (error) {
+        setMessage(error instanceof Error ? error.message : "결과를 불러오지 못했습니다.");
+      } finally { setLoading(false); }
+    };
+    void load();
+  }, [plan]);
+  const byteLength = (value: string) => new TextEncoder().encode(value).length;
+  const commentMap = new Map(comments.map((item) => [`${item.studentId}|${item.subject}`, item]));
+  const behaviorMap = new Map(behaviors.map((item) => [item.studentId, item]));
+  const copyLines = async (lines: string[], label: string) => {
+    try {
+      await navigator.clipboard.writeText(lines.join("\n"));
+      setMessage(`${label}을 번호순으로 복사했습니다. 나이스 첫 번째 학생 칸에 붙여넣으세요.`);
+    } catch {
+      setMessage("클립보드 권한을 확인해 주세요.");
+    }
+  };
+  const exportWorkbook = async () => {
+    const XLSX = await import("xlsx");
+    const ordered = [...roster].sort((a, b) => (a.number ?? a.id) - (b.number ?? b.id));
+    const subjectRows = subjects.flatMap((subject) => ordered.map((student) => {
+      const result = commentMap.get(`${student.id}|${subject}`);
+      return {
+        번호: student.number ?? student.id, 이름: student.name, 과목: subject,
+        "교과 평어": result?.comment ?? "", "바이트 수": byteLength(result?.comment ?? ""),
+        "작성 상태": result?.comment ? "작성" : "미작성", "최종 수정일": result?.updatedAt ? new Date(result.updatedAt).toLocaleString("ko-KR") : "",
+      };
+    }));
+    const behaviorRows = ordered.map((student) => {
+      const result = behaviorMap.get(student.id);
+      return {
+        번호: student.number ?? student.id, 이름: student.name, 특성: result?.characteristic ?? "",
+        "행동특성 및 발달상황": result?.behavior ?? "", "바이트 수": byteLength(result?.behavior ?? ""),
+        "검수 결과": result?.behavior ? (byteLength(result.behavior) >= 500 && byteLength(result.behavior) <= 550 ? "바이트 정상" : "바이트 확인") : "미작성",
+        "작성 상태": result?.behavior ? "작성" : "미작성", "최종 수정일": result?.updatedAt ? new Date(result.updatedAt).toLocaleString("ko-KR") : "",
+      };
+    });
+    const summaryRows = ordered.map((student) => ({
+      번호: student.number ?? student.id,
+      이름: student.name,
+      "교과 평어 작성": `${subjects.filter((subject) => commentMap.get(`${student.id}|${subject}`)?.comment).length}/${subjects.length}`,
+      "행동특성 작성": behaviorMap.get(student.id)?.behavior ? "완료" : "미작성",
+    }));
+    const workbook = XLSX.utils.book_new();
+    const addSheet = (name: string, rows: Record<string, unknown>[], widths: number[]) => {
+      const sheet = XLSX.utils.json_to_sheet(rows);
+      sheet["!cols"] = widths.map((wch) => ({ wch }));
+      sheet["!autofilter"] = rows.length ? { ref: sheet["!ref"] ?? "A1" } : undefined;
+      XLSX.utils.book_append_sheet(workbook, sheet, name);
+    };
+    addSheet("작성현황", summaryRows, [8, 12, 18, 18]);
+    addSheet("교과평어", subjectRows, [8, 12, 12, 70, 12, 12, 22]);
+    addSheet("행동특성", behaviorRows, [8, 12, 40, 80, 12, 16, 12, 22]);
+    const classLabel = classroom ? `${classroom.schoolYear}_${classroom.grade}학년_${classroom.classNumber}반` : "학급";
+    XLSX.writeFile(workbook, `기록샘_${classLabel}_최종결과.xlsx`);
+    setMessage("전체 결과 Excel 파일을 내려받았습니다.");
+  };
+  const downloadCsv = (kind: "comments" | "behaviors") => {
+    const ordered = [...roster].sort((a, b) => (a.number ?? a.id) - (b.number ?? b.id));
+    const rows = kind === "comments"
+      ? ordered.map((student) => [student.number ?? student.id, student.name, selectedSubject, commentMap.get(`${student.id}|${selectedSubject}`)?.comment ?? ""])
+      : ordered.map((student) => [student.number ?? student.id, student.name, behaviorMap.get(student.id)?.behavior ?? ""]);
+    const header = kind === "comments" ? ["번호", "이름", "과목", "평어"] : ["번호", "이름", "행동특성"];
+    const escape = (value: unknown) => `"${String(value ?? "").replaceAll("\"", "\"\"")}"`;
+    const blob = new Blob([`\uFEFF${[header, ...rows].map((row) => row.map(escape).join(",")).join("\n")}`], { type: "text/csv;charset=utf-8" });
+    const anchor = document.createElement("a");
+    anchor.href = URL.createObjectURL(blob);
+    anchor.download = kind === "comments" ? `기록샘_${selectedSubject}_교과평어.csv` : "기록샘_행동특성.csv";
+    anchor.click();
+    URL.revokeObjectURL(anchor.href);
+    setMessage("CSV 파일을 내려받았습니다.");
+  };
+  const orderedRoster = [...roster].sort((a, b) => (a.number ?? a.id) - (b.number ?? b.id));
+  const writtenComments = comments.filter((item) => item.comment).length;
+  const writtenBehaviors = behaviors.filter((item) => item.behavior).length;
+  return <section>
+    <div className="page-heading">
+      <div><p className="eyebrow">NEIS READY</p><h1>결과 내보내기</h1><p>학급의 최종 기록을 번호순으로 복사하거나 Excel·CSV로 내려받으세요.</p></div>
+      <button onClick={() => void exportWorkbook()} disabled={loading}>전체 Excel 내려받기</button>
+    </div>
+    <div className="export-stats">
+      <article><span>교과 평어</span><strong>{writtenComments}건</strong><small>전체 {roster.length * subjects.length}건</small></article>
+      <article><span>행동특성</span><strong>{writtenBehaviors}명</strong><small>전체 {roster.length}명</small></article>
+      <article><span>내보내기 순서</span><strong>번호순</strong><small>나이스 붙여넣기 기준</small></article>
+    </div>
+    {message && <p className="student-message">{message}</p>}
+    <div className="export-grid">
+      <section className="export-card">
+        <div className="section-heading"><div><p className="eyebrow">SUBJECT COMMENTS</p><h2>교과 평어</h2></div></div>
+        <label className="export-select"><span>과목 선택</span><select value={selectedSubject} onChange={(event) => setSelectedSubject(event.target.value)}>{subjects.map((subject) => <option key={subject}>{subject}</option>)}</select></label>
+        <p>복사 버튼은 번호와 이름을 제외하고 평어만 한 줄에 한 명씩 복사합니다.</p>
+        <div className="export-actions"><button onClick={() => void copyLines(orderedRoster.map((student) => commentMap.get(`${student.id}|${selectedSubject}`)?.comment ?? ""), `${selectedSubject} 평어`)}>평어만 복사</button><button className="secondary" onClick={() => downloadCsv("comments")}>CSV 내려받기</button></div>
+      </section>
+      <section className="export-card">
+        <div className="section-heading"><div><p className="eyebrow">BEHAVIOR</p><h2>행동특성</h2></div></div>
+        <p>학생 번호순으로 행동특성만 복사해 나이스 입력란에 바로 붙여넣을 수 있습니다.</p>
+        <div className="export-actions"><button onClick={() => void copyLines(orderedRoster.map((student) => behaviorMap.get(student.id)?.behavior ?? ""), "행동특성")}>행동특성만 복사</button><button className="secondary" onClick={() => downloadCsv("behaviors")}>CSV 내려받기</button></div>
+      </section>
+    </div>
+    <section className="export-preview">
+      <div className="section-heading"><div><p className="eyebrow">PREVIEW</p><h2>{selectedSubject || "교과"} 평어 미리보기</h2></div></div>
+      <div className="student-table-wrap"><table className="students-table"><thead><tr><th>번호</th><th>이름</th><th>평어</th><th>바이트</th></tr></thead><tbody>{orderedRoster.map((student) => {
+        const value = commentMap.get(`${student.id}|${selectedSubject}`)?.comment ?? "";
+        return <tr key={student.id}><td>{student.number ?? student.id}</td><td>{student.name}</td><td>{value || <span className="export-empty">미작성</span>}</td><td>{byteLength(value)}</td></tr>;
+      })}</tbody></table></div>
+    </section>
+  </section>;
+}
+
 export default function Home() {
   const [view, setView] = useState<View>("dashboard");
   const [currentUser, setCurrentUser] = useState("선생님");
@@ -915,11 +1045,11 @@ export default function Home() {
         <button className="brand" onClick={() => setView("dashboard")}><span>기록</span>샘<i>교사의 기록을 더 가치 있게</i></button>
         <nav>{navItems.map((item) => <button className={view === item.id ? "active" : ""} key={item.id} onClick={() => setView(item.id)}><span>{item.icon}</span>{item.label}</button>)}</nav>
         <div className="nav-divider" />
-        <nav><button><span>⇧</span>결과 내보내기</button></nav>
+        <nav><button className={view === "export" ? "active" : ""} onClick={() => setView("export")}><span>⇧</span>결과 내보내기</button></nav>
         <div className="sidebar-bottom"><div className="storage"><span>이번 달 AI 생성</span><strong>128 / 300</strong><div><i /></div></div><div className="profile"><span className="avatar">{currentUser.slice(0, 1)}</span><span><b>{currentUser}</b><small>{classroom?.schoolName ?? "학교 정보 확인 중"}</small></span><form action="/api/auth/logout" method="post"><button type="submit">로그아웃</button></form></div></div>
       </aside>
       <main>
-        <header className="mobile-header"><button className="brand" onClick={() => setView("dashboard")}><span>기록</span>샘</button><select value={view} onChange={(e) => setView(e.target.value as View)}>{navItems.map((item) => <option value={item.id} key={item.id}>{item.label}</option>)}</select></header>
+        <header className="mobile-header"><button className="brand" onClick={() => setView("dashboard")}><span>기록</span>샘</button><select value={view} onChange={(e) => setView(e.target.value as View)}>{navItems.map((item) => <option value={item.id} key={item.id}>{item.label}</option>)}<option value="export">결과 내보내기</option></select></header>
         <div className="content">
           {view === "dashboard" && <Dashboard move={setView} teacherName={currentUser} classroom={classroom} studentCount={roster.length} completedLevels={completedLevels} totalLevels={totalLevels} />}
           {view === "students" && <StudentManager roster={roster} onAdded={mergeStudentIntoState} onChanged={mergeStudentIntoState} onDeleted={(id) => void deleteStudent(id)} onImported={mergeImportedStudents} />}
@@ -927,6 +1057,7 @@ export default function Home() {
           {view === "assessments" && <Assessments data={assessmentDataBySubject[activeSubject] ?? []} setData={(updater) => setAssessmentDataBySubject((current) => ({ ...current, [activeSubject]: typeof updater === "function" ? updater(current[activeSubject] ?? []) : updater }))} plan={plan} activeSubject={activeSubject} setActiveSubject={setActiveSubject} onAddStudent={() => void addStudent()} onDeleteStudent={(id) => void deleteStudent(id)} onSave={saveAssessmentLevels} />}
           {view === "comments" && <Comments assessmentDataBySubject={assessmentDataBySubject} plan={plan} roster={roster} />}
           {view === "behavior" && <Behavior roster={roster} />}
+          {view === "export" && <ExportResults roster={roster} plan={plan} classroom={classroom} />}
         </div>
       </main>
     </div>
