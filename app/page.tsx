@@ -91,24 +91,30 @@ const navItems: { id: View; label: string; icon: string }[] = [
   { id: "behavior", label: "행동특성", icon: "◎" },
 ];
 
-function Dashboard({ move, teacherName, classroom, studentCount, completedLevels, totalLevels }: {
+function Dashboard({ move, teacherName, classroom, studentCount, completedLevels, totalLevels, commentCount, expectedComments, behaviorCount }: {
   move: (view: View) => void;
   teacherName: string;
   classroom: ClassroomInfo | null;
   studentCount: number;
   completedLevels: number;
   totalLevels: number;
+  commentCount: number;
+  expectedComments: number;
+  behaviorCount: number;
 }) {
+  const levelProgress = totalLevels ? Math.round((completedLevels / totalLevels) * 100) : 0;
+  const commentProgress = expectedComments ? Math.round((commentCount / expectedComments) * 100) : 0;
+  const behaviorProgress = studentCount ? Math.round((behaviorCount / studentCount) * 100) : 0;
   const cards = [
     { label: "학생", value: `${studentCount}명`, detail: "재적 학생", tone: "blue" },
-    { label: "평가 입력", value: totalLevels ? `${Math.round((completedLevels / totalLevels) * 100)}%` : "0%", detail: `${completedLevels} / ${totalLevels}개`, tone: "mint" },
-    { label: "교과 평어", value: "0건", detail: "생성 결과", tone: "amber" },
-    { label: "행동특성", value: "0명", detail: `전체 ${studentCount}명`, tone: "violet" },
+    { label: "평가 입력", value: `${levelProgress}%`, detail: `${completedLevels} / ${totalLevels}개`, tone: "mint" },
+    { label: "교과 평어", value: `${commentCount}건`, detail: `전체 ${expectedComments}건`, tone: "amber" },
+    { label: "행동특성", value: `${behaviorCount}명`, detail: `전체 ${studentCount}명`, tone: "violet" },
   ];
   const tasks = [
-    { title: "국어 평가 수준 입력", detail: "5명이 아직 입력되지 않았어요", action: "이어하기", view: "assessments" as View, progress: 78 },
-    { title: "수학 교과 평어 검토", detail: "생성된 문장 8건을 확인해 주세요", action: "검토하기", view: "comments" as View, progress: 64 },
-    { title: "행동특성 관찰 기록", detail: "12명의 기록을 더 입력해 주세요", action: "기록하기", view: "behavior" as View, progress: 45 },
+    { title: "평가 수준 입력", detail: totalLevels ? `${Math.max(totalLevels - completedLevels, 0)}개 항목이 남았습니다.` : "평가계획과 학생 명단을 먼저 등록하세요.", action: levelProgress === 100 ? "확인하기" : "이어하기", view: "assessments" as View, progress: levelProgress },
+    { title: "교과 평어 작성", detail: expectedComments ? `${Math.max(expectedComments - commentCount, 0)}건의 평어가 남았습니다.` : "평가계획과 학생 명단을 먼저 등록하세요.", action: commentProgress === 100 ? "검토하기" : "작성하기", view: "comments" as View, progress: commentProgress },
+    { title: "행동특성 작성", detail: `${Math.max(studentCount - behaviorCount, 0)}명의 행동특성이 남았습니다.`, action: behaviorProgress === 100 ? "검토하기" : "기록하기", view: "behavior" as View, progress: behaviorProgress },
   ];
 
   return (
@@ -163,7 +169,7 @@ function Dashboard({ move, teacherName, classroom, studentCount, completedLevels
 
       <section className="privacy-banner">
         <span>◈</span><div><strong>학생 정보는 안전하게 보호됩니다</strong><p>AI 문장 생성 시 학생 이름은 자동으로 비식별 처리되며, 입력하지 않은 사실은 문장에 포함하지 않습니다.</p></div>
-        <button>보호 원칙 보기</button>
+        <button onClick={() => move("settings")}>보호 원칙 보기</button>
       </section>
     </>
   );
@@ -995,10 +1001,17 @@ export default function Home() {
   const [assessmentDataBySubject, setAssessmentDataBySubject] = useState<Record<string, AssessmentStudent[]>>({});
   const [plan, setPlan] = useState<AssessmentPlan[]>([]);
   const [activeSubject, setActiveSubject] = useState("");
+  const [generatedCommentCount, setGeneratedCommentCount] = useState(0);
+  const [generatedBehaviorCount, setGeneratedBehaviorCount] = useState(0);
   useEffect(() => {
     const loadClassData = async () => {
       try {
-        const [planResponse, classResponse] = await Promise.all([fetch("/api/assessment-plan"), fetch("/api/class-data")]);
+        const [planResponse, classResponse, commentResponse, behaviorResponse] = await Promise.all([
+          fetch("/api/assessment-plan"),
+          fetch("/api/class-data"),
+          fetch("/api/generated-comments"),
+          fetch("/api/student-behaviors"),
+        ]);
         const planResult = await planResponse.json() as { plan?: AssessmentPlan[] };
         const classResult = await classResponse.json() as {
           students?: Array<{ id: number; number: number; name: string }>;
@@ -1006,6 +1019,8 @@ export default function Home() {
           user?: { displayName: string };
           classroom?: ClassroomInfo;
         };
+        const commentResult = await commentResponse.json() as { comments?: Array<{ comment: string }> };
+        const behaviorResult = await behaviorResponse.json() as { behaviors?: Array<{ behavior: string }> };
         if (!planResponse.ok || !classResponse.ok) return;
         const loadedPlan = planResult.plan ?? [];
         const loadedRoster: AssessmentStudent[] = classResponse.ok && classResult.students?.length
@@ -1014,6 +1029,8 @@ export default function Home() {
         const savedLevels = new Map((classResult.levels ?? []).map((item) => [`${item.studentId}|${item.subject}|${item.assessmentIndex}`, item.level]));
         setPlan(loadedPlan);
         setRoster(loadedRoster);
+        setGeneratedCommentCount((commentResult.comments ?? []).filter((item) => item.comment.trim()).length);
+        setGeneratedBehaviorCount((behaviorResult.behaviors ?? []).filter((item) => item.behavior.trim()).length);
         if (classResult.user?.displayName) setCurrentUser(classResult.user.displayName);
         if (classResult.classroom) setClassroom(classResult.classroom);
         const firstSubject = loadedPlan[0]?.subject ?? "";
@@ -1033,6 +1050,21 @@ export default function Home() {
     };
     void loadClassData();
   }, []);
+  useEffect(() => {
+    if (view !== "dashboard") return;
+    const refreshGeneratedCounts = async () => {
+      try {
+        const [commentResponse, behaviorResponse] = await Promise.all([fetch("/api/generated-comments"), fetch("/api/student-behaviors")]);
+        const commentResult = await commentResponse.json() as { comments?: Array<{ comment: string }> };
+        const behaviorResult = await behaviorResponse.json() as { behaviors?: Array<{ behavior: string }> };
+        if (commentResponse.ok) setGeneratedCommentCount((commentResult.comments ?? []).filter((item) => item.comment.trim()).length);
+        if (behaviorResponse.ok) setGeneratedBehaviorCount((behaviorResult.behaviors ?? []).filter((item) => item.behavior.trim()).length);
+      } catch {
+        // 대시보드 집계 실패는 작성 기능을 막지 않음.
+      }
+    };
+    void refreshGeneratedCounts();
+  }, [view]);
   const addStudent = async () => {
     const name = window.prompt("추가할 학생 이름을 입력해 주세요.");
     if (!name?.trim()) return;
@@ -1124,7 +1156,7 @@ export default function Home() {
       <main>
         <header className="mobile-header"><button className="brand" onClick={() => setView("dashboard")}><span>기록</span>샘</button><select value={view} onChange={(e) => setView(e.target.value as View)}>{navItems.map((item) => <option value={item.id} key={item.id}>{item.label}</option>)}<option value="export">결과 내보내기</option><option value="settings">개인정보·설정</option></select></header>
         <div className="content">
-          {view === "dashboard" && <Dashboard move={setView} teacherName={currentUser} classroom={classroom} studentCount={roster.length} completedLevels={completedLevels} totalLevels={totalLevels} />}
+          {view === "dashboard" && <Dashboard move={setView} teacherName={currentUser} classroom={classroom} studentCount={roster.length} completedLevels={completedLevels} totalLevels={totalLevels} commentCount={generatedCommentCount} expectedComments={roster.length * new Set(plan.map((item) => item.subject)).size} behaviorCount={generatedBehaviorCount} />}
           {view === "students" && <StudentManager roster={roster} onAdded={mergeStudentIntoState} onChanged={mergeStudentIntoState} onDeleted={(id) => void deleteStudent(id)} onImported={mergeImportedStudents} />}
           {view === "plans" && <PlanManager plan={plan} onChanged={applyPlanChange} />}
           {view === "assessments" && <Assessments data={assessmentDataBySubject[activeSubject] ?? []} setData={(updater) => setAssessmentDataBySubject((current) => ({ ...current, [activeSubject]: typeof updater === "function" ? updater(current[activeSubject] ?? []) : updater }))} plan={plan} activeSubject={activeSubject} setActiveSubject={setActiveSubject} onAddStudent={() => void addStudent()} onDeleteStudent={(id) => void deleteStudent(id)} onSave={saveAssessmentLevels} />}
