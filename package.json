@@ -11,7 +11,8 @@
     "start": "vinext start",
     "test": "vinext build && node --test tests/rendered-html.test.mjs",
     "lint": "eslint . --ignore-pattern dist --ignore-pattern .next",
-    "db:generate": "drizzle-kit generate"
+    "db:generate": "drizzle-kit generate",
+    "db:migrate-auth": "node scripts/migrate-auth-ownership.mjs"
   },
   "dependencies": {
     "@supabase/ssr": "^0.12.3",

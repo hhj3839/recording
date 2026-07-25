@@ -10,7 +10,7 @@ export async function POST(request: Request) {
     const { user, classId } = await getDataScope();
     const now = new Date().toISOString();
     const [student] = await insertRows<{ id: number; number: number; name: string }>("students", [{
-      name, number, active: true, created_at: now, owner_email: user.email, class_id: classId,
+      name, number, active: true, created_at: now, owner_email: user.email, owner_id: user.id, class_id: classId,
     }]);
     return Response.json({ student });
   } catch (error) {
@@ -23,7 +23,7 @@ export async function DELETE(request: Request) {
     const id = Number(new URL(request.url).searchParams.get("id"));
     if (!Number.isInteger(id)) return Response.json({ error: "학생 정보를 확인해 주세요." }, { status: 400 });
     const { user, classId } = await getDataScope();
-    await updateRows("students", { id: eq(id), owner_email: eq(user.email), class_id: eq(classId) }, { active: false });
+    await updateRows("students", { id: eq(id), owner_id: eq(user.id), class_id: eq(classId) }, { active: false });
     return Response.json({ ok: true });
   } catch (error) {
     return dataError(error, "학생을 삭제하지 못했습니다.");

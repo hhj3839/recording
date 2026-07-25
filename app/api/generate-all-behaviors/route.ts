@@ -1,5 +1,5 @@
 import { upsertRows } from "../../../db/supabase";
-import { dataError, getDataScope } from "../../data-scope";
+import { dataError, getDataScope, requireOwnedStudentIds } from "../../data-scope";
 
 function extractOutputText(payload: unknown): string {
   if (!payload || typeof payload !== "object") return "";
@@ -23,6 +23,7 @@ export async function POST(request: Request) {
       return Number.isInteger(studentId) && characteristic ? [{ studentId, characteristic }] : [];
     });
     if (!inputs.length) return Response.json({ error: "한 명 이상의 특성을 입력해 주세요." }, { status: 400 });
+    await requireOwnedStudentIds(inputs.map((item) => item.studentId), user.id, classId);
     const apiKey = process.env.OPENAI_API_KEY;
     if (!apiKey) return Response.json({ error: "AI 생성 설정이 아직 완료되지 않았습니다." }, { status: 503 });
     const response = await fetch("https://api.openai.com/v1/responses", {
@@ -58,6 +59,7 @@ export async function POST(request: Request) {
       behavior: item.behavior,
       updated_at: updatedAt,
       owner_email: user.email,
+      owner_id: user.id,
       class_id: classId,
     })), "class_id,student_id");
     return Response.json({ behaviors, updatedAt });

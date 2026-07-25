@@ -1,5 +1,5 @@
 import { upsertRows } from "../../../db/supabase";
-import { dataError, getDataScope } from "../../data-scope";
+import { dataError, getDataScope, requireOwnedStudentIds } from "../../data-scope";
 
 type LevelInput = { studentId?: unknown; subject?: unknown; assessmentIndex?: unknown; level?: unknown };
 
@@ -18,6 +18,7 @@ export async function PUT(request: Request) {
     });
     if (!levels.length) return Response.json({ error: "저장할 평가수준이 없습니다." }, { status: 400 });
     const { user, classId } = await getDataScope();
+    await requireOwnedStudentIds(levels.map((item) => item.studentId), user.id, classId);
     const updatedAt = new Date().toISOString();
     await upsertRows("assessment_levels", levels.map((item) => ({
       student_id: item.studentId,
@@ -26,6 +27,7 @@ export async function PUT(request: Request) {
       level: item.level,
       updated_at: updatedAt,
       owner_email: user.email,
+      owner_id: user.id,
       class_id: classId,
     })), "class_id,student_id,subject,assessment_index");
     return Response.json({ ok: true, updatedAt });

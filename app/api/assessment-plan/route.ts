@@ -5,7 +5,7 @@ export async function GET() {
   try {
     const { user, classId } = await getDataScope();
     const rows = await selectRows<Record<string, string | number>>("assessment_plans", {
-      owner_email: eq(user.email), class_id: eq(classId), order: "sort_order.asc",
+      owner_id: eq(user.id), class_id: eq(classId), order: "sort_order.asc",
     });
     return Response.json({
       plan: rows.map((row) => ({

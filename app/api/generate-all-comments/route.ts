@@ -1,5 +1,5 @@
 import { eq, selectRows, upsertRows } from "../../../db/supabase";
-import { dataError, getDataScope } from "../../data-scope";
+import { dataError, getDataScope, requireOwnedStudentIds } from "../../data-scope";
 
 type Level = "상" | "중" | "하" | "-";
 type ScoreStudent = { studentId: number; levels: Level[] };
@@ -21,7 +21,7 @@ export async function POST(request: Request) {
     }
     const { user, classId } = await getDataScope();
     const rows = await selectRows<Record<string, string | number>>("assessment_plans", {
-      owner_email: eq(user.email), class_id: eq(classId), order: "sort_order.asc",
+      owner_id: eq(user.id), class_id: eq(classId), order: "sort_order.asc",
     });
     const plan = rows.map((row) => ({
       subject: String(row.subject), unit: String(row.unit), goal: String(row.goal), domain: String(row.domain),
@@ -45,6 +45,7 @@ export async function POST(request: Request) {
       }
     }
     if (!evidence.length) return Response.json({ error: "전 과목 중 평가 수준을 한 개 이상 입력해 주세요." }, { status: 400 });
+    await requireOwnedStudentIds(evidence.map((item) => item.studentId), user.id, classId);
 
     const apiKey = process.env.OPENAI_API_KEY;
     if (!apiKey) return Response.json({ error: "AI 생성 설정이 아직 완료되지 않았습니다." }, { status: 503 });
@@ -88,6 +89,7 @@ export async function POST(request: Request) {
       comment: item.comment,
       updated_at: updatedAt,
       owner_email: user.email,
+      owner_id: user.id,
       class_id: classId,
     })), "class_id,student_id,subject");
     return Response.json({ comments });

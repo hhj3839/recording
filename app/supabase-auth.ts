@@ -30,10 +30,26 @@ export function createAuthClient() {
 }
 
 export async function getAuthUser(): Promise<AuthUser | null> {
-  const token = (await cookies()).get(ACCESS_COOKIE)?.value;
+  const cookieStore = await cookies();
+  let token = cookieStore.get(ACCESS_COOKIE)?.value;
   if (!token) return null;
-  const { data, error } = await createAuthClient().auth.getUser(token);
-  if (error || !data.user?.email) return null;
+  const client = createAuthClient();
+  let { data, error } = await client.auth.getUser(token);
+  if (error || !data.user?.email) {
+    const refreshToken = cookieStore.get(REFRESH_COOKIE)?.value;
+    if (!refreshToken) return null;
+    const refreshed = await client.auth.refreshSession({ refresh_token: refreshToken });
+    if (refreshed.error || !refreshed.data.session) return null;
+    token = refreshed.data.session.access_token;
+    data = { user: refreshed.data.user };
+    try {
+      cookieStore.set(ACCESS_COOKIE, token, authCookieOptions(refreshed.data.session.expires_in));
+      cookieStore.set(REFRESH_COOKIE, refreshed.data.session.refresh_token, authCookieOptions(60 * 60 * 24 * 30));
+    } catch {
+      // 서버 컴포넌트 읽기 단계에서는 쿠키 갱신이 제한될 수 있음.
+    }
+  }
+  if (!data.user?.email) return null;
   return {
     id: data.user.id,
     email: data.user.email,

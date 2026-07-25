@@ -5,8 +5,8 @@ export async function GET() {
   try {
     const { user, classId, classroom } = await getDataScope();
     const [studentRows, levelRows] = await Promise.all([
-      selectRows<Record<string, string | number | boolean>>("students", { owner_email: eq(user.email), class_id: eq(classId), active: eq(true), order: "number.asc" }),
-      selectRows<Record<string, string | number>>("assessment_levels", { owner_email: eq(user.email), class_id: eq(classId), order: "student_id.asc,subject.asc,assessment_index.asc" }),
+      selectRows<Record<string, string | number | boolean>>("students", { owner_id: eq(user.id), class_id: eq(classId), active: eq(true), order: "number.asc" }),
+      selectRows<Record<string, string | number>>("assessment_levels", { owner_id: eq(user.id), class_id: eq(classId), order: "student_id.asc,subject.asc,assessment_index.asc" }),
     ]);
     return Response.json({
       students: studentRows.map((student) => ({ id: student.id, number: student.number, name: student.name })),

@@ -1,30 +1,29 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-async function render(authenticated = true) {
+async function request(path = "/") {
   const workerUrl = new URL("../dist/server/index.js", import.meta.url);
-  workerUrl.searchParams.set("test", `${process.pid}-${Date.now()}`);
+  workerUrl.searchParams.set("test", `${process.pid}-${Date.now()}-${Math.random()}`);
   const { default: worker } = await import(workerUrl.href);
-  const headers = { accept: "text/html" };
-  if (authenticated) headers["oai-authenticated-user-email"] = "teacher@example.com";
-  return worker.fetch(new Request("http://localhost/", { headers }), {
+  return worker.fetch(new Request(`http://localhost${path}`, {
+    headers: { accept: "text/html" },
+  }), {
     ASSETS: { fetch: async () => new Response("Not found", { status: 404 }) },
   }, { waitUntil() {}, passThroughOnException() {} });
 }
 
-test("renders the 기록샘 application shell", async () => {
-  const response = await render();
+test("renders the Supabase teacher login page", async () => {
+  const response = await request("/login");
   assert.equal(response.status, 200);
   const html = await response.text();
   assert.match(html, /<title>기록샘 \| 생활기록부 작성 지원<\/title>/);
-  assert.match(html, /홍현진 선생님, 안녕하세요/);
-  assert.match(html, /평가 수준 입력/);
-  assert.match(html, /학생 정보는 안전하게 보호됩니다/);
-  assert.doesNotMatch(html, /codex-preview|react-loading-skeleton/);
+  assert.match(html, /교사 로그인/);
+  assert.match(html, /회원가입/);
+  assert.match(html, /비밀번호를 잊으셨나요/);
 });
 
-test("redirects unauthenticated users to ChatGPT sign-in", async () => {
-  const response = await render(false);
+test("redirects unauthenticated users to the app login", async () => {
+  const response = await request("/");
   assert.equal(response.status, 307);
-  assert.match(response.headers.get("location") ?? "", /\/signin-with-chatgpt\?/);
+  assert.match(response.headers.get("location") ?? "", /\/login\?returnTo=%2F/);
 });

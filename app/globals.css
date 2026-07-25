@@ -330,4 +330,5 @@ button.secondary { color: #526171; border: 1px solid #dce1e6; background: #fff; 
 .auth-form input:focus,.auth-form select:focus{outline:3px solid rgba(53,111,229,.14);border-color:#356fe5}
 .auth-row{display:grid;grid-template-columns:1fr 1fr;gap:12px}.auth-submit{border:0;border-radius:11px;background:#356fe5;color:#fff;padding:13px;font-weight:800;font-size:15px;margin-top:4px}
 .auth-submit:disabled{opacity:.65}.auth-message{padding:11px 13px;border-radius:9px;background:#edf4ff;color:#214f9d!important;margin:0!important;font-size:13px}
+.auth-link{border:0;background:transparent;color:#356fe5;font-weight:700;padding:5px}
 @media(max-width:520px){.auth-card{padding:24px}.auth-row{grid-template-columns:1fr}}

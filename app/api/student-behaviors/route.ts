@@ -1,11 +1,11 @@
 import { eq, selectRows, upsertRows } from "../../../db/supabase";
-import { dataError, getDataScope } from "../../data-scope";
+import { dataError, getDataScope, requireOwnedStudentIds } from "../../data-scope";
 
 export async function GET() {
   try {
     const { user, classId } = await getDataScope();
     const rows = await selectRows<Record<string, string | number>>("student_behaviors", {
-      owner_email: eq(user.email), class_id: eq(classId), order: "student_id.asc",
+      owner_id: eq(user.id), class_id: eq(classId), order: "student_id.asc",
     });
     return Response.json({ behaviors: rows.map((row) => ({
       id: row.id, studentId: row.student_id, characteristic: row.characteristic, behavior: row.behavior, updatedAt: row.updated_at,
@@ -23,9 +23,10 @@ export async function PUT(request: Request) {
     const behavior = typeof body.behavior === "string" ? body.behavior.trim().slice(0, 8000) : "";
     if (!Number.isInteger(studentId)) return Response.json({ error: "학생 정보를 확인해 주세요." }, { status: 400 });
     const { user, classId } = await getDataScope();
+    await requireOwnedStudentIds([studentId], user.id, classId);
     const updatedAt = new Date().toISOString();
     await upsertRows("student_behaviors", [{
-      student_id: studentId, characteristic, behavior, updated_at: updatedAt, owner_email: user.email, class_id: classId,
+      student_id: studentId, characteristic, behavior, updated_at: updatedAt, owner_email: user.email, owner_id: user.id, class_id: classId,
     }], "class_id,student_id");
     return Response.json({ ok: true, updatedAt });
   } catch (error) {

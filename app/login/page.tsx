@@ -5,7 +5,7 @@ import { useSearchParams } from "next/navigation";
 
 export default function LoginPage() {
   const params = useSearchParams();
-  const [mode, setMode] = useState<"login" | "signup">("login");
+  const [mode, setMode] = useState<"login" | "signup" | "forgot">("login");
   const [message, setMessage] = useState("");
   const [busy, setBusy] = useState(false);
 
@@ -14,7 +14,8 @@ export default function LoginPage() {
     setBusy(true);
     setMessage("");
     const values = Object.fromEntries(new FormData(event.currentTarget));
-    const response = await fetch(`/api/auth/${mode}`, {
+    const endpoint = mode === "forgot" ? "forgot-password" : mode;
+    const response = await fetch(`/api/auth/${endpoint}`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ ...values, returnTo: params.get("returnTo") ?? "/" }),
@@ -30,7 +31,7 @@ export default function LoginPage() {
     <main className="auth-shell">
       <section className="auth-card">
         <div className="auth-brand">기록샘</div>
-        <h1>{mode === "login" ? "교사 로그인" : "교사 회원가입"}</h1>
+        <h1>{mode === "login" ? "교사 로그인" : mode === "signup" ? "교사 회원가입" : "비밀번호 찾기"}</h1>
         <p>학급 자료는 로그인한 교사 계정별로 안전하게 분리됩니다.</p>
         <div className="auth-tabs">
           <button className={mode === "login" ? "active" : ""} onClick={() => setMode("login")}>로그인</button>
@@ -50,9 +51,11 @@ export default function LoginPage() {
             </div>
           </>}
           <label>이메일<input name="email" type="email" required autoComplete="email" /></label>
-          <label>비밀번호<input name="password" type="password" minLength={8} required autoComplete={mode === "login" ? "current-password" : "new-password"} /></label>
+          {mode !== "forgot" && <label>비밀번호<input name="password" type="password" minLength={8} required autoComplete={mode === "login" ? "current-password" : "new-password"} /></label>}
           {message && <p className="auth-message" role="status">{message}</p>}
-          <button className="auth-submit" disabled={busy}>{busy ? "처리 중..." : mode === "login" ? "로그인" : "인증 메일 받기"}</button>
+          <button className="auth-submit" disabled={busy}>{busy ? "처리 중..." : mode === "login" ? "로그인" : mode === "signup" ? "인증 메일 받기" : "재설정 메일 받기"}</button>
+          {mode === "login" && <button type="button" className="auth-link" onClick={() => setMode("forgot")}>비밀번호를 잊으셨나요?</button>}
+          {mode === "forgot" && <button type="button" className="auth-link" onClick={() => setMode("login")}>로그인으로 돌아가기</button>}
         </form>
       </section>
     </main>

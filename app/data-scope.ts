@@ -1,18 +1,9 @@
-import { and, asc, eq as drizzleEq } from "drizzle-orm";
-import { getDb } from "../db";
-import {
-  assessmentLevels as d1AssessmentLevels,
-  assessmentPlans as d1AssessmentPlans,
-  classrooms as d1Classrooms,
-  generatedComments as d1GeneratedComments,
-  studentBehaviors as d1StudentBehaviors,
-  students as d1Students,
-} from "../db/schema";
-import { eq, insertRows, selectRows, upsertRows } from "../db/supabase";
+import { eq, selectRows, upsertRows } from "../db/supabase";
 import { getAuthUser } from "./supabase-auth";
 
 type SupabaseClassroom = {
   id: number;
+  owner_id: string;
   owner_email: string;
   school_name: string;
   school_year: number;
@@ -22,94 +13,33 @@ type SupabaseClassroom = {
   created_at: string;
 };
 
-type SupabaseStudent = { id: number; number: number; name: string };
-
 export class AuthenticationRequiredError extends Error {}
-
-async function migrateD1Data(ownerEmail: string, classId: number) {
-  const db = await getDb();
-  const legacyClass = (await db.select().from(d1Classrooms).where(and(
-    drizzleEq(d1Classrooms.ownerEmail, ownerEmail),
-    drizzleEq(d1Classrooms.schoolYear, 2026),
-    drizzleEq(d1Classrooms.semester, 1),
-    drizzleEq(d1Classrooms.grade, 3),
-    drizzleEq(d1Classrooms.classNumber, 5),
-  )).limit(1))[0];
-  const sourceClassId = legacyClass?.id ?? 0;
-  const planRows = await db.select().from(d1AssessmentPlans).where(drizzleEq(d1AssessmentPlans.classId, sourceClassId)).orderBy(asc(d1AssessmentPlans.sortOrder));
-  const studentRows = await db.select().from(d1Students).where(drizzleEq(d1Students.classId, sourceClassId)).orderBy(asc(d1Students.number));
-  await upsertRows("assessment_plans", planRows.map((row) => ({
-    subject: row.subject,
-    unit: row.unit,
-    goal: row.goal,
-    domain: row.domain,
-    assessment_type: row.assessmentType,
-    perspective: row.perspective,
-    high: row.high,
-    middle: row.middle,
-    low: row.low,
-    caution: row.caution,
-    sort_order: row.sortOrder,
-    owner_email: ownerEmail,
-    class_id: classId,
-  })), "class_id,subject,unit,goal");
-  const migratedStudents = await upsertRows<SupabaseStudent>("students", studentRows.map((row) => ({
-    number: row.number,
-    name: row.name,
-    active: row.active,
-    created_at: row.createdAt,
-    owner_email: ownerEmail,
-    class_id: classId,
-  })), "class_id,number");
-  if (!legacyClass) return;
-  const newIdByNumber = new Map(migratedStudents.map((student) => [student.number, student.id]));
-  const newIdByOldId = new Map(studentRows.flatMap((student) => {
-    const newId = newIdByNumber.get(student.number);
-    return newId ? [[student.id, newId] as const] : [];
-  }));
-  const [levels, comments, behaviors] = await Promise.all([
-    db.select().from(d1AssessmentLevels).where(drizzleEq(d1AssessmentLevels.classId, legacyClass.id)),
-    db.select().from(d1GeneratedComments).where(drizzleEq(d1GeneratedComments.classId, legacyClass.id)),
-    db.select().from(d1StudentBehaviors).where(drizzleEq(d1StudentBehaviors.classId, legacyClass.id)),
-  ]);
-  await upsertRows("assessment_levels", levels.flatMap((row) => {
-    const studentId = newIdByOldId.get(row.studentId);
-    return studentId ? [{
-      student_id: studentId, subject: row.subject, assessment_index: row.assessmentIndex, level: row.level,
-      updated_at: row.updatedAt, owner_email: ownerEmail, class_id: classId,
-    }] : [];
-  }), "class_id,student_id,subject,assessment_index");
-  await upsertRows("generated_comments", comments.flatMap((row) => {
-    const studentId = newIdByOldId.get(row.studentId);
-    return studentId ? [{
-      student_id: studentId, subject: row.subject, comment: row.comment, updated_at: row.updatedAt,
-      owner_email: ownerEmail, class_id: classId,
-    }] : [];
-  }), "class_id,student_id,subject");
-  await upsertRows("student_behaviors", behaviors.flatMap((row) => {
-    const studentId = newIdByOldId.get(row.studentId);
-    return studentId ? [{
-      student_id: studentId, characteristic: row.characteristic, behavior: row.behavior, updated_at: row.updatedAt,
-      owner_email: ownerEmail, class_id: classId,
-    }] : [];
-  }), "class_id,student_id");
-}
+export class AuthorizationError extends Error {}
 
 export async function getDataScope() {
   const user = await getAuthUser();
   if (!user) throw new AuthenticationRequiredError("로그인이 필요합니다.");
+
   const now = new Date().toISOString();
-  await upsertRows("teachers", [{ email: user.email, display_name: user.displayName, created_at: now }], "email");
+  await upsertRows("teachers", [{
+    email: user.email,
+    user_id: user.id,
+    display_name: user.displayName,
+    created_at: now,
+  }], "email");
+
   let classroom = (await selectRows<SupabaseClassroom>("classrooms", {
-    owner_email: eq(user.email),
+    owner_id: eq(user.id),
     school_year: eq(user.schoolYear),
     semester: eq(user.semester),
     grade: eq(user.grade),
     class_number: eq(user.classNumber),
     limit: 1,
   }))[0];
+
   if (!classroom) {
     classroom = (await upsertRows<SupabaseClassroom>("classrooms", [{
+      owner_id: user.id,
       owner_email: user.email,
       school_name: user.schoolName,
       school_year: user.schoolYear,
@@ -119,11 +49,36 @@ export async function getDataScope() {
       created_at: now,
     }], "owner_email,school_year,semester,grade,class_number"))[0];
   }
+
+  if (classroom.owner_id !== user.id) throw new AuthorizationError("학급 접근 권한이 없습니다.");
   return { user, classId: classroom.id, classroom };
 }
 
+export async function requireOwnedStudentIds(
+  studentIds: number[],
+  ownerId: string,
+  classId: number,
+) {
+  const uniqueIds = [...new Set(studentIds)];
+  if (!uniqueIds.length) return;
+  const rows = await selectRows<{ id: number }>("students", {
+    owner_id: eq(ownerId),
+    class_id: eq(classId),
+    active: eq(true),
+  });
+  const allowed = new Set(rows.map((row) => Number(row.id)));
+  if (uniqueIds.some((id) => !allowed.has(id))) {
+    throw new AuthorizationError("현재 학급에 속하지 않은 학생 정보가 포함되어 있습니다.");
+  }
+}
+
 export function dataError(error: unknown, fallback: string) {
-  if (error instanceof AuthenticationRequiredError) return Response.json({ error: "로그인이 필요합니다." }, { status: 401 });
+  if (error instanceof AuthenticationRequiredError) {
+    return Response.json({ error: "로그인이 필요합니다." }, { status: 401 });
+  }
+  if (error instanceof AuthorizationError) {
+    return Response.json({ error: error.message }, { status: 403 });
+  }
   console.error(fallback, error instanceof Error ? error.message : "unknown");
   return Response.json({ error: fallback }, { status: 500 });
 }
