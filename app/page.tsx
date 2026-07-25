@@ -434,6 +434,7 @@ function PlanManager({ plan, onChanged }: { plan: AssessmentPlan[]; onChanged: (
   const [draft, setDraft] = useState<AssessmentPlan>(blankPlan);
   const [preview, setPreview] = useState<AssessmentPlan[]>([]);
   const [errors, setErrors] = useState<string[]>([]);
+  const [warnings, setWarnings] = useState<string[]>([]);
   const [message, setMessage] = useState("");
   const [busy, setBusy] = useState(false);
   const columns: Array<[keyof AssessmentPlan, string]> = [
@@ -454,11 +455,23 @@ function PlanManager({ plan, onChanged }: { plan: AssessmentPlan[]; onChanged: (
     });
     return found;
   };
+  const validateWarnings = (rows: AssessmentPlan[]) => {
+    const found: string[] = [];
+    const standardSubjects = new Set(["국어", "수학", "사회", "과학", "도덕", "체육", "음악", "미술", "영어", "실과", "통합교과", "창의적 체험활동"]);
+    const savedKeys = new Set(plan.map((row) => `${row.subject.trim()}|${row.unit.trim()}|${row.goal.trim()}`));
+    rows.forEach((row, index) => {
+      if (row.subject && !standardSubjects.has(row.subject.trim())) found.push(`${index + 2}행: ‘${row.subject}’은 표준 과목명인지 확인해 주세요.`);
+      if (Object.values(row).some((value) => typeof value === "string" && value.length > 1000)) found.push(`${index + 2}행: 1,000자가 넘는 항목이 있습니다.`);
+      if (savedKeys.has(`${row.subject.trim()}|${row.unit.trim()}|${row.goal.trim()}`)) found.push(`${index + 2}행: 이미 저장된 평가계획과 같아 기존 내용을 갱신합니다.`);
+    });
+    return found;
+  };
   const saveMany = async (rows: AssessmentPlan[]) => {
     const validation = validatePlans(rows);
     if (validation.length) return setErrors(validation);
     setBusy(true);
     setErrors([]);
+    setWarnings([]);
     try {
       const response = await fetch("/api/assessment-plan", {
         method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ plan: rows }),
@@ -505,33 +518,57 @@ function PlanManager({ plan, onChanged }: { plan: AssessmentPlan[]; onChanged: (
   const upload = async (file: File) => {
     setMessage("");
     setErrors([]);
+    setWarnings([]);
     try {
       const XLSX = await import("xlsx");
-      const workbook = XLSX.read(await file.arrayBuffer(), { type: "array" });
+      const workbook = XLSX.read(await file.arrayBuffer(), { type: "array", cellFormula: true, cellStyles: true });
       const sheet = workbook.Sheets[workbook.SheetNames[0]];
+      const fileErrors: string[] = [];
+      const fileWarnings: string[] = [];
+      const headerRows = XLSX.utils.sheet_to_json<unknown[]>(sheet, { header: 1, defval: "", range: 0 });
+      const headers = (headerRows[0] ?? []).map((value) => String(value ?? "").trim().replace(/\s+/g, ""));
       const raw = XLSX.utils.sheet_to_json<Record<string, unknown>>(sheet, { defval: "" });
       const aliases: Record<string, keyof AssessmentPlan> = {
         "과목": "subject", "단원": "unit", "평가목표": "goal", "평가 목표": "goal", "영역": "domain",
         "평가유형": "type", "평가 유형": "type", "평가관점": "perspective", "평가 관점": "perspective",
         "상": "high", "중": "middle", "하": "low", "평가상의 유의점": "caution", "유의점": "caution",
       };
+      const normalizedAliases = Object.fromEntries(Object.entries(aliases).map(([name, key]) => [name.replace(/\s+/g, ""), key])) as Record<string, keyof AssessmentPlan>;
+      const detected = new Set(headers.flatMap((header) => normalizedAliases[header] ? [normalizedAliases[header]] : []));
+      const requiredHeaders: Array<[keyof AssessmentPlan, string]> = [
+        ["subject", "과목"], ["unit", "단원"], ["goal", "평가목표"], ["domain", "영역"],
+        ["perspective", "평가 관점"], ["high", "상"], ["middle", "중"], ["low", "하"],
+      ];
+      const missingHeaders = requiredHeaders.filter(([key]) => !detected.has(key)).map(([, label]) => label);
+      if (missingHeaders.length) fileErrors.push(`필수 열이 없습니다: ${missingHeaders.join(", ")}`);
+      const merges = sheet["!merges"] ?? [];
+      if (merges.length) fileErrors.push(`병합된 셀이 ${merges.length}개 있습니다. 병합을 해제해 주세요.`);
+      const formulaCells = Object.entries(sheet).filter(([address, cell]) => !address.startsWith("!") && typeof cell === "object" && cell && "f" in cell);
+      if (formulaCells.length) fileErrors.push(`수식 셀이 ${formulaCells.length}개 있습니다. 계산 결과를 값으로 붙여 넣어 주세요.`);
+      const hiddenRows = (sheet["!rows"] ?? []).flatMap((row, index) => row?.hidden ? [index + 1] : []);
+      if (hiddenRows.length) fileWarnings.push(`숨김 행 ${hiddenRows.slice(0, 10).join(", ")}${hiddenRows.length > 10 ? "…" : ""}이 포함되어 있습니다.`);
+      const sheetInfo = workbook.Workbook?.Sheets?.find((item) => item.name === workbook.SheetNames[0]);
+      if (sheetInfo?.Hidden) fileWarnings.push("첫 번째 시트가 숨김 상태입니다.");
       const rows = raw.map((source) => {
         const row = blankPlan();
         Object.entries(source).forEach(([header, value]) => {
-          const key = aliases[header.trim()];
+          const key = normalizedAliases[header.trim().replace(/\s+/g, "")];
           if (key && key !== "id" && key !== "sortOrder") row[key] = String(value ?? "").trim();
         });
         return row;
       }).filter((row) => Object.values(row).some(Boolean));
       if (!rows.length) throw new Error("첫 번째 시트에서 평가계획을 찾지 못했습니다.");
       if (rows.length > 200) throw new Error("한 번에 200개까지만 업로드할 수 있습니다.");
-      const validation = validatePlans(rows);
+      const validation = [...fileErrors, ...validatePlans(rows)];
+      const reviewWarnings = [...fileWarnings, ...validateWarnings(rows)];
       setPreview(rows);
       setErrors(validation);
-      setMessage(validation.length ? "오류를 수정한 뒤 다시 업로드해 주세요." : `${rows.length}개 평가계획이 검증되었습니다. 내용을 확인하고 저장하세요.`);
+      setWarnings(reviewWarnings);
+      setMessage(validation.length ? "저장할 수 없는 오류를 수정한 뒤 다시 업로드해 주세요." : reviewWarnings.length ? `${rows.length}개를 읽었습니다. 확인 필요 항목을 검토한 뒤 저장하세요.` : `${rows.length}개 평가계획이 정상 검증되었습니다. 내용을 확인하고 저장하세요.`);
     } catch (error) {
       setPreview([]);
       setErrors([error instanceof Error ? error.message : "파일을 읽지 못했습니다."]);
+      setWarnings([]);
     }
   };
   const downloadTemplate = () => {
@@ -556,6 +593,7 @@ function PlanManager({ plan, onChanged }: { plan: AssessmentPlan[]; onChanged: (
     <div className="plan-help"><strong>필수 열</strong> 과목 · 단원 · 평가목표 · 영역 · 평가 관점 · 상 · 중 · 하 <span>평가 유형과 유의점은 선택 항목입니다.</span></div>
     {message && <p className="student-message">{message}</p>}
     {!!errors.length && <div className="plan-errors"><strong>확인이 필요합니다.</strong>{errors.slice(0, 8).map((error) => <p key={error}>• {error}</p>)}</div>}
+    {!!warnings.length && <div className="plan-warnings"><strong>저장할 수 있지만 확인이 필요합니다.</strong>{warnings.slice(0, 8).map((warning) => <p key={warning}>• {warning}</p>)}</div>}
     {!!preview.length && <section className="plan-preview">
       <div className="section-heading"><div><p className="eyebrow">PREVIEW</p><h2>저장 전 미리보기 · {preview.length}개</h2></div><button disabled={busy || !!errors.length} onClick={() => void saveMany(preview)}>{busy ? "저장 중…" : "검증된 계획 저장"}</button></div>
       <div className="plan-preview-list">{preview.slice(0, 8).map((item, index) => <article key={`${item.subject}-${item.unit}-${index}`}><b>{item.subject} · {item.unit}</b><span>{item.goal}</span><small>{item.domain} / {item.type || "유형 미입력"}</small></article>)}</div>
