@@ -87,6 +87,8 @@ export async function POST(request: Request) {
       student_id: item.studentId,
       subject: item.subject,
       comment: item.comment,
+      confirmed: false,
+      confirmed_at: null,
       updated_at: updatedAt,
       owner_email: user.email,
       owner_id: user.id,

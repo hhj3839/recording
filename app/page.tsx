@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { recordSimilarity, validateRecord } from "./record-validation";
 
 type View = "dashboard" | "classes" | "students" | "plans" | "assessments" | "comments" | "behavior" | "export" | "settings";
 type Level = "상" | "중" | "하" | "-";
@@ -690,6 +691,7 @@ function Comments({ assessmentDataBySubject, plan, roster }: { assessmentDataByS
   const subjects = [...new Set(plan.map((item) => item.subject))];
   const [selectedSubject, setSelectedSubject] = useState(subjects[0] ?? "국어");
   const [comments, setComments] = useState<Record<string, string>>({});
+  const [confirmedComments, setConfirmedComments] = useState<Record<string, boolean>>({});
   const [loading, setLoading] = useState(false);
   const [generationProgress, setGenerationProgress] = useState("");
   const [error, setError] = useState("");
@@ -702,9 +704,10 @@ function Comments({ assessmentDataBySubject, plan, roster }: { assessmentDataByS
     const loadGeneratedComments = async () => {
       try {
         const response = await fetch("/api/generated-comments");
-        const result = await response.json() as { comments?: Array<{ studentId: number; subject: string; comment: string; updatedAt: string }> };
+        const result = await response.json() as { comments?: Array<{ studentId: number; subject: string; comment: string; confirmed: boolean; updatedAt: string }> };
         if (!response.ok || !result.comments?.length) return;
         setComments(Object.fromEntries(result.comments.map((item) => [`${item.studentId}|${item.subject}`, item.comment])));
+        setConfirmedComments(Object.fromEntries(result.comments.map((item) => [`${item.studentId}|${item.subject}`, item.confirmed])));
         const latest = result.comments.map((item) => item.updatedAt).sort().at(-1);
         if (latest) {
           setLastGeneratedAt(latest);
@@ -770,6 +773,10 @@ function Comments({ assessmentDataBySubject, plan, roster }: { assessmentDataByS
               ...current,
               ...Object.fromEntries(result.comments!.map((item) => [`${item.studentId}|${item.subject}`, item.comment])),
             }));
+            setConfirmedComments((current) => ({
+              ...current,
+              ...Object.fromEntries(result.comments!.map((item) => [`${item.studentId}|${item.subject}`, false])),
+            }));
             pendingStudents = pendingStudents.filter((student) => !returnedIds.has(student.id));
           }
           if (pendingStudents.length) failedSubjects.add(job.subject);
@@ -791,16 +798,18 @@ function Comments({ assessmentDataBySubject, plan, roster }: { assessmentDataByS
       setGenerationProgress("");
     }
   };
-  const saveComment = async (studentId: number, subject: string, comment: string) => {
+  const saveComment = async (studentId: number, subject: string, comment: string, confirmed = false) => {
     try {
       const response = await fetch("/api/generated-comments", {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ studentId, subject, comment }),
+        body: JSON.stringify({ studentId, subject, comment, confirmed }),
       });
-      if (!response.ok) throw new Error();
+      const result = await response.json() as { error?: string };
+      if (!response.ok) throw new Error(result.error || "평어를 저장하지 못했습니다.");
+      setConfirmedComments((current) => ({ ...current, [`${studentId}|${subject}`]: confirmed }));
     } catch {
-      setError("수정한 평어를 저장하지 못했습니다. 잠시 후 다시 시도해 주세요.");
+      setError(confirmed ? "검수 항목을 모두 통과한 평어만 확정할 수 있습니다." : "수정한 평어를 저장하지 못했습니다. 잠시 후 다시 시도해 주세요.");
     }
   };
 
@@ -817,16 +826,20 @@ function Comments({ assessmentDataBySubject, plan, roster }: { assessmentDataByS
           {loading && <div className="comment-loading class-loading"><span>✦</span><p>모든 학생의 전 과목 평어를 생성하고 있어요.</p></div>}
           <div className="comments-table-wrap">
             <table className="comments-table">
-              <thead><tr><th>번호</th><th>이름</th><th>평어</th></tr></thead>
+              <thead><tr><th>번호</th><th>이름</th><th>평어</th><th>검수·확정</th></tr></thead>
               <tbody>{roster.map((student, index) => {
                 const key = `${student.id}|${selectedSubject}`;
                 const text = comments[key] ?? "";
                 const assessment = assessmentDataBySubject[selectedSubject]?.[index];
                 const hasLevel = assessment?.assessments.some((level) => level !== "-");
+                const validation = validateRecord(text);
+                const confirmed = confirmedComments[key] ?? false;
+                const similarStudents = roster.filter((other) => other.id !== student.id && recordSimilarity(text, comments[`${other.id}|${selectedSubject}`] ?? "") >= 0.82);
                 return <tr id={`comment-${student.id}`} key={student.id}>
                   <td>{student.number ?? student.id}</td>
                   <td><strong>{student.name}</strong><small>{text ? `${new TextEncoder().encode(text).length}B` : hasLevel ? "생성 대기" : "수준 미입력"}</small></td>
-                  <td><textarea value={text} onChange={(event) => { setComments((current) => ({ ...current, [key]: event.target.value })); setCopied(false); }} onBlur={(event) => void saveComment(student.id, selectedSubject, event.target.value)} placeholder={hasLevel ? "AI 평어 생성 버튼을 누르면 결과가 표시됩니다." : "평가 수준이 입력되지 않았습니다."} /></td>
+                  <td><textarea value={text} onChange={(event) => { setComments((current) => ({ ...current, [key]: event.target.value })); setConfirmedComments((current) => ({ ...current, [key]: false })); setCopied(false); }} onBlur={(event) => void saveComment(student.id, selectedSubject, event.target.value)} placeholder={hasLevel ? "AI 평어 생성 버튼을 누르면 결과가 표시됩니다." : "평가 수준이 입력되지 않았습니다."} /></td>
+                  <td className="validation-cell"><div><span className={validation.endingsOk ? "pass" : "fail"}>종결 {validation.endingsOk ? "정상" : "확인"}</span><span className={!validation.forbidden.length ? "pass" : "fail"}>금지어 {!validation.forbidden.length ? "없음" : "확인"}</span><span className={!similarStudents.length ? "pass" : "fail"} title={similarStudents.map((item) => item.name).join(", ")}>중복 {!similarStudents.length ? "없음" : `${similarStudents.length}명`}</span></div><button className={confirmed ? "confirmed" : ""} disabled={!validation.valid || !!similarStudents.length} onMouseDown={(event) => event.preventDefault()} onClick={() => void saveComment(student.id, selectedSubject, text, !confirmed)}>{confirmed ? "확정됨 ✓" : "최종 확정"}</button></td>
                 </tr>;
               })}</tbody>
             </table>
@@ -838,7 +851,7 @@ function Comments({ assessmentDataBySubject, plan, roster }: { assessmentDataByS
 }
 
 function Behavior({ roster }: { roster: AssessmentStudent[] }) {
-  const [records, setRecords] = useState<Record<number, { characteristic: string; behavior: string }>>({});
+  const [records, setRecords] = useState<Record<number, { characteristic: string; behavior: string; confirmed: boolean }>>({});
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const [copied, setCopied] = useState(false);
@@ -851,9 +864,9 @@ function Behavior({ roster }: { roster: AssessmentStudent[] }) {
     const load = async () => {
       try {
         const response = await fetch("/api/student-behaviors");
-        const result = await response.json() as { behaviors?: Array<{ studentId: number; characteristic: string; behavior: string; updatedAt: string }> };
+        const result = await response.json() as { behaviors?: Array<{ studentId: number; characteristic: string; behavior: string; confirmed: boolean; updatedAt: string }> };
         if (!response.ok || !result.behaviors) return;
-        setRecords(Object.fromEntries(result.behaviors.map((item) => [item.studentId, { characteristic: item.characteristic, behavior: item.behavior }])));
+        setRecords(Object.fromEntries(result.behaviors.map((item) => [item.studentId, { characteristic: item.characteristic, behavior: item.behavior, confirmed: item.confirmed }])));
         setLastGeneratedAt(result.behaviors.map((item) => item.updatedAt).sort().at(-1) ?? "");
       } catch {
         setError("저장된 행동특성을 불러오지 못했습니다.");
@@ -862,8 +875,8 @@ function Behavior({ roster }: { roster: AssessmentStudent[] }) {
     void load();
   }, []);
 
-  const updateRecord = (studentId: number, patch: Partial<{ characteristic: string; behavior: string }>) => {
-    setRecords((current) => ({ ...current, [studentId]: { ...(current[studentId] ?? { characteristic: "", behavior: "" }), ...patch } }));
+  const updateRecord = (studentId: number, patch: Partial<{ characteristic: string; behavior: string; confirmed: boolean }>) => {
+    setRecords((current) => ({ ...current, [studentId]: { ...(current[studentId] ?? { characteristic: "", behavior: "", confirmed: false }), ...patch } }));
     setCopied(false);
   };
   const addReferencePhrase = (phrase: string) => {
@@ -887,7 +900,7 @@ function Behavior({ roster }: { roster: AssessmentStudent[] }) {
       if (!response.ok || !result.behaviors?.length) throw new Error(result.error || "행동특성을 생성하지 못했습니다.");
       setRecords((current) => ({
         ...current,
-        ...Object.fromEntries(result.behaviors!.map((item) => [item.studentId, { characteristic: item.characteristic, behavior: item.behavior }])),
+        ...Object.fromEntries(result.behaviors!.map((item) => [item.studentId, { characteristic: item.characteristic, behavior: item.behavior, confirmed: false }])),
       }));
       setLastGeneratedAt(result.updatedAt ?? new Date().toISOString());
     } catch (reason) {
@@ -905,16 +918,18 @@ function Behavior({ roster }: { roster: AssessmentStudent[] }) {
       setError("클립보드 복사 권한을 확인해 주세요.");
     }
   };
-  const saveRecord = async (studentId: number, record: { characteristic: string; behavior: string }) => {
+  const saveRecord = async (studentId: number, record: { characteristic: string; behavior: string; confirmed: boolean }, confirmed = false) => {
     try {
       const response = await fetch("/api/student-behaviors", {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ studentId, ...record }),
+        body: JSON.stringify({ studentId, characteristic: record.characteristic, behavior: record.behavior, confirmed }),
       });
-      if (!response.ok) throw new Error();
+      const result = await response.json() as { error?: string };
+      if (!response.ok) throw new Error(result.error || "행동특성을 저장하지 못했습니다.");
+      updateRecord(studentId, { confirmed });
     } catch {
-      setError("수정한 행동특성 내용을 저장하지 못했습니다. 잠시 후 다시 시도해 주세요.");
+      setError(confirmed ? "검수 항목을 모두 통과한 행동특성만 확정할 수 있습니다." : "수정한 행동특성 내용을 저장하지 못했습니다. 잠시 후 다시 시도해 주세요.");
     }
   };
   const formattedLastGeneratedAt = lastGeneratedAt
@@ -934,10 +949,12 @@ function Behavior({ roster }: { roster: AssessmentStudent[] }) {
         <div className={`behavior-work-area ${referenceOpen ? "with-reference" : ""}`}>
           <div className="comments-table-wrap">
             <table className="comments-table behavior-table">
-              <thead><tr><th>번호</th><th>이름</th><th>특성</th><th>행동특성</th></tr></thead>
+              <thead><tr><th>번호</th><th>이름</th><th>특성</th><th>행동특성</th><th>검수·확정</th></tr></thead>
               <tbody>{roster.map((student) => {
-                const record = records[student.id] ?? { characteristic: "", behavior: "" };
-                return <tr className={activeStudentId === student.id ? "active-reference-row" : ""} key={student.id}><td>{student.number ?? student.id}</td><td><strong>{student.name}</strong></td><td><textarea value={record.characteristic} onFocus={() => setActiveStudentId(student.id)} onChange={(event) => updateRecord(student.id, { characteristic: event.target.value })} onBlur={() => void saveRecord(student.id, records[student.id] ?? record)} placeholder="관찰한 행동과 변화 모습을 입력하세요." /></td><td><textarea value={record.behavior} onChange={(event) => updateRecord(student.id, { behavior: event.target.value })} onBlur={() => void saveRecord(student.id, records[student.id] ?? record)} placeholder={record.characteristic ? "AI 행특 생성 버튼을 누르면 결과가 표시됩니다." : "특성을 먼저 입력해 주세요."} /><small>{record.behavior ? `${new TextEncoder().encode(record.behavior).length} bytes` : ""}</small></td></tr>;
+                const record = records[student.id] ?? { characteristic: "", behavior: "", confirmed: false };
+                const validation = validateRecord(record.behavior, true);
+                const similarStudents = roster.filter((other) => other.id !== student.id && recordSimilarity(record.behavior, records[other.id]?.behavior ?? "") >= 0.82);
+                return <tr className={activeStudentId === student.id ? "active-reference-row" : ""} key={student.id}><td>{student.number ?? student.id}</td><td><strong>{student.name}</strong></td><td><textarea value={record.characteristic} onFocus={() => setActiveStudentId(student.id)} onChange={(event) => updateRecord(student.id, { characteristic: event.target.value, confirmed: false })} onBlur={() => void saveRecord(student.id, records[student.id] ?? record)} placeholder="관찰한 행동과 변화 모습을 입력하세요." /></td><td><textarea value={record.behavior} onChange={(event) => updateRecord(student.id, { behavior: event.target.value, confirmed: false })} onBlur={() => void saveRecord(student.id, records[student.id] ?? record)} placeholder={record.characteristic ? "AI 행특 생성 버튼을 누르면 결과가 표시됩니다." : "특성을 먼저 입력해 주세요."} /><small>{record.behavior ? `${validation.bytes} bytes` : ""}</small></td><td className="validation-cell behavior-validation"><div><span className={validation.lengthOk ? "pass" : "fail"}>500~550B</span><span className={validation.endingsOk ? "pass" : "fail"}>종결</span><span className={validation.growthIncluded ? "pass" : "fail"}>성장</span><span className={!validation.forbidden.length ? "pass" : "fail"}>금지어</span><span className={!validation.repeated.length ? "pass" : "fail"}>반복</span><span className={!similarStudents.length ? "pass" : "fail"} title={similarStudents.map((item) => item.name).join(", ")}>유사 {!similarStudents.length ? "없음" : `${similarStudents.length}명`}</span></div><button className={record.confirmed ? "confirmed" : ""} disabled={!validation.valid || !!similarStudents.length} onMouseDown={(event) => event.preventDefault()} onClick={() => void saveRecord(student.id, record, !record.confirmed)}>{record.confirmed ? "확정됨 ✓" : "최종 확정"}</button></td></tr>;
               })}</tbody>
             </table>
           </div>
@@ -956,8 +973,8 @@ function Behavior({ roster }: { roster: AssessmentStudent[] }) {
   );
 }
 
-type ExportComment = { studentId: number; subject: string; comment: string; updatedAt: string };
-type ExportBehavior = { studentId: number; characteristic: string; behavior: string; updatedAt: string };
+type ExportComment = { studentId: number; subject: string; comment: string; confirmed: boolean; updatedAt: string };
+type ExportBehavior = { studentId: number; characteristic: string; behavior: string; confirmed: boolean; updatedAt: string };
 
 function ExportResults({ roster, plan, classroom }: { roster: AssessmentStudent[]; plan: AssessmentPlan[]; classroom: ClassroomInfo | null }) {
   const [comments, setComments] = useState<ExportComment[]>([]);
@@ -999,26 +1016,28 @@ function ExportResults({ roster, plan, classroom }: { roster: AssessmentStudent[
     const ordered = [...roster].sort((a, b) => (a.number ?? a.id) - (b.number ?? b.id));
     const subjectRows = subjects.flatMap((subject) => ordered.map((student) => {
       const result = commentMap.get(`${student.id}|${subject}`);
+      const value = result?.confirmed ? result.comment : "";
       return {
         번호: student.number ?? student.id, 이름: student.name, 과목: subject,
-        "교과 평어": result?.comment ?? "", "바이트 수": byteLength(result?.comment ?? ""),
-        "작성 상태": result?.comment ? "작성" : "미작성", "최종 수정일": result?.updatedAt ? new Date(result.updatedAt).toLocaleString("ko-KR") : "",
+        "교과 평어": value, "바이트 수": byteLength(value),
+        "작성 상태": result?.confirmed ? "확정" : result?.comment ? "미확정" : "미작성", "최종 수정일": result?.updatedAt ? new Date(result.updatedAt).toLocaleString("ko-KR") : "",
       };
     }));
     const behaviorRows = ordered.map((student) => {
       const result = behaviorMap.get(student.id);
+      const value = result?.confirmed ? result.behavior : "";
       return {
         번호: student.number ?? student.id, 이름: student.name, 특성: result?.characteristic ?? "",
-        "행동특성 및 발달상황": result?.behavior ?? "", "바이트 수": byteLength(result?.behavior ?? ""),
-        "검수 결과": result?.behavior ? (byteLength(result.behavior) >= 500 && byteLength(result.behavior) <= 550 ? "바이트 정상" : "바이트 확인") : "미작성",
-        "작성 상태": result?.behavior ? "작성" : "미작성", "최종 수정일": result?.updatedAt ? new Date(result.updatedAt).toLocaleString("ko-KR") : "",
+        "행동특성 및 발달상황": value, "바이트 수": byteLength(value),
+        "검수 결과": result?.confirmed ? "검수 통과" : result?.behavior ? "미확정" : "미작성",
+        "작성 상태": result?.confirmed ? "확정" : result?.behavior ? "미확정" : "미작성", "최종 수정일": result?.updatedAt ? new Date(result.updatedAt).toLocaleString("ko-KR") : "",
       };
     });
     const summaryRows = ordered.map((student) => ({
       번호: student.number ?? student.id,
       이름: student.name,
-      "교과 평어 작성": `${subjects.filter((subject) => commentMap.get(`${student.id}|${subject}`)?.comment).length}/${subjects.length}`,
-      "행동특성 작성": behaviorMap.get(student.id)?.behavior ? "완료" : "미작성",
+      "교과 평어 확정": `${subjects.filter((subject) => commentMap.get(`${student.id}|${subject}`)?.confirmed).length}/${subjects.length}`,
+      "행동특성 확정": behaviorMap.get(student.id)?.confirmed ? "완료" : "미확정",
     }));
     const workbook = XLSX.utils.book_new();
     const addSheet = (name: string, rows: Record<string, unknown>[], widths: number[]) => {
@@ -1037,8 +1056,8 @@ function ExportResults({ roster, plan, classroom }: { roster: AssessmentStudent[
   const downloadCsv = (kind: "comments" | "behaviors") => {
     const ordered = [...roster].sort((a, b) => (a.number ?? a.id) - (b.number ?? b.id));
     const rows = kind === "comments"
-      ? ordered.map((student) => [student.number ?? student.id, student.name, selectedSubject, commentMap.get(`${student.id}|${selectedSubject}`)?.comment ?? ""])
-      : ordered.map((student) => [student.number ?? student.id, student.name, behaviorMap.get(student.id)?.behavior ?? ""]);
+      ? ordered.map((student) => { const item = commentMap.get(`${student.id}|${selectedSubject}`); return [student.number ?? student.id, student.name, selectedSubject, item?.confirmed ? item.comment : ""]; })
+      : ordered.map((student) => { const item = behaviorMap.get(student.id); return [student.number ?? student.id, student.name, item?.confirmed ? item.behavior : ""]; });
     const header = kind === "comments" ? ["번호", "이름", "과목", "평어"] : ["번호", "이름", "행동특성"];
     const escape = (value: unknown) => `"${String(value ?? "").replaceAll("\"", "\"\"")}"`;
     const blob = new Blob([`\uFEFF${[header, ...rows].map((row) => row.map(escape).join(",")).join("\n")}`], { type: "text/csv;charset=utf-8" });
@@ -1050,16 +1069,16 @@ function ExportResults({ roster, plan, classroom }: { roster: AssessmentStudent[
     setMessage("CSV 파일을 내려받았습니다.");
   };
   const orderedRoster = [...roster].sort((a, b) => (a.number ?? a.id) - (b.number ?? b.id));
-  const writtenComments = comments.filter((item) => item.comment).length;
-  const writtenBehaviors = behaviors.filter((item) => item.behavior).length;
+  const writtenComments = comments.filter((item) => item.confirmed).length;
+  const writtenBehaviors = behaviors.filter((item) => item.confirmed).length;
   return <section>
     <div className="page-heading">
-      <div><p className="eyebrow">NEIS READY</p><h1>결과 내보내기</h1><p>학급의 최종 기록을 번호순으로 복사하거나 Excel·CSV로 내려받으세요.</p></div>
+      <div><p className="eyebrow">NEIS READY</p><h1>결과 내보내기</h1><p>검수 후 최종 확정한 기록만 번호순으로 복사하거나 내려받습니다.</p></div>
       <button onClick={() => void exportWorkbook()} disabled={loading}>전체 Excel 내려받기</button>
     </div>
     <div className="export-stats">
-      <article><span>교과 평어</span><strong>{writtenComments}건</strong><small>전체 {roster.length * subjects.length}건</small></article>
-      <article><span>행동특성</span><strong>{writtenBehaviors}명</strong><small>전체 {roster.length}명</small></article>
+      <article><span>교과 평어 확정</span><strong>{writtenComments}건</strong><small>전체 {roster.length * subjects.length}건</small></article>
+      <article><span>행동특성 확정</span><strong>{writtenBehaviors}명</strong><small>전체 {roster.length}명</small></article>
       <article><span>내보내기 순서</span><strong>번호순</strong><small>나이스 붙여넣기 기준</small></article>
     </div>
     {message && <p className="student-message">{message}</p>}
@@ -1068,19 +1087,20 @@ function ExportResults({ roster, plan, classroom }: { roster: AssessmentStudent[
         <div className="section-heading"><div><p className="eyebrow">SUBJECT COMMENTS</p><h2>교과 평어</h2></div></div>
         <label className="export-select"><span>과목 선택</span><select value={selectedSubject} onChange={(event) => setSelectedSubject(event.target.value)}>{subjects.map((subject) => <option key={subject}>{subject}</option>)}</select></label>
         <p>복사 버튼은 번호와 이름을 제외하고 평어만 한 줄에 한 명씩 복사합니다.</p>
-        <div className="export-actions"><button onClick={() => void copyLines(orderedRoster.map((student) => commentMap.get(`${student.id}|${selectedSubject}`)?.comment ?? ""), `${selectedSubject} 평어`)}>평어만 복사</button><button className="secondary" onClick={() => downloadCsv("comments")}>CSV 내려받기</button></div>
+        <div className="export-actions"><button onClick={() => void copyLines(orderedRoster.map((student) => { const item = commentMap.get(`${student.id}|${selectedSubject}`); return item?.confirmed ? item.comment : ""; }), `${selectedSubject} 확정 평어`)}>확정 평어만 복사</button><button className="secondary" onClick={() => downloadCsv("comments")}>CSV 내려받기</button></div>
       </section>
       <section className="export-card">
         <div className="section-heading"><div><p className="eyebrow">BEHAVIOR</p><h2>행동특성</h2></div></div>
         <p>학생 번호순으로 행동특성만 복사해 나이스 입력란에 바로 붙여넣을 수 있습니다.</p>
-        <div className="export-actions"><button onClick={() => void copyLines(orderedRoster.map((student) => behaviorMap.get(student.id)?.behavior ?? ""), "행동특성")}>행동특성만 복사</button><button className="secondary" onClick={() => downloadCsv("behaviors")}>CSV 내려받기</button></div>
+        <div className="export-actions"><button onClick={() => void copyLines(orderedRoster.map((student) => { const item = behaviorMap.get(student.id); return item?.confirmed ? item.behavior : ""; }), "확정 행동특성")}>확정 행동특성만 복사</button><button className="secondary" onClick={() => downloadCsv("behaviors")}>CSV 내려받기</button></div>
       </section>
     </div>
     <section className="export-preview">
       <div className="section-heading"><div><p className="eyebrow">PREVIEW</p><h2>{selectedSubject || "교과"} 평어 미리보기</h2></div></div>
       <div className="student-table-wrap"><table className="students-table"><thead><tr><th>번호</th><th>이름</th><th>평어</th><th>바이트</th></tr></thead><tbody>{orderedRoster.map((student) => {
-        const value = commentMap.get(`${student.id}|${selectedSubject}`)?.comment ?? "";
-        return <tr key={student.id}><td>{student.number ?? student.id}</td><td>{student.name}</td><td>{value || <span className="export-empty">미작성</span>}</td><td>{byteLength(value)}</td></tr>;
+        const item = commentMap.get(`${student.id}|${selectedSubject}`);
+        const value = item?.confirmed ? item.comment : "";
+        return <tr key={student.id}><td>{student.number ?? student.id}</td><td>{student.name}</td><td>{value || <span className="export-empty">{item?.comment ? "미확정" : "미작성"}</span>}</td><td>{byteLength(value)}</td></tr>;
       })}</tbody></table></div>
     </section>
   </section>;

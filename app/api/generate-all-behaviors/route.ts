@@ -57,6 +57,8 @@ export async function POST(request: Request) {
       student_id: item.studentId,
       characteristic: item.characteristic,
       behavior: item.behavior,
+      confirmed: false,
+      confirmed_at: null,
       updated_at: updatedAt,
       owner_email: user.email,
       owner_id: user.id,
