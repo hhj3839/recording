@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import { eq, selectRows, upsertRows } from "../../../db/supabase";
 import { dataError, getDataScope, requireOwnedStudentIds } from "../../data-scope";
 import { recordSimilarity, validateRecord } from "../../record-validation";
@@ -9,7 +10,7 @@ export async function GET() {
     const rows = await selectRows<Record<string, string | number>>("generated_comments", {
       owner_id: eq(user.id), class_id: eq(classId), order: "student_id.asc,subject.asc",
     });
-    return Response.json({ comments: rows.map((row) => ({ studentId: row.student_id, subject: row.subject, comment: row.comment, confirmed: Boolean(row.confirmed), confirmedAt: row.confirmed_at, updatedAt: row.updated_at })) });
+    return Response.json({ comments: rows.map((row) => ({ studentId: row.student_id, subject: row.subject, comment: row.comment, confirmed: Boolean(row.confirmed), confirmedAt: row.confirmed_at, updatedAt: row.updated_at, evidenceStatus: row.evidence_status ?? "unchecked", evidenceIssues: row.evidence_issues ?? [], evidenceHash: row.evidence_hash ?? "" })) });
   } catch (error) {
     return dataError(error, "저장된 평어를 불러오지 못했습니다.");
   }
@@ -28,6 +29,13 @@ export async function PUT(request: Request) {
     const { user, classId } = await getDataScope();
     await requireOwnedStudentIds([studentId], user.id, classId);
     if (confirmed) {
+      const current = (await selectRows<{ evidence_status: string; evidence_hash: string }>("generated_comments", {
+        owner_id: eq(user.id), class_id: eq(classId), student_id: eq(studentId), subject: eq(subject), limit: 1,
+      }))[0];
+      const commentHash = createHash("sha256").update(comment).digest("hex");
+      if (current?.evidence_status !== "pass" || current.evidence_hash !== commentHash) {
+        return Response.json({ error: "입력 근거 AI 검수를 통과한 최신 평어만 확정할 수 있습니다." }, { status: 409 });
+      }
       const peers = await selectRows<{ student_id: number; comment: string }>("generated_comments", {
         owner_id: eq(user.id), class_id: eq(classId), subject: eq(subject),
       });
@@ -36,8 +44,16 @@ export async function PUT(request: Request) {
     }
     await archiveComment({ ownerId: user.id, ownerEmail: user.email, classId, studentId, subject, nextContent: comment, source: confirmed ? "confirmation" : "manual-edit" });
     const updatedAt = new Date().toISOString();
+    const existing = (await selectRows<{ comment: string; evidence_status: string; evidence_issues: string[]; evidence_hash: string; evidence_validated_at: string }>("generated_comments", {
+      owner_id: eq(user.id), class_id: eq(classId), student_id: eq(studentId), subject: eq(subject), limit: 1,
+    }))[0];
+    const unchanged = existing?.comment === comment;
     await upsertRows("generated_comments", [{
       student_id: studentId, subject, comment, confirmed, confirmed_at: confirmed ? updatedAt : null, updated_at: updatedAt, owner_email: user.email, owner_id: user.id, class_id: classId,
+      evidence_status: unchanged ? existing.evidence_status : "unchecked",
+      evidence_issues: unchanged ? existing.evidence_issues : [],
+      evidence_hash: unchanged ? existing.evidence_hash : null,
+      evidence_validated_at: unchanged ? existing.evidence_validated_at : null,
     }], "class_id,student_id,subject");
     return Response.json({ ok: true, confirmed, validation, updatedAt });
   } catch (error) {
