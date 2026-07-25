@@ -7,6 +7,23 @@ test("accepts a valid school-record comment", () => {
   assert.equal(result.valid, true);
   assert.equal(result.endingsOk, true);
   assert.deepEqual(result.forbidden, []);
+  assert.equal(result.spellingOk, true);
+});
+
+test("detects conservative Korean spelling and spacing mistakes", () => {
+  const result = validateRecord("맡은 역활을 수행할수 있으며  꾸준히 노력함..");
+  assert.equal(result.valid, false);
+  assert.equal(result.spellingOk, false);
+  assert.equal(result.spellingIssues.some((issue) => issue.includes("역할")), true);
+  assert.equal(result.spellingIssues.some((issue) => issue.includes("'수'")), true);
+  assert.equal(result.spellingIssues.some((issue) => issue.includes("두 칸")), true);
+  assert.equal(result.spellingIssues.some((issue) => issue.includes("문장부호")), true);
+});
+
+test("detects unbalanced parentheses", () => {
+  const result = validateRecord("친구의 의견을 경청하고 자신의 생각을 표현함(꾸준함.");
+  assert.equal(result.spellingOk, false);
+  assert.equal(result.spellingIssues.includes("여는 괄호와 닫는 괄호의 개수가 다름"), true);
 });
 
 test("rejects forbidden terms and non-nominal endings", () => {
