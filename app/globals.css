@@ -332,3 +332,12 @@ button.secondary { color: #526171; border: 1px solid #dce1e6; background: #fff; 
 .auth-submit:disabled{opacity:.65}.auth-message{padding:11px 13px;border-radius:9px;background:#edf4ff;color:#214f9d!important;margin:0!important;font-size:13px}
 .auth-link{border:0;background:transparent;color:#356fe5;font-weight:700;padding:5px}
 @media(max-width:520px){.auth-card{padding:24px}.auth-row{grid-template-columns:1fr}}
+.student-tools{display:flex;justify-content:space-between;gap:16px;align-items:center;margin:20px 0;padding:16px;background:#fff;border:1px solid #e4e9f0;border-radius:14px}
+.student-tools form,.student-tools>div{display:flex;gap:9px;align-items:center}.student-tools input{border:1px solid #cfd8e5;border-radius:9px;padding:10px 11px;max-width:170px}
+.student-tools input[type=number]{max-width:90px}.student-tools button,.file-upload-button{border:0;border-radius:9px;background:#356fe5;color:#fff;padding:10px 13px;font-weight:750;cursor:pointer}
+.student-tools>div>button{background:#eef3fb;color:#31527f}.file-upload-button input{display:none}.student-message{margin:0 0 12px;padding:11px 14px;background:#edf4ff;color:#285da9;border-radius:9px}
+.student-table-wrap{background:#fff;border:1px solid #e4e9f0;border-radius:14px}.students-table{width:100%;border-collapse:collapse}.students-table th,.students-table td{padding:12px 14px;border-bottom:1px solid #edf0f4;text-align:left}
+.students-table th{background:#f7f9fc;color:#536176;font-size:13px}.students-table td input{width:100%;box-sizing:border-box;border:1px solid #d5dce7;border-radius:8px;padding:9px}
+.students-table td:first-child{width:130px}.students-table td:last-child{width:190px}.students-table td button{border:0;background:#eaf1ff;color:#285dbe;border-radius:8px;padding:8px 10px;margin-right:7px;font-weight:700}
+.students-table td button.danger-text{background:#fff0f0;color:#bd3434}.empty-cell{text-align:center!important;color:#7a8698;padding:36px!important}
+@media(max-width:760px){.student-tools{align-items:stretch;flex-direction:column}.student-tools form,.student-tools>div{flex-wrap:wrap}.student-tools input{flex:1}.student-table-wrap{overflow-x:auto}.students-table{min-width:560px}}

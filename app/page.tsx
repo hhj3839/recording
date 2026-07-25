@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 
-type View = "dashboard" | "assessments" | "comments" | "behavior";
+type View = "dashboard" | "students" | "assessments" | "comments" | "behavior";
 type Level = "상" | "중" | "하" | "-";
 type AssessmentPlan = {
   subject: string;
@@ -82,6 +82,7 @@ const withSampleLevels = (student: (typeof students)[number], subjectIndex: numb
 
 const navItems: { id: View; label: string; icon: string }[] = [
   { id: "dashboard", label: "대시보드", icon: "⌂" },
+  { id: "students", label: "학생 관리", icon: "♙" },
   { id: "assessments", label: "평가 수준 입력", icon: "▦" },
   { id: "comments", label: "교과 평어", icon: "✦" },
   { id: "behavior", label: "행동특성", icon: "◎" },
@@ -163,6 +164,134 @@ function Dashboard({ move, teacherName, classroom, studentCount, completedLevels
       </section>
     </>
   );
+}
+
+function StudentManager({ roster, onAdded, onChanged, onDeleted, onImported }: {
+  roster: AssessmentStudent[];
+  onAdded: (student: { id: number; number: number; name: string }) => void;
+  onChanged: (student: { id: number; number: number; name: string }) => void;
+  onDeleted: (id: number) => void;
+  onImported: (students: Array<{ id: number; number: number; name: string }>) => void;
+}) {
+  const [number, setNumber] = useState("");
+  const [name, setName] = useState("");
+  const [message, setMessage] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [drafts, setDrafts] = useState<Record<number, { number: number; name: string }>>({});
+
+  useEffect(() => {
+    setDrafts(Object.fromEntries(roster.map((student) => [student.id, {
+      number: student.number ?? student.id,
+      name: student.name,
+    }])));
+  }, [roster]);
+
+  async function addStudent(event: React.FormEvent) {
+    event.preventDefault();
+    setMessage("");
+    const response = await fetch("/api/students", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ number: Number(number), name }),
+    });
+    const result = await response.json() as { student?: { id: number; number: number; name: string }; error?: string };
+    if (!response.ok || !result.student) return setMessage(result.error ?? "학생을 추가하지 못했습니다.");
+    onAdded(result.student);
+    setNumber("");
+    setName("");
+    setMessage(`${result.student.name} 학생을 추가했습니다.`);
+  }
+
+  async function saveStudent(id: number) {
+    const draft = drafts[id];
+    if (!draft) return;
+    setMessage("");
+    const response = await fetch("/api/students", {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ id, ...draft }),
+    });
+    const result = await response.json() as { student?: { id: number; number: number; name: string }; error?: string };
+    if (!response.ok || !result.student) return setMessage(result.error ?? "학생 정보를 수정하지 못했습니다.");
+    onChanged(result.student);
+    setMessage(`${result.student.name} 학생 정보를 저장했습니다.`);
+  }
+
+  async function uploadRoster(event: React.ChangeEvent<HTMLInputElement>) {
+    const file = event.target.files?.[0];
+    event.target.value = "";
+    if (!file) return;
+    setBusy(true);
+    setMessage("");
+    try {
+      const XLSX = await import("xlsx");
+      const workbook = XLSX.read(await file.arrayBuffer(), { type: "array" });
+      const sheet = workbook.Sheets[workbook.SheetNames[0]];
+      const rows = XLSX.utils.sheet_to_json<Record<string, unknown>>(sheet, { defval: "" });
+      const parsed = rows.flatMap((row) => {
+        const rawNumber = row["번호"] ?? row["순번"] ?? row["No"] ?? row["no"];
+        const rawName = row["이름"] ?? row["학생명"] ?? row["성명"] ?? row["name"];
+        const studentNumber = Number(rawNumber);
+        const studentName = String(rawName ?? "").trim();
+        return Number.isInteger(studentNumber) && studentNumber > 0 && studentName
+          ? [{ number: studentNumber, name: studentName }]
+          : [];
+      });
+      if (!parsed.length) throw new Error("첫 행에 ‘번호’와 ‘이름’ 열이 있는지 확인해 주세요.");
+      if (parsed.length !== rows.length) throw new Error("번호 또는 이름이 비어 있는 행이 있습니다.");
+      if (new Set(parsed.map((row) => row.number)).size !== parsed.length) throw new Error("중복된 학생 번호가 있습니다.");
+      const response = await fetch("/api/students", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ students: parsed }),
+      });
+      const result = await response.json() as { students?: Array<{ id: number; number: number; name: string }>; error?: string };
+      if (!response.ok || !result.students) throw new Error(result.error ?? "명단을 저장하지 못했습니다.");
+      onImported(result.students);
+      setMessage(`${result.students.length}명의 명단을 저장했습니다.`);
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : "파일을 읽지 못했습니다.");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  function downloadTemplate() {
+    const csv = "\uFEFF번호,이름\n1,홍길동\n2,김하늘\n";
+    const url = URL.createObjectURL(new Blob([csv], { type: "text/csv;charset=utf-8" }));
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = "기록샘_학생명단_양식.csv";
+    link.click();
+    URL.revokeObjectURL(url);
+  }
+
+  return <section>
+    <div className="page-heading"><div><p className="eyebrow">CLASS ROSTER</p><h1>학생 관리</h1><p>번호와 이름만 등록하며, 업로드한 파일은 브라우저에서 읽은 뒤 현재 학급에 저장됩니다.</p></div></div>
+    <div className="student-tools">
+      <form onSubmit={addStudent}>
+        <input aria-label="추가할 학생 번호" type="number" min="1" value={number} onChange={(event) => setNumber(event.target.value)} placeholder="번호" required />
+        <input aria-label="추가할 학생 이름" value={name} onChange={(event) => setName(event.target.value)} placeholder="이름" required />
+        <button type="submit">학생 추가</button>
+      </form>
+      <div>
+        <button type="button" onClick={downloadTemplate}>CSV 양식 받기</button>
+        <label className="file-upload-button">{busy ? "업로드 중…" : "Excel·CSV 명단 업로드"}<input type="file" accept=".xlsx,.xls,.csv" onChange={(event) => void uploadRoster(event)} disabled={busy} /></label>
+      </div>
+    </div>
+    {message && <p className="student-message" role="status">{message}</p>}
+    <div className="table-wrap student-table-wrap"><table className="students-table">
+      <thead><tr><th>번호</th><th>이름</th><th>관리</th></tr></thead>
+      <tbody>{roster.length ? roster.map((student) => {
+        const draft = drafts[student.id] ?? { number: student.number ?? student.id, name: student.name };
+        return <tr key={student.id}>
+          <td><input aria-label={`${student.name} 번호`} type="number" min="1" value={draft.number} onChange={(event) => setDrafts((current) => ({ ...current, [student.id]: { ...draft, number: Number(event.target.value) } }))} /></td>
+          <td><input aria-label={`${student.name} 이름`} value={draft.name} onChange={(event) => setDrafts((current) => ({ ...current, [student.id]: { ...draft, name: event.target.value } }))} /></td>
+          <td><button onClick={() => void saveStudent(student.id)}>저장</button><button className="danger-text" onClick={() => onDeleted(student.id)}>비활성화</button></td>
+        </tr>;
+      }) : <tr><td colSpan={3} className="empty-cell">등록된 학생이 없습니다. 직접 추가하거나 명단을 업로드해 주세요.</td></tr>}</tbody>
+    </table></div>
+  </section>;
 }
 
 type AssessmentStudent = {
@@ -573,6 +702,25 @@ export default function Home() {
     setRoster((current) => current.filter((item) => item.id !== id));
     setAssessmentDataBySubject((current) => Object.fromEntries(Object.entries(current).map(([subject, data]) => [subject, data.filter((item) => item.id !== id)])));
   };
+  const mergeStudentIntoState = (student: { id: number; number: number; name: string }) => {
+    setRoster((current) => {
+      const existing = current.find((item) => item.id === student.id);
+      const next: AssessmentStudent = existing
+        ? { ...existing, number: student.number, name: student.name }
+        : { ...student, assessments: [], status: "미생성", note: "" };
+      return [...current.filter((item) => item.id !== student.id), next].sort((a, b) => (a.number ?? a.id) - (b.number ?? b.id));
+    });
+    setAssessmentDataBySubject((current) => Object.fromEntries(Object.entries(current).map(([subject, data]) => {
+      const existing = data.find((item) => item.id === student.id);
+      const next: AssessmentStudent = existing
+        ? { ...existing, number: student.number, name: student.name }
+        : { ...student, assessments: Array(plan.filter((item) => item.subject === subject).length).fill("-") as Level[], status: "미생성", note: "" };
+      return [subject, [...data.filter((item) => item.id !== student.id), next].sort((a, b) => (a.number ?? a.id) - (b.number ?? b.id))];
+    })));
+  };
+  const mergeImportedStudents = (imported: Array<{ id: number; number: number; name: string }>) => {
+    imported.forEach(mergeStudentIntoState);
+  };
   const saveAssessmentLevels = async () => {
     const levels = Object.entries(assessmentDataBySubject).flatMap(([subject, data]) => data.flatMap((student) =>
       student.assessments.map((level, assessmentIndex) => ({ studentId: student.id, subject, assessmentIndex, level })),
@@ -597,13 +745,14 @@ export default function Home() {
         <button className="brand" onClick={() => setView("dashboard")}><span>기록</span>샘<i>교사의 기록을 더 가치 있게</i></button>
         <nav>{navItems.map((item) => <button className={view === item.id ? "active" : ""} key={item.id} onClick={() => setView(item.id)}><span>{item.icon}</span>{item.label}</button>)}</nav>
         <div className="nav-divider" />
-        <nav><button><span>♙</span>학생 관리</button><button><span>⇧</span>결과 내보내기</button></nav>
+        <nav><button><span>⇧</span>결과 내보내기</button></nav>
         <div className="sidebar-bottom"><div className="storage"><span>이번 달 AI 생성</span><strong>128 / 300</strong><div><i /></div></div><div className="profile"><span className="avatar">{currentUser.slice(0, 1)}</span><span><b>{currentUser}</b><small>{classroom?.schoolName ?? "학교 정보 확인 중"}</small></span><form action="/api/auth/logout" method="post"><button type="submit">로그아웃</button></form></div></div>
       </aside>
       <main>
         <header className="mobile-header"><button className="brand" onClick={() => setView("dashboard")}><span>기록</span>샘</button><select value={view} onChange={(e) => setView(e.target.value as View)}>{navItems.map((item) => <option value={item.id} key={item.id}>{item.label}</option>)}</select></header>
         <div className="content">
           {view === "dashboard" && <Dashboard move={setView} teacherName={currentUser} classroom={classroom} studentCount={roster.length} completedLevels={completedLevels} totalLevels={totalLevels} />}
+          {view === "students" && <StudentManager roster={roster} onAdded={mergeStudentIntoState} onChanged={mergeStudentIntoState} onDeleted={(id) => void deleteStudent(id)} onImported={mergeImportedStudents} />}
           {view === "assessments" && <Assessments data={assessmentDataBySubject[activeSubject] ?? []} setData={(updater) => setAssessmentDataBySubject((current) => ({ ...current, [activeSubject]: typeof updater === "function" ? updater(current[activeSubject] ?? []) : updater }))} plan={plan} activeSubject={activeSubject} setActiveSubject={setActiveSubject} onAddStudent={() => void addStudent()} onDeleteStudent={(id) => void deleteStudent(id)} onSave={saveAssessmentLevels} />}
           {view === "comments" && <Comments assessmentDataBySubject={assessmentDataBySubject} plan={plan} roster={roster} />}
           {view === "behavior" && <Behavior roster={roster} />}
