@@ -574,12 +574,18 @@ function Assessments({ data, setData, plan, activeSubject, setActiveSubject, onA
 }) {
   const [saved, setSaved] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [dirty, setDirty] = useState(false);
+  const [bulkLevel, setBulkLevel] = useState<Level>("중");
+  const [message, setMessage] = useState("");
   const subjects = [...new Set(plan.map((item) => item.subject))];
   const visiblePlan = plan.filter((item) => item.subject === activeSubject);
+  const completedCount = data.reduce((count, student) => count + student.assessments.filter((level) => level !== "-").length, 0);
+  const expectedCount = data.length * visiblePlan.length;
 
   const changeSubject = (subject: string) => {
     setActiveSubject(subject);
     setSaved(false);
+    setMessage("");
   };
   const cycle = (row: number, col: number) => {
     const order: Level[] = ["-", "상", "중", "하"];
@@ -588,33 +594,94 @@ function Assessments({ data, setData, plan, activeSubject, setActiveSubject, onA
       assessments: student.assessments.map((level, c) => c !== col ? level : order[(order.indexOf(level) + 1) % order.length]),
     }));
     setSaved(false);
+    setDirty(true);
   };
   const save = async () => {
     setSaving(true);
     try {
       await onSave();
       setSaved(true);
+      setDirty(false);
+      setMessage("변경사항을 저장했습니다.");
     } finally {
       setSaving(false);
+    }
+  };
+  useEffect(() => {
+    if (!dirty || saving) return;
+    const timer = window.setTimeout(() => void save(), 1500);
+    return () => window.clearTimeout(timer);
+  }, [dirty]);
+  const applyToMissing = () => {
+    let changed = 0;
+    setData((current) => current.map((student) => ({
+      ...student,
+      assessments: student.assessments.map((level) => {
+        if (level !== "-") return level;
+        changed += 1;
+        return bulkLevel;
+      }),
+    })));
+    setDirty(true);
+    setSaved(false);
+    setMessage(`${changed}개의 미입력 칸에 '${bulkLevel}'을 적용했습니다.`);
+  };
+  const clearAll = () => {
+    if (!window.confirm(`${activeSubject}의 현재 화면 평가수준을 모두 미입력으로 바꿀까요?`)) return;
+    setData((current) => current.map((student) => ({ ...student, assessments: student.assessments.map(() => "-") })));
+    setDirty(true);
+    setSaved(false);
+    setMessage(`${activeSubject} 평가수준을 모두 초기화했습니다.`);
+  };
+  const pasteLevels = async () => {
+    setMessage("");
+    try {
+      const clipboard = await navigator.clipboard.readText();
+      const rows = clipboard.trim().split(/\r?\n/).filter(Boolean).map((line) => line.split("\t").map((cell) => cell.trim()));
+      if (!rows.length) throw new Error("클립보드에서 붙여넣을 내용을 찾지 못했습니다.");
+      const allowed = new Set<Level>(["상", "중", "하", "-"]);
+      const normalized = rows.map((cells) => {
+        const direct = cells.slice(0, visiblePlan.length);
+        if (direct.every((cell) => allowed.has(cell as Level))) return direct as Level[];
+        const trailing = cells.slice(-visiblePlan.length);
+        if (trailing.every((cell) => allowed.has(cell as Level))) return trailing as Level[];
+        return null;
+      });
+      if (normalized.some((row) => !row)) throw new Error("붙여넣기 영역에는 상·중·하 또는 -만 입력해 주세요.");
+      const usable = normalized.slice(0, data.length) as Level[][];
+      setData((current) => current.map((student, rowIndex) => ({
+        ...student,
+        assessments: student.assessments.map((level, columnIndex) => usable[rowIndex]?.[columnIndex] ?? level),
+      })));
+      setDirty(true);
+      setSaved(false);
+      setMessage(`${usable.length}명 × ${visiblePlan.length}개 평가수준을 붙여넣었습니다.`);
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : "클립보드 내용을 붙여넣지 못했습니다.");
     }
   };
   return (
     <section>
       <div className="page-heading">
         <div><p className="eyebrow">{activeSubject} · 1학기</p><h1>평가 수준 입력</h1><p>셀을 눌러 학생별 성취 수준을 빠르게 입력하세요.</p></div>
-        <div className="heading-actions"><button className="secondary" onClick={onAddStudent}>＋ 학생 추가</button><button onClick={() => void save()} disabled={saving}>{saving ? "저장 중…" : saved ? "저장됨 ✓" : "변경사항 저장"}</button></div>
+        <div className="heading-actions"><span className={`autosave-state ${saving ? "saving" : dirty ? "dirty" : "saved"}`}>{saving ? "자동 저장 중…" : dirty ? "저장 대기 중" : saved ? "자동 저장됨" : "변경 시 자동 저장"}</span><button className="secondary" onClick={onAddStudent}>＋ 학생 추가</button><button onClick={() => void save()} disabled={saving || !dirty}>{saving ? "저장 중…" : "지금 저장"}</button></div>
       </div>
       <div className="table-tools">
         <div className="subject-tabs">{subjects.map((subject) => <button className={subject === activeSubject ? "active" : ""} onClick={() => changeSubject(subject)} key={subject}>{subject}</button>)}</div>
         <span><i className="level high" /> 상 <i className="level middle" /> 중 <i className="level low" /> 하</span>
       </div>
+      <div className="assessment-bulk-tools">
+        <div><strong>일괄 입력</strong><select value={bulkLevel} onChange={(event) => setBulkLevel(event.target.value as Level)}><option>상</option><option>중</option><option>하</option></select><button onClick={applyToMissing}>미입력 전체 적용</button><button className="secondary" onClick={() => void pasteLevels()}>엑셀 표 붙여넣기</button><button className="danger-text" onClick={clearAll}>전체 초기화</button></div>
+        <span>엑셀에서 학생별 상·중·하 영역만 복사하거나, 번호·이름을 포함한 표를 복사해도 됩니다.</span>
+      </div>
+      {message && <p className="student-message">{message}</p>}
       <div className="assessment-wrap">
         <table className="assessment-table">
           <thead><tr><th>번호</th><th>학생</th>{visiblePlan.map((item, index) => <th key={`${item.unit}-${item.domain}-${index}`} title={item.goal}><b>{item.unit}</b><small>{item.domain}</small></th>)}<th>관리</th></tr></thead>
           <tbody>{data.map((student, row) => <tr key={student.id}><td>{student.number ?? student.id}</td><td><strong>{student.name}</strong></td>{student.assessments.map((level, col) => <td key={col}><button aria-label={`${student.name} ${col + 1}단원 수준 ${level}`} className={`level-button level-${level}`} onClick={() => cycle(row, col)}>{level}</button></td>)}<td><button className="delete-student" onClick={() => onDeleteStudent(student.id)} aria-label={`${student.name} 삭제`}>삭제</button></td></tr>)}</tbody>
         </table>
       </div>
-      <div className="bottom-action"><span>입력 완료 <strong>{data.reduce((count, student) => count + student.assessments.filter((level) => level !== "-").length, 0)} / {data.length * visiblePlan.length}</strong></span></div>
+      <div className="bottom-action"><span>입력 완료 <strong>{completedCount} / {expectedCount}</strong> · 미입력 {Math.max(expectedCount - completedCount, 0)}개</span></div>
     </section>
   );
 }
