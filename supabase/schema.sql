@@ -54,7 +54,7 @@ create table if not exists assessment_levels (
   student_id bigint not null,
   subject text not null,
   assessment_index integer not null,
-  level text not null check (level in ('상', '중', '하', '-')),
+  level text not null check (level in ('상', '중', '하', '미응시', '평가 예정', '-')),
   updated_at timestamptz not null default now(),
   owner_email text not null,
   owner_id uuid references auth.users(id) on delete cascade,

@@ -103,7 +103,7 @@ button.secondary { color: #526171; border: 1px solid #dce1e6; background: #fff; 
 .assessment-table tbody tr:last-child td { border-bottom: 0; }
 .assessment-table td:nth-child(2) { text-align: left; color: #283445; }
 .level-button { width: 34px; height: 30px; border-radius: 7px; font-weight: 800; border: 0; }
-.level-상 { background: #e7f1fc; color: #2472c3; }.level-중 { background: #e8f6ef; color: #2f8b61; }.level-하 { background: #fff1e3; color: #be6f25; }.level-- { background: #f1f3f5; color: #a4acb7; }
+.level-상 { background: #e7f1fc; color: #2472c3; }.level-중 { background: #e8f6ef; color: #2f8b61; }.level-하 { background: #fff1e3; color: #be6f25; }.level-미응시 { background: #fcebec; color: #a84c55; }.level-평가예정 { background: #f0ecfb; color: #6f59a8; }.level-- { background: #f1f3f5; color: #a4acb7; }
 .bottom-action { margin-top: 16px; display: flex; justify-content: flex-end; align-items: center; gap: 18px; font-size: 11px; color: #7b8592; }
 .bottom-action button b { margin-left: 18px; }
 .review-layout { display: grid; grid-template-columns: 220px 1fr; gap: 15px; align-items: start; }

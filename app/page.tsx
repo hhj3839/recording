@@ -4,7 +4,7 @@ import { useEffect, useState } from "react";
 import { recordSimilarity, validateRecord } from "./record-validation";
 
 type View = "dashboard" | "classes" | "students" | "plans" | "assessments" | "comments" | "behavior" | "export" | "settings";
-type Level = "상" | "중" | "하" | "-";
+type Level = "상" | "중" | "하" | "미응시" | "평가 예정" | "-";
 type AssessmentPlan = {
   id?: number;
   subject: string;
@@ -825,7 +825,7 @@ function Assessments({ data, setData, plan, activeSubject, setActiveSubject, onA
     setMessage("");
   };
   const cycle = (row: number, col: number) => {
-    const order: Level[] = ["-", "상", "중", "하"];
+    const order: Level[] = ["-", "상", "중", "하", "미응시", "평가 예정"];
     setData((current) => current.map((student, r) => r !== row ? student : {
       ...student,
       assessments: student.assessments.map((level, c) => c !== col ? level : order[(order.indexOf(level) + 1) % order.length]),
@@ -876,7 +876,7 @@ function Assessments({ data, setData, plan, activeSubject, setActiveSubject, onA
       const clipboard = await navigator.clipboard.readText();
       const rows = clipboard.trim().split(/\r?\n/).filter(Boolean).map((line) => line.split("\t").map((cell) => cell.trim()));
       if (!rows.length) throw new Error("클립보드에서 붙여넣을 내용을 찾지 못했습니다.");
-      const allowed = new Set<Level>(["상", "중", "하", "-"]);
+      const allowed = new Set<Level>(["상", "중", "하", "미응시", "평가 예정", "-"]);
       const normalized = rows.map((cells) => {
         const direct = cells.slice(0, visiblePlan.length);
         if (direct.every((cell) => allowed.has(cell as Level))) return direct as Level[];
@@ -884,7 +884,7 @@ function Assessments({ data, setData, plan, activeSubject, setActiveSubject, onA
         if (trailing.every((cell) => allowed.has(cell as Level))) return trailing as Level[];
         return null;
       });
-      if (normalized.some((row) => !row)) throw new Error("붙여넣기 영역에는 상·중·하 또는 -만 입력해 주세요.");
+      if (normalized.some((row) => !row)) throw new Error("붙여넣기 영역에는 상·중·하·미응시·평가 예정 또는 -만 입력해 주세요.");
       const usable = normalized.slice(0, data.length) as Level[][];
       setData((current) => current.map((student, rowIndex) => ({
         ...student,
@@ -905,17 +905,17 @@ function Assessments({ data, setData, plan, activeSubject, setActiveSubject, onA
       </div>
       <div className="table-tools">
         <div className="subject-tabs">{subjects.map((subject) => <button className={subject === activeSubject ? "active" : ""} onClick={() => changeSubject(subject)} key={subject}>{subject}</button>)}</div>
-        <span><i className="level high" /> 상 <i className="level middle" /> 중 <i className="level low" /> 하</span>
+        <span><i className="level high" /> 상 <i className="level middle" /> 중 <i className="level low" /> 하 <i className="level absent" /> 미응시 <i className="level planned" /> 평가 예정</span>
       </div>
       <div className="assessment-bulk-tools">
-        <div><strong>일괄 입력</strong><select value={bulkLevel} onChange={(event) => setBulkLevel(event.target.value as Level)}><option>상</option><option>중</option><option>하</option></select><button onClick={applyToMissing}>미입력 전체 적용</button><button className="secondary" onClick={() => void pasteLevels()}>엑셀 표 붙여넣기</button><button className="danger-text" onClick={clearAll}>전체 초기화</button></div>
-        <span>엑셀에서 학생별 상·중·하 영역만 복사하거나, 번호·이름을 포함한 표를 복사해도 됩니다.</span>
+        <div><strong>일괄 입력</strong><select value={bulkLevel} onChange={(event) => setBulkLevel(event.target.value as Level)}><option>상</option><option>중</option><option>하</option><option>미응시</option><option>평가 예정</option></select><button onClick={applyToMissing}>미입력 전체 적용</button><button className="secondary" onClick={() => void pasteLevels()}>엑셀 표 붙여넣기</button><button className="danger-text" onClick={clearAll}>전체 초기화</button></div>
+        <span>엑셀에서 학생별 상·중·하·미응시·평가 예정 영역만 복사하거나, 번호·이름을 포함한 표를 복사해도 됩니다.</span>
       </div>
       {message && <p className="student-message">{message}</p>}
       <div className="assessment-wrap">
         <table className="assessment-table">
           <thead><tr><th>번호</th><th>학생</th>{visiblePlan.map((item, index) => <th key={`${item.unit}-${item.domain}-${index}`} title={item.goal}><b>{item.unit}</b><small>{item.domain}</small></th>)}<th>관리</th></tr></thead>
-          <tbody>{data.map((student, row) => <tr key={student.id}><td>{student.number ?? student.id}</td><td><strong>{student.name}</strong></td>{student.assessments.map((level, col) => <td key={col}><button aria-label={`${student.name} ${col + 1}단원 수준 ${level}`} className={`level-button level-${level}`} onClick={() => cycle(row, col)}>{level}</button></td>)}<td><button className="delete-student" onClick={() => onDeleteStudent(student.id)} aria-label={`${student.name} 삭제`}>삭제</button></td></tr>)}</tbody>
+          <tbody>{data.map((student, row) => <tr key={student.id}><td>{student.number ?? student.id}</td><td><strong>{student.name}</strong></td>{student.assessments.map((level, col) => <td key={col}><button aria-label={`${student.name} ${col + 1}단원 수준 ${level}`} className={`level-button level-${level === "평가 예정" ? "평가예정" : level}`} onClick={() => cycle(row, col)}>{level}</button></td>)}<td><button className="delete-student" onClick={() => onDeleteStudent(student.id)} aria-label={`${student.name} 삭제`}>삭제</button></td></tr>)}</tbody>
         </table>
       </div>
       <div className="bottom-action"><span>입력 완료 <strong>{completedCount} / {expectedCount}</strong> · 미입력 {Math.max(expectedCount - completedCount, 0)}개</span></div>

@@ -1,7 +1,7 @@
 import { dataError, getDataScope } from "../../data-scope";
 import { checkAiUsage, recordAiUsage } from "../../ai-usage";
 
-type Level = "상" | "중" | "하" | "-";
+type Level = "상" | "중" | "하" | "미응시" | "평가 예정" | "-";
 
 const defaultAssessmentPlan = [
   {
@@ -84,7 +84,7 @@ export async function POST(request: Request) {
       high: item.criteria.상, middle: item.criteria.중, low: item.criteria.하, caution: "",
     }));
     const levels = Array.isArray(body.levels) ? body.levels : [];
-    const validLevels = levels.length === plan.length && levels.every((level): level is Level => ["상", "중", "하", "-"].includes(String(level)));
+    const validLevels = levels.length === plan.length && levels.every((level): level is Level => ["상", "중", "하", "미응시", "평가 예정", "-"].includes(String(level)));
     if (!validLevels) return Response.json({ error: "평가 수준을 다시 확인해 주세요." }, { status: 400 });
     if (levels.every((level) => level === "-")) return Response.json({ error: "평가 수준을 한 개 이상 입력해 주세요." }, { status: 400 });
 

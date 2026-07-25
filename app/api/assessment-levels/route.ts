@@ -12,7 +12,7 @@ export async function PUT(request: Request) {
       const subject = typeof item?.subject === "string" ? item.subject : "";
       const assessmentIndex = Number(item?.assessmentIndex);
       const level = typeof item?.level === "string" ? item.level : "";
-      return Number.isInteger(studentId) && subject && Number.isInteger(assessmentIndex) && ["상", "중", "하", "-"].includes(level)
+      return Number.isInteger(studentId) && subject && Number.isInteger(assessmentIndex) && ["상", "중", "하", "미응시", "평가 예정", "-"].includes(level)
         ? [{ studentId, subject, assessmentIndex, level }]
         : [];
     });

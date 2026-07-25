@@ -4,7 +4,7 @@ import { getAiUsage, MONTHLY_AI_LIMIT } from "../../ai-usage";
 import { CommentEvidence, signCommentJob } from "../../comment-generation";
 import { dataError, getDataScope, requireOwnedStudentIds } from "../../data-scope";
 
-type Level = "상" | "중" | "하" | "-";
+type Level = "상" | "중" | "하" | "미응시" | "평가 예정" | "-";
 type ScoreStudent = { studentId: number; levels: Level[] };
 type JobRow = {
   id: string;

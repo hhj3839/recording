@@ -3,7 +3,7 @@ import { dataError, getDataScope, requireOwnedStudentIds } from "../../data-scop
 import { checkAiUsage, recordAiUsage } from "../../ai-usage";
 import { archiveComment } from "../../record-revisions";
 
-type Level = "상" | "중" | "하" | "-";
+type Level = "상" | "중" | "하" | "미응시" | "평가 예정" | "-";
 type ScoreStudent = { studentId: number; levels: Level[] };
 
 function extractOutputText(payload: unknown): string {
