@@ -311,6 +311,8 @@ function StudentManager({ roster, onAdded, onChanged, onDeleted, onImported }: {
   const [drafts, setDrafts] = useState<Record<number, { number: number; name: string }>>({});
   const [inactiveStudents, setInactiveStudents] = useState<Array<{ id: number; number: number; name: string }>>([]);
   const [studentTab, setStudentTab] = useState<"active" | "inactive">("active");
+  const [orderedIds, setOrderedIds] = useState<number[]>([]);
+  const [orderDirty, setOrderDirty] = useState(false);
 
   useEffect(() => {
     setDrafts(Object.fromEntries(roster.map((student) => [student.id, {
@@ -321,6 +323,8 @@ function StudentManager({ roster, onAdded, onChanged, onDeleted, onImported }: {
       const result = await response.json() as { students?: Array<{ id: number; number: number; name: string }> };
       if (response.ok) setInactiveStudents(result.students ?? []);
     }).catch(() => undefined);
+    setOrderedIds(roster.map((student) => student.id));
+    setOrderDirty(false);
   }, [roster]);
 
   async function addStudent(event: React.FormEvent) {
@@ -439,6 +443,37 @@ function StudentManager({ roster, onAdded, onChanged, onDeleted, onImported }: {
       setBusy(false);
     }
   }
+  const orderedRoster = orderedIds.map((id) => roster.find((student) => student.id === id)).filter((student): student is AssessmentStudent => Boolean(student));
+  function moveStudent(id: number, direction: -1 | 1) {
+    setOrderedIds((current) => {
+      const index = current.indexOf(id);
+      const nextIndex = index + direction;
+      if (index < 0 || nextIndex < 0 || nextIndex >= current.length) return current;
+      const next = [...current];
+      [next[index], next[nextIndex]] = [next[nextIndex], next[index]];
+      return next;
+    });
+    setOrderDirty(true);
+  }
+  async function saveStudentOrder() {
+    setBusy(true);
+    setMessage("");
+    try {
+      const response = await fetch("/api/students/reorder", {
+        method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ studentIds: orderedIds }),
+      });
+      const result = await response.json() as { students?: Array<{ id: number; number: number; name: string }>; error?: string };
+      if (!response.ok || !result.students) throw new Error(result.error || "학생 순서를 저장하지 못했습니다.");
+      onImported(result.students);
+      setOrderedIds(result.students.map((student) => student.id));
+      setOrderDirty(false);
+      setMessage("학생 순서를 저장하고 1번부터 자동으로 다시 번호를 매겼습니다.");
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : "학생 순서를 저장하지 못했습니다.");
+    } finally {
+      setBusy(false);
+    }
+  }
 
   return <section>
     <div className="page-heading"><div><p className="eyebrow">CLASS ROSTER</p><h1>학생 관리</h1><p>번호와 이름만 등록하며, 업로드한 파일은 브라우저에서 읽은 뒤 현재 학급에 저장됩니다.</p></div></div>
@@ -455,18 +490,19 @@ function StudentManager({ roster, onAdded, onChanged, onDeleted, onImported }: {
     </div>
     {message && <p className="student-message" role="status">{message}</p>}
     <div className="student-status-tabs">
-      <button className={studentTab === "active" ? "active" : ""} onClick={() => setStudentTab("active")}>재학생 {roster.length}</button>
-      <button className={studentTab === "inactive" ? "active" : ""} onClick={() => setStudentTab("inactive")}>전출·비활성 {inactiveStudents.length}</button>
+      <div><button className={studentTab === "active" ? "active" : ""} onClick={() => setStudentTab("active")}>재학생 {roster.length}</button>
+      <button className={studentTab === "inactive" ? "active" : ""} onClick={() => setStudentTab("inactive")}>전출·비활성 {inactiveStudents.length}</button></div>
+      {studentTab === "active" && <button className="save-order" disabled={busy || !orderDirty} onClick={() => void saveStudentOrder()}>{orderDirty ? "변경 순서 저장" : "순서 저장됨"}</button>}
     </div>
     {studentTab === "active" ? (
     <div className="table-wrap student-table-wrap"><table className="students-table">
       <thead><tr><th>번호</th><th>이름</th><th>관리</th></tr></thead>
-      <tbody>{roster.length ? roster.map((student) => {
+      <tbody>{orderedRoster.length ? orderedRoster.map((student, index) => {
         const draft = drafts[student.id] ?? { number: student.number ?? student.id, name: student.name };
         return <tr key={student.id}>
           <td><input aria-label={`${student.name} 번호`} type="number" min="1" value={draft.number} onChange={(event) => setDrafts((current) => ({ ...current, [student.id]: { ...draft, number: Number(event.target.value) } }))} /></td>
           <td><input aria-label={`${student.name} 이름`} value={draft.name} onChange={(event) => setDrafts((current) => ({ ...current, [student.id]: { ...draft, name: event.target.value } }))} /></td>
-          <td><button onClick={() => void saveStudent(student.id)}>저장</button><button className="danger-text" onClick={() => onDeleted(student.id)}>비활성화</button></td>
+          <td><span className="order-buttons"><button disabled={busy || index === 0} title="한 칸 위로" onClick={() => moveStudent(student.id, -1)}>↑</button><button disabled={busy || index === orderedRoster.length - 1} title="한 칸 아래로" onClick={() => moveStudent(student.id, 1)}>↓</button></span><button onClick={() => void saveStudent(student.id)}>저장</button><button className="danger-text" onClick={() => onDeleted(student.id)}>비활성화</button></td>
         </tr>;
       }) : <tr><td colSpan={3} className="empty-cell">등록된 학생이 없습니다. 직접 추가하거나 명단을 업로드해 주세요.</td></tr>}</tbody>
     </table></div>

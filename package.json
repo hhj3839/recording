@@ -18,7 +18,8 @@
     "db:migrate-revisions": "node scripts/migrate-record-revisions.mjs",
     "db:migrate-generation-jobs": "node scripts/migrate-generation-jobs.mjs",
     "db:configure-generation-cron": "node scripts/configure-generation-job-cron.mjs",
-    "db:migrate-behavior-jobs": "node scripts/migrate-behavior-generation-jobs.mjs"
+    "db:migrate-behavior-jobs": "node scripts/migrate-behavior-generation-jobs.mjs",
+    "db:migrate-student-reordering": "node scripts/migrate-student-reordering.mjs"
   },
   "dependencies": {
     "@supabase/ssr": "^0.12.3",
