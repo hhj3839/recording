@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 
-type View = "dashboard" | "students" | "plans" | "assessments" | "comments" | "behavior" | "export" | "settings";
+type View = "dashboard" | "classes" | "students" | "plans" | "assessments" | "comments" | "behavior" | "export" | "settings";
 type Level = "상" | "중" | "하" | "-";
 type AssessmentPlan = {
   id?: number;
@@ -19,6 +19,7 @@ type AssessmentPlan = {
   sortOrder?: number;
 };
 type ClassroomInfo = {
+  id?: number;
   schoolName: string;
   schoolYear: number;
   semester: number;
@@ -84,6 +85,7 @@ const withSampleLevels = (student: (typeof students)[number], subjectIndex: numb
 
 const navItems: { id: View; label: string; icon: string }[] = [
   { id: "dashboard", label: "대시보드", icon: "⌂" },
+  { id: "classes", label: "학급 관리", icon: "▣" },
   { id: "students", label: "학생 관리", icon: "♙" },
   { id: "plans", label: "평가계획 관리", icon: "▤" },
   { id: "assessments", label: "평가 수준 입력", icon: "▦" },
@@ -125,7 +127,7 @@ function Dashboard({ move, teacherName, classroom, studentCount, completedLevels
           <h1>{teacherName} 선생님, 안녕하세요.</h1>
           <p>오늘도 학생의 성장을 세심하게 기록해 볼까요?</p>
         </div>
-        <button className="class-button">{classroom ? `${classroom.schoolName} · ${classroom.grade}학년 ${classroom.classNumber}반` : "학급 정보 확인 중"} <span>⌄</span></button>
+        <button className="class-button" onClick={() => move("classes")}>{classroom ? `${classroom.schoolName} · ${classroom.grade}학년 ${classroom.classNumber}반` : "학급 정보 확인 중"} <span>⌄</span></button>
       </section>
 
       <section className="stats-grid" aria-label="학급 진행 현황">
@@ -173,6 +175,103 @@ function Dashboard({ move, teacherName, classroom, studentCount, completedLevels
       </section>
     </>
   );
+}
+
+type ManagedClassroom = ClassroomInfo & { id: number };
+
+function ClassroomManager({ current }: { current: ClassroomInfo | null }) {
+  const [classrooms, setClassrooms] = useState<ManagedClassroom[]>([]);
+  const [form, setForm] = useState({
+    schoolName: current?.schoolName ?? "",
+    schoolYear: current?.schoolYear ?? new Date().getFullYear(),
+    semester: current?.semester ?? 1,
+    grade: current?.grade ?? 1,
+    classNumber: current?.classNumber ?? 1,
+  });
+  const [message, setMessage] = useState("");
+  const [busy, setBusy] = useState(false);
+  const load = async () => {
+    const response = await fetch("/api/classrooms");
+    const result = await response.json() as { classrooms?: ManagedClassroom[]; error?: string };
+    if (!response.ok) return setMessage(result.error || "학급 목록을 불러오지 못했습니다.");
+    setClassrooms(result.classrooms ?? []);
+  };
+  useEffect(() => { void load(); }, []);
+  useEffect(() => {
+    if (!current) return;
+    setForm({
+      schoolName: current.schoolName,
+      schoolYear: current.schoolYear,
+      semester: current.semester,
+      grade: current.grade,
+      classNumber: current.classNumber,
+    });
+  }, [current]);
+  const createClassroom = async (event: React.FormEvent) => {
+    event.preventDefault();
+    setBusy(true);
+    setMessage("");
+    try {
+      const response = await fetch("/api/classrooms", {
+        method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(form),
+      });
+      const result = await response.json() as { classroom?: ManagedClassroom; error?: string };
+      if (!response.ok || !result.classroom) throw new Error(result.error || "학급을 추가하지 못했습니다.");
+      window.location.reload();
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : "학급을 추가하지 못했습니다.");
+      setBusy(false);
+    }
+  };
+  const selectClassroom = async (id: number) => {
+    if (id === current?.id) return;
+    setBusy(true);
+    setMessage("");
+    try {
+      const response = await fetch("/api/classrooms", {
+        method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ id }),
+      });
+      const result = await response.json() as { error?: string };
+      if (!response.ok) throw new Error(result.error || "학급을 전환하지 못했습니다.");
+      window.location.reload();
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : "학급을 전환하지 못했습니다.");
+      setBusy(false);
+    }
+  };
+  const updateForm = (key: keyof typeof form, value: string) => setForm((currentForm) => ({
+    ...currentForm,
+    [key]: key === "schoolName" ? value : Number(value),
+  }));
+  return <section>
+    <div className="page-heading"><div><p className="eyebrow">SCHOOL & CLASS</p><h1>학급 관리</h1><p>학년도·학기·학년·반별로 자료를 완전히 분리해 관리하세요.</p></div></div>
+    {message && <p className="student-message">{message}</p>}
+    <div className="classroom-layout">
+      <section className="classroom-list-panel">
+        <div className="section-heading"><div><p className="eyebrow">MY CLASSES</p><h2>내 학급 · {classrooms.length}개</h2></div></div>
+        <div className="classroom-list">{classrooms.map((item) => {
+          const active = item.id === current?.id;
+          return <button className={active ? "active" : ""} disabled={busy} onClick={() => void selectClassroom(item.id)} key={item.id}>
+            <span className="classroom-icon">{item.grade}</span>
+            <span><b>{item.schoolName}</b><small>{item.schoolYear}학년도 {item.semester}학기 · {item.grade}학년 {item.classNumber}반</small></span>
+            <i>{active ? "사용 중" : "전환"}</i>
+          </button>;
+        })}</div>
+      </section>
+      <section className="classroom-create-panel">
+        <div className="section-heading"><div><p className="eyebrow">NEW CLASS</p><h2>학급 추가</h2></div></div>
+        <p>새 학급은 빈 학생 명단과 평가계획으로 시작합니다. 기존 학급 자료에는 영향을 주지 않습니다.</p>
+        <form onSubmit={(event) => void createClassroom(event)}>
+          <label className="wide"><span>학교명</span><input required value={form.schoolName} onChange={(event) => updateForm("schoolName", event.target.value)} /></label>
+          <label><span>학년도</span><input type="number" min="2020" max="2100" required value={form.schoolYear} onChange={(event) => updateForm("schoolYear", event.target.value)} /></label>
+          <label><span>학기</span><select value={form.semester} onChange={(event) => updateForm("semester", event.target.value)}><option value="1">1학기</option><option value="2">2학기</option></select></label>
+          <label><span>학년</span><select value={form.grade} onChange={(event) => updateForm("grade", event.target.value)}>{[1, 2, 3, 4, 5, 6].map((grade) => <option value={grade} key={grade}>{grade}학년</option>)}</select></label>
+          <label><span>반</span><input type="number" min="1" max="30" required value={form.classNumber} onChange={(event) => updateForm("classNumber", event.target.value)} /></label>
+          <button className="wide" disabled={busy}>{busy ? "처리 중…" : "새 학급 추가 후 전환"}</button>
+        </form>
+      </section>
+    </div>
+  </section>;
 }
 
 function StudentManager({ roster, onAdded, onChanged, onDeleted, onImported }: {
@@ -1157,6 +1256,7 @@ export default function Home() {
         <header className="mobile-header"><button className="brand" onClick={() => setView("dashboard")}><span>기록</span>샘</button><select value={view} onChange={(e) => setView(e.target.value as View)}>{navItems.map((item) => <option value={item.id} key={item.id}>{item.label}</option>)}<option value="export">결과 내보내기</option><option value="settings">개인정보·설정</option></select></header>
         <div className="content">
           {view === "dashboard" && <Dashboard move={setView} teacherName={currentUser} classroom={classroom} studentCount={roster.length} completedLevels={completedLevels} totalLevels={totalLevels} commentCount={generatedCommentCount} expectedComments={roster.length * new Set(plan.map((item) => item.subject)).size} behaviorCount={generatedBehaviorCount} />}
+          {view === "classes" && <ClassroomManager current={classroom} />}
           {view === "students" && <StudentManager roster={roster} onAdded={mergeStudentIntoState} onChanged={mergeStudentIntoState} onDeleted={(id) => void deleteStudent(id)} onImported={mergeImportedStudents} />}
           {view === "plans" && <PlanManager plan={plan} onChanged={applyPlanChange} />}
           {view === "assessments" && <Assessments data={assessmentDataBySubject[activeSubject] ?? []} setData={(updater) => setAssessmentDataBySubject((current) => ({ ...current, [activeSubject]: typeof updater === "function" ? updater(current[activeSubject] ?? []) : updater }))} plan={plan} activeSubject={activeSubject} setActiveSubject={setActiveSubject} onAddStudent={() => void addStudent()} onDeleteStudent={(id) => void deleteStudent(id)} onSave={saveAssessmentLevels} />}

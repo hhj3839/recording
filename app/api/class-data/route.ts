@@ -11,7 +11,7 @@ export async function GET() {
     return Response.json({
       students: studentRows.map((student) => ({ id: student.id, number: student.number, name: student.name })),
       levels: levelRows.map((row) => ({ studentId: row.student_id, subject: row.subject, assessmentIndex: row.assessment_index, level: row.level })),
-      classroom: { schoolName: classroom.school_name, schoolYear: classroom.school_year, semester: classroom.semester, grade: classroom.grade, classNumber: classroom.class_number },
+      classroom: { id: classId, schoolName: classroom.school_name, schoolYear: classroom.school_year, semester: classroom.semester, grade: classroom.grade, classNumber: classroom.class_number },
       user: { displayName: user.displayName },
     });
   } catch (error) {

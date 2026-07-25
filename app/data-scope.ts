@@ -1,5 +1,8 @@
 import { eq, selectRows, upsertRows } from "../db/supabase";
 import { getAuthUser } from "./supabase-auth";
+import { cookies } from "next/headers";
+
+export const ACTIVE_CLASS_COOKIE = "giroksam-active-class";
 
 type SupabaseClassroom = {
   id: number;
@@ -28,14 +31,24 @@ export async function getDataScope() {
     created_at: now,
   }], "email");
 
-  let classroom = (await selectRows<SupabaseClassroom>("classrooms", {
-    owner_id: eq(user.id),
-    school_year: eq(user.schoolYear),
-    semester: eq(user.semester),
-    grade: eq(user.grade),
-    class_number: eq(user.classNumber),
-    limit: 1,
-  }))[0];
+  const cookieStore = await cookies();
+  const preferredClassId = Number(cookieStore.get(ACTIVE_CLASS_COOKIE)?.value);
+  let classroom = Number.isInteger(preferredClassId)
+    ? (await selectRows<SupabaseClassroom>("classrooms", {
+        id: eq(preferredClassId), owner_id: eq(user.id), limit: 1,
+      }))[0]
+    : undefined;
+
+  if (!classroom) {
+    classroom = (await selectRows<SupabaseClassroom>("classrooms", {
+      owner_id: eq(user.id),
+      school_year: eq(user.schoolYear),
+      semester: eq(user.semester),
+      grade: eq(user.grade),
+      class_number: eq(user.classNumber),
+      limit: 1,
+    }))[0];
+  }
 
   if (!classroom) {
     classroom = (await upsertRows<SupabaseClassroom>("classrooms", [{
