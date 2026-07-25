@@ -910,8 +910,11 @@ function Comments({ assessmentDataBySubject, plan, roster }: { assessmentDataByS
 }
 
 function Behavior({ roster }: { roster: AssessmentStudent[] }) {
+  type BehaviorJob = { id: string; status: string; totalItems: number; completedItems: number; failedItems: number; completedAt?: string | null };
   const [records, setRecords] = useState<Record<number, { characteristic: string; behavior: string; confirmed: boolean }>>({});
   const [loading, setLoading] = useState(false);
+  const [generationProgress, setGenerationProgress] = useState("");
+  const [activeJob, setActiveJob] = useState<BehaviorJob | null>(null);
   const [error, setError] = useState("");
   const [copied, setCopied] = useState(false);
   const [lastGeneratedAt, setLastGeneratedAt] = useState("");
@@ -920,20 +923,52 @@ function Behavior({ roster }: { roster: AssessmentStudent[] }) {
   const [activeStudentId, setActiveStudentId] = useState<number | null>(roster[0]?.id ?? null);
   const [history, setHistory] = useState<{ studentId: number; studentName: string; revisions: RevisionItem[] } | null>(null);
 
+  const loadBehaviors = async () => {
+    try {
+      const response = await fetch("/api/student-behaviors");
+      const result = await response.json() as { behaviors?: Array<{ studentId: number; characteristic: string; behavior: string; confirmed: boolean; updatedAt: string }> };
+      if (!response.ok || !result.behaviors) return;
+      setRecords(Object.fromEntries(result.behaviors.map((item) => [item.studentId, { characteristic: item.characteristic, behavior: item.behavior, confirmed: item.confirmed }])));
+      setLastGeneratedAt(result.behaviors.map((item) => item.updatedAt).sort().at(-1) ?? "");
+    } catch {
+      setError("저장된 행동특성을 불러오지 못했습니다.");
+    }
+  };
   useEffect(() => {
-    const load = async () => {
-      try {
-        const response = await fetch("/api/student-behaviors");
-        const result = await response.json() as { behaviors?: Array<{ studentId: number; characteristic: string; behavior: string; confirmed: boolean; updatedAt: string }> };
-        if (!response.ok || !result.behaviors) return;
-        setRecords(Object.fromEntries(result.behaviors.map((item) => [item.studentId, { characteristic: item.characteristic, behavior: item.behavior, confirmed: item.confirmed }])));
-        setLastGeneratedAt(result.behaviors.map((item) => item.updatedAt).sort().at(-1) ?? "");
-      } catch {
-        setError("저장된 행동특성을 불러오지 못했습니다.");
+    void loadBehaviors();
+    fetch("/api/behavior-jobs").then(async (response) => {
+      const result = await response.json() as { job?: BehaviorJob | null };
+      if (response.ok && result.job) {
+        setActiveJob(result.job);
+        if (["queued", "running"].includes(result.job.status)) setLoading(true);
       }
-    };
-    void load();
+    }).catch(() => undefined);
   }, []);
+  useEffect(() => {
+    if (!activeJob || !["queued", "running"].includes(activeJob.status)) return;
+    setGenerationProgress(`${activeJob.completedItems}/${activeJob.totalItems}`);
+    const timer = window.setInterval(async () => {
+      try {
+        const response = await fetch("/api/behavior-jobs");
+        const result = await response.json() as { job?: BehaviorJob | null };
+        if (!response.ok || !result.job) return;
+        setActiveJob(result.job);
+        setGenerationProgress(`${result.job.completedItems}/${result.job.totalItems}`);
+        if (!["queued", "running"].includes(result.job.status)) {
+          window.clearInterval(timer);
+          setLoading(false);
+          setGenerationProgress("");
+          await loadBehaviors();
+          if (result.job.failedItems) setError(`${result.job.failedItems}명의 행동특성이 생성되지 않았습니다. 다시 실행해 재시도해 주세요.`);
+          else setError("");
+          setLastGeneratedAt(result.job.completedAt || new Date().toISOString());
+        }
+      } catch {
+        // 페이지 연결이 끊겨도 서버 작업은 계속 진행됨.
+      }
+    }, 3000);
+    return () => window.clearInterval(timer);
+  }, [activeJob?.id, activeJob?.status]);
 
   const updateRecord = (studentId: number, patch: Partial<{ characteristic: string; behavior: string; confirmed: boolean }>) => {
     setRecords((current) => ({ ...current, [studentId]: { ...(current[studentId] ?? { characteristic: "", behavior: "", confirmed: false }), ...patch } }));
@@ -950,23 +985,21 @@ function Behavior({ roster }: { roster: AssessmentStudent[] }) {
     if (!inputs.length) return setError("한 명 이상의 특성을 입력해 주세요.");
     setLoading(true);
     setError("");
+    setGenerationProgress("작업 등록 중…");
     try {
-      const response = await fetch("/api/generate-all-behaviors", {
+      const response = await fetch("/api/behavior-jobs", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ students: inputs }),
       });
-      const result = await response.json() as { behaviors?: Array<{ studentId: number; characteristic: string; behavior: string }>; updatedAt?: string; error?: string };
-      if (!response.ok || !result.behaviors?.length) throw new Error(result.error || "행동특성을 생성하지 못했습니다.");
-      setRecords((current) => ({
-        ...current,
-        ...Object.fromEntries(result.behaviors!.map((item) => [item.studentId, { characteristic: item.characteristic, behavior: item.behavior, confirmed: false }])),
-      }));
-      setLastGeneratedAt(result.updatedAt ?? new Date().toISOString());
+      const result = await response.json() as { job?: BehaviorJob; error?: string };
+      if (!response.ok || !result.job) throw new Error(result.error || "행동특성 백그라운드 작업을 시작하지 못했습니다.");
+      setActiveJob(result.job);
+      setGenerationProgress(`${result.job.completedItems}/${result.job.totalItems}`);
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : "행동특성을 생성하지 못했습니다.");
-    } finally {
       setLoading(false);
+      setGenerationProgress("");
     }
   };
   const copyBehaviors = async () => {
@@ -1017,7 +1050,7 @@ function Behavior({ roster }: { roster: AssessmentStudent[] }) {
     <section>
       <div className="page-heading">
         <div><p className="eyebrow">GROWTH NOTE</p><h1>행동특성 작성</h1><p>학생별 특성을 입력하고 한 번에 행동특성을 생성하세요.</p></div>
-        <div className="ai-generate-actions">{formattedLastGeneratedAt && <span>마지막 사용 {formattedLastGeneratedAt}</span>}<button onClick={() => void generateAll()} disabled={loading}>{loading ? "전체 생성 중…" : "✦ AI 행특 생성"}</button></div>
+        <div className="ai-generate-actions">{formattedLastGeneratedAt && <span>마지막 사용 {formattedLastGeneratedAt}</span>}<button onClick={() => void generateAll()} disabled={loading}>{loading ? generationProgress || "전체 생성 중…" : "✦ AI 행특 생성"}</button></div>
       </div>
       <div className="review-content behavior-table-content">
         <div className="behavior-table-toolbar"><span>특성 입력 {roster.filter((student) => records[student.id]?.characteristic.trim()).length} / {roster.length}명</span><div><button className="reference-open-button" onClick={() => setReferenceOpen((current) => !current)}>{referenceOpen ? "참고자료 닫기" : "참고자료 열기"}</button><button className="copy-comments" onClick={() => void copyBehaviors()} disabled={!roster.some((student) => records[student.id]?.behavior)}>{copied ? "복사됨 ✓" : "행동특성만 복사하기"}</button></div></div>

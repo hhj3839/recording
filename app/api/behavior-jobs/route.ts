@@ -1,0 +1,72 @@
+import { waitUntil } from "@vercel/functions";
+import { eq, insertRows, selectRows } from "../../../db/supabase";
+import { getAiUsage, MONTHLY_AI_LIMIT } from "../../ai-usage";
+import { BehaviorInput } from "../../behavior-generation";
+import { signCommentJob } from "../../comment-generation";
+import { dataError, getDataScope, requireOwnedStudentIds } from "../../data-scope";
+
+type JobRow = {
+  id: string; status: string; current_batch: number; total_batches: number; total_items: number;
+  completed_items: number; failed_items: number; error_message: string; created_at: string; completed_at: string | null;
+};
+const present = (row: JobRow) => ({
+  id: row.id, status: row.status, currentBatch: Number(row.current_batch), totalBatches: Number(row.total_batches),
+  totalItems: Number(row.total_items), completedItems: Number(row.completed_items), failedItems: Number(row.failed_items),
+  error: row.error_message, createdAt: row.created_at, completedAt: row.completed_at,
+});
+function startRunner(request: Request, jobId: string) {
+  waitUntil(fetch(new URL("/api/behavior-jobs/run", request.url), {
+    method: "POST", headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ jobId, signature: signCommentJob(jobId) }),
+  }).catch(() => undefined));
+}
+
+export async function GET() {
+  try {
+    const { user, classId } = await getDataScope();
+    const rows = await selectRows<JobRow>("generation_jobs", {
+      owner_id: eq(user.id), class_id: eq(classId), job_type: eq("behaviors"), order: "created_at.desc", limit: 1,
+    });
+    return Response.json({ job: rows[0] ? present(rows[0]) : null });
+  } catch (error) {
+    return dataError(error, "행동특성 생성 상태를 불러오지 못했습니다.");
+  }
+}
+
+export async function POST(request: Request) {
+  try {
+    const body = await request.json() as { students?: unknown };
+    if (!Array.isArray(body.students)) return Response.json({ error: "학생 특성을 다시 확인해 주세요." }, { status: 400 });
+    const inputs: BehaviorInput[] = body.students.flatMap((item) => {
+      if (!item || typeof item !== "object") return [];
+      const row = item as Record<string, unknown>;
+      const studentId = Number(row.studentId);
+      const characteristic = typeof row.characteristic === "string" ? row.characteristic.trim().slice(0, 4000) : "";
+      return Number.isInteger(studentId) && characteristic ? [{ studentId, characteristic }] : [];
+    });
+    if (!inputs.length) return Response.json({ error: "한 명 이상의 특성을 입력해 주세요." }, { status: 400 });
+    const { user, classId } = await getDataScope();
+    await requireOwnedStudentIds(inputs.map((item) => item.studentId), user.id, classId);
+    const active = await selectRows<JobRow>("generation_jobs", {
+      owner_id: eq(user.id), class_id: eq(classId), job_type: eq("behaviors"), status: "in.(queued,running)", limit: 1,
+    });
+    if (active[0]) {
+      startRunner(request, active[0].id);
+      return Response.json({ job: present(active[0]), alreadyRunning: true }, { status: 202 });
+    }
+    const batches = Array.from({ length: Math.ceil(inputs.length / 5) }, (_, index) => inputs.slice(index * 5, index * 5 + 5));
+    const usage = await getAiUsage(user.id);
+    if (usage.monthly + batches.length > MONTHLY_AI_LIMIT) {
+      return Response.json({ error: `이번 작업에는 AI 요청 ${batches.length}회가 필요하지만 이번 달 잔여 한도는 ${Math.max(0, MONTHLY_AI_LIMIT - usage.monthly)}회입니다.` }, { status: 429 });
+    }
+    const rows = await insertRows<JobRow>("generation_jobs", [{
+      owner_id: user.id, owner_email: user.email, class_id: classId, job_type: "behaviors", status: "queued",
+      batches, current_batch: 0, total_batches: batches.length, total_items: inputs.length,
+      completed_items: 0, failed_items: 0, error_message: "", created_at: new Date().toISOString(), updated_at: new Date().toISOString(),
+    }]);
+    startRunner(request, rows[0].id);
+    return Response.json({ job: present(rows[0]) }, { status: 202 });
+  } catch (error) {
+    return dataError(error, "행동특성 백그라운드 작업을 시작하지 못했습니다.");
+  }
+}

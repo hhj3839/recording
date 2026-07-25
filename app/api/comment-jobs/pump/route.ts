@@ -4,7 +4,7 @@ import { commentJobCronSecret, signCommentJob } from "../../../comment-generatio
 
 export const maxDuration = 60;
 
-type ActiveJob = { id: string };
+type ActiveJob = { id: string; job_type: "comments" | "behaviors" };
 
 function validSecret(request: Request) {
   const supplied = request.headers.get("authorization")?.replace(/^Bearer\s+/i, "") ?? "";
@@ -21,7 +21,8 @@ export async function POST(request: Request) {
   });
   if (!jobs[0]) return Response.json({ ok: true, processed: 0 });
 
-  const response = await fetch(new URL("/api/comment-jobs/run", request.url), {
+  const runPath = jobs[0].job_type === "behaviors" ? "/api/behavior-jobs/run" : "/api/comment-jobs/run";
+  const response = await fetch(new URL(runPath, request.url), {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ jobId: jobs[0].id, signature: signCommentJob(jobs[0].id) }),

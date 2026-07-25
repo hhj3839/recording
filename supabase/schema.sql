@@ -137,7 +137,7 @@ create table if not exists generation_jobs (
   owner_id uuid not null references auth.users(id) on delete cascade,
   owner_email text not null,
   class_id bigint not null,
-  job_type text not null check (job_type in ('comments')),
+  job_type text not null check (job_type in ('comments', 'behaviors')),
   status text not null check (status in ('queued', 'running', 'completed', 'completed_with_errors', 'failed', 'cancelled')),
   batches jsonb not null default '[]'::jsonb,
   current_batch integer not null default 0,
