@@ -430,18 +430,29 @@ const blankPlan = (): AssessmentPlan => ({
   perspective: "", high: "", middle: "", low: "", caution: "",
 });
 
-function PlanManager({ plan, onChanged }: { plan: AssessmentPlan[]; onChanged: (plan: AssessmentPlan[]) => void }) {
+function PlanManager({ plan, onChanged, current }: { plan: AssessmentPlan[]; onChanged: (plan: AssessmentPlan[]) => void; current: ClassroomInfo | null }) {
   const [draft, setDraft] = useState<AssessmentPlan>(blankPlan);
   const [preview, setPreview] = useState<AssessmentPlan[]>([]);
   const [errors, setErrors] = useState<string[]>([]);
   const [warnings, setWarnings] = useState<string[]>([]);
   const [message, setMessage] = useState("");
   const [busy, setBusy] = useState(false);
+  const [classrooms, setClassrooms] = useState<ManagedClassroom[]>([]);
+  const [targetClassId, setTargetClassId] = useState("");
   const columns: Array<[keyof AssessmentPlan, string]> = [
     ["subject", "과목"], ["unit", "단원"], ["goal", "평가목표"], ["domain", "영역"],
     ["type", "평가 유형"], ["perspective", "평가 관점"], ["high", "상"], ["middle", "중"],
     ["low", "하"], ["caution", "평가상의 유의점"],
   ];
+  useEffect(() => {
+    fetch("/api/classrooms").then(async (response) => {
+      const result = await response.json() as { classrooms?: ManagedClassroom[] };
+      if (!response.ok) return;
+      const targets = (result.classrooms ?? []).filter((item) => item.id !== current?.id);
+      setClassrooms(targets);
+      setTargetClassId((selected) => selected || String(targets[0]?.id ?? ""));
+    }).catch(() => undefined);
+  }, [current?.id]);
   const validatePlans = (rows: AssessmentPlan[]) => {
     const found: string[] = [];
     const keys = new Set<string>();
@@ -582,6 +593,26 @@ function PlanManager({ plan, onChanged }: { plan: AssessmentPlan[]; onChanged: (
     anchor.click();
     URL.revokeObjectURL(anchor.href);
   };
+  const copyToClassroom = async () => {
+    const target = classrooms.find((item) => item.id === Number(targetClassId));
+    if (!target) return setErrors(["복사할 대상 학급을 선택해 주세요."]);
+    const label = `${target.schoolName} ${target.schoolYear}학년도 ${target.semester}학기 ${target.grade}학년 ${target.classNumber}반`;
+    if (!window.confirm(`현재 평가계획 ${plan.length}개를 ${label}에 복사할까요?\n\n대상 학급의 같은 평가 항목은 현재 내용으로 갱신됩니다.`)) return;
+    setBusy(true);
+    setErrors([]);
+    try {
+      const response = await fetch("/api/assessment-plan/copy", {
+        method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ targetClassId: target.id }),
+      });
+      const result = await response.json() as { copied?: number; error?: string };
+      if (!response.ok) throw new Error(result.error || "평가계획을 복사하지 못했습니다.");
+      setMessage(`${label}에 평가계획 ${result.copied ?? plan.length}개를 복사했습니다.`);
+    } catch (error) {
+      setErrors([error instanceof Error ? error.message : "평가계획을 복사하지 못했습니다."]);
+    } finally {
+      setBusy(false);
+    }
+  };
   const changePlan = (id: number | undefined, key: keyof AssessmentPlan, value: string) => {
     onChanged(plan.map((item) => item.id === id ? { ...item, [key]: value } : item));
   };
@@ -591,6 +622,14 @@ function PlanManager({ plan, onChanged }: { plan: AssessmentPlan[]; onChanged: (
       <div className="heading-actions"><button className="secondary" onClick={downloadTemplate}>업로드 양식 받기</button><label className="file-upload-button">Excel/CSV 불러오기<input type="file" accept=".xlsx,.xls,.csv" onChange={(event) => { const file = event.target.files?.[0]; if (file) void upload(file); event.target.value = ""; }} /></label></div>
     </div>
     <div className="plan-help"><strong>필수 열</strong> 과목 · 단원 · 평가목표 · 영역 · 평가 관점 · 상 · 중 · 하 <span>평가 유형과 유의점은 선택 항목입니다.</span></div>
+    <section className="plan-copy">
+      <div><strong>다른 학급에 적용</strong><span>현재 평가계획 {plan.length}개를 내가 관리하는 다른 학급으로 복사합니다.</span></div>
+      <select value={targetClassId} onChange={(event) => setTargetClassId(event.target.value)} disabled={busy || !classrooms.length}>
+        {classrooms.map((item) => <option value={item.id} key={item.id}>{item.schoolName} · {item.schoolYear}학년도 {item.semester}학기 · {item.grade}학년 {item.classNumber}반</option>)}
+        {!classrooms.length && <option value="">복사할 다른 학급이 없습니다</option>}
+      </select>
+      <button disabled={busy || !plan.length || !targetClassId} onClick={() => void copyToClassroom()}>평가계획 복사</button>
+    </section>
     {message && <p className="student-message">{message}</p>}
     {!!errors.length && <div className="plan-errors"><strong>확인이 필요합니다.</strong>{errors.slice(0, 8).map((error) => <p key={error}>• {error}</p>)}</div>}
     {!!warnings.length && <div className="plan-warnings"><strong>저장할 수 있지만 확인이 필요합니다.</strong>{warnings.slice(0, 8).map((warning) => <p key={warning}>• {warning}</p>)}</div>}
@@ -1509,7 +1548,7 @@ export default function Home() {
           {view === "dashboard" && <Dashboard move={setView} teacherName={currentUser} classroom={classroom} studentCount={roster.length} completedLevels={completedLevels} totalLevels={totalLevels} commentCount={generatedCommentCount} expectedComments={roster.length * new Set(plan.map((item) => item.subject)).size} behaviorCount={generatedBehaviorCount} />}
           {view === "classes" && <ClassroomManager current={classroom} />}
           {view === "students" && <StudentManager roster={roster} onAdded={mergeStudentIntoState} onChanged={mergeStudentIntoState} onDeleted={(id) => void deleteStudent(id)} onImported={mergeImportedStudents} />}
-          {view === "plans" && <PlanManager plan={plan} onChanged={applyPlanChange} />}
+          {view === "plans" && <PlanManager plan={plan} onChanged={applyPlanChange} current={classroom} />}
           {view === "assessments" && <Assessments data={assessmentDataBySubject[activeSubject] ?? []} setData={(updater) => setAssessmentDataBySubject((current) => ({ ...current, [activeSubject]: typeof updater === "function" ? updater(current[activeSubject] ?? []) : updater }))} plan={plan} activeSubject={activeSubject} setActiveSubject={setActiveSubject} onAddStudent={() => void addStudent()} onDeleteStudent={(id) => void deleteStudent(id)} onSave={saveAssessmentLevels} />}
           {view === "comments" && <Comments assessmentDataBySubject={assessmentDataBySubject} plan={plan} roster={roster} />}
           {view === "behavior" && <Behavior roster={roster} />}
