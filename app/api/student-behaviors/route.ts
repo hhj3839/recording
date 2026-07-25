@@ -1,6 +1,7 @@
 import { eq, selectRows, upsertRows } from "../../../db/supabase";
 import { dataError, getDataScope, requireOwnedStudentIds } from "../../data-scope";
 import { recordSimilarity, validateRecord } from "../../record-validation";
+import { archiveBehavior } from "../../record-revisions";
 
 export async function GET() {
   try {
@@ -35,6 +36,7 @@ export async function PUT(request: Request) {
       const duplicate = peers.find((item) => Number(item.student_id) !== studentId && recordSimilarity(behavior, item.behavior) >= 0.82);
       if (duplicate) return Response.json({ error: "다른 학생의 행동특성과 지나치게 유사하여 확정할 수 없습니다.", duplicateStudentId: duplicate.student_id }, { status: 409 });
     }
+    await archiveBehavior({ ownerId: user.id, ownerEmail: user.email, classId, studentId, nextContent: behavior, nextCharacteristic: characteristic, source: confirmed ? "confirmation" : "manual-edit" });
     const updatedAt = new Date().toISOString();
     await upsertRows("student_behaviors", [{
       student_id: studentId, characteristic, behavior, confirmed, confirmed_at: confirmed ? updatedAt : null, updated_at: updatedAt, owner_email: user.email, owner_id: user.id, class_id: classId,

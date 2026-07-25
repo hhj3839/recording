@@ -1,6 +1,7 @@
 import { upsertRows } from "../../../db/supabase";
 import { dataError, getDataScope, requireOwnedStudentIds } from "../../data-scope";
 import { checkAiUsage, recordAiUsage } from "../../ai-usage";
+import { archiveBehavior } from "../../record-revisions";
 
 function extractOutputText(payload: unknown): string {
   if (!payload || typeof payload !== "object") return "";
@@ -56,6 +57,10 @@ export async function POST(request: Request) {
     }) : [];
     if (!behaviors.length) return Response.json({ error: "AI가 행동특성을 반환하지 않았습니다." }, { status: 502 });
     const updatedAt = new Date().toISOString();
+    await Promise.all(behaviors.map((item) => archiveBehavior({
+      ownerId: user.id, ownerEmail: user.email, classId, studentId: item.studentId,
+      nextContent: item.behavior, nextCharacteristic: item.characteristic, source: "ai-regeneration",
+    })));
     await upsertRows("student_behaviors", behaviors.map((item) => ({
       student_id: item.studentId,
       characteristic: item.characteristic,

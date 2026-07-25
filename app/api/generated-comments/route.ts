@@ -1,6 +1,7 @@
 import { eq, selectRows, upsertRows } from "../../../db/supabase";
 import { dataError, getDataScope, requireOwnedStudentIds } from "../../data-scope";
 import { recordSimilarity, validateRecord } from "../../record-validation";
+import { archiveComment } from "../../record-revisions";
 
 export async function GET() {
   try {
@@ -33,6 +34,7 @@ export async function PUT(request: Request) {
       const duplicate = peers.find((item) => Number(item.student_id) !== studentId && recordSimilarity(comment, item.comment) >= 0.82);
       if (duplicate) return Response.json({ error: "같은 과목의 다른 학생 평어와 지나치게 유사하여 확정할 수 없습니다.", duplicateStudentId: duplicate.student_id }, { status: 409 });
     }
+    await archiveComment({ ownerId: user.id, ownerEmail: user.email, classId, studentId, subject, nextContent: comment, source: confirmed ? "confirmation" : "manual-edit" });
     const updatedAt = new Date().toISOString();
     await upsertRows("generated_comments", [{
       student_id: studentId, subject, comment, confirmed, confirmed_at: confirmed ? updatedAt : null, updated_at: updatedAt, owner_email: user.email, owner_id: user.id, class_id: classId,

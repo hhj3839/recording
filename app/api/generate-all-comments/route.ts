@@ -1,6 +1,7 @@
 import { eq, selectRows, upsertRows } from "../../../db/supabase";
 import { dataError, getDataScope, requireOwnedStudentIds } from "../../data-scope";
 import { checkAiUsage, recordAiUsage } from "../../ai-usage";
+import { archiveComment } from "../../record-revisions";
 
 type Level = "상" | "중" | "하" | "-";
 type ScoreStudent = { studentId: number; levels: Level[] };
@@ -86,6 +87,9 @@ export async function POST(request: Request) {
     }) : [];
     if (!comments.length) return Response.json({ error: "AI가 평어를 반환하지 않았습니다." }, { status: 502 });
     const updatedAt = new Date().toISOString();
+    await Promise.all(comments.map((item) => archiveComment({
+      ownerId: user.id, ownerEmail: user.email, classId, studentId: item.studentId, subject: item.subject, nextContent: item.comment, source: "ai-regeneration",
+    })));
     await upsertRows("generated_comments", comments.map((item) => ({
       student_id: item.studentId,
       subject: item.subject,

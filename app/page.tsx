@@ -687,6 +687,27 @@ function Assessments({ data, setData, plan, activeSubject, setActiveSubject, onA
   );
 }
 
+type RevisionItem = {
+  id: number;
+  content: string;
+  characteristic: string;
+  confirmed: boolean;
+  source: string;
+  createdAt: string;
+};
+
+function RevisionPanel({ title, revisions, onRestore, onClose }: { title: string; revisions: RevisionItem[]; onRestore: (revision: RevisionItem) => void; onClose: () => void }) {
+  const sourceLabel: Record<string, string> = { "manual-edit": "직접 수정", "ai-regeneration": "AI 다시 생성", confirmation: "최종 확정" };
+  return <aside className="revision-panel">
+    <div className="revision-head"><div><p className="eyebrow">VERSION HISTORY</p><h3>{title} 이전 기록</h3></div><button onClick={onClose}>닫기</button></div>
+    {revisions.length ? <div className="revision-list">{revisions.map((revision) => <article key={revision.id}>
+      <div><span>{new Intl.DateTimeFormat("ko-KR", { dateStyle: "short", timeStyle: "short" }).format(new Date(revision.createdAt))}</span><small>{sourceLabel[revision.source] ?? revision.source}{revision.confirmed ? " · 확정본" : ""}</small></div>
+      <p>{revision.content}</p>
+      <button onClick={() => onRestore(revision)}>이 버전 복원</button>
+    </article>)}</div> : <p className="revision-empty">저장된 이전 기록이 없습니다.</p>}
+  </aside>;
+}
+
 function Comments({ assessmentDataBySubject, plan, roster }: { assessmentDataBySubject: Record<string, AssessmentStudent[]>; plan: AssessmentPlan[]; roster: AssessmentStudent[] }) {
   const subjects = [...new Set(plan.map((item) => item.subject))];
   const [selectedSubject, setSelectedSubject] = useState(subjects[0] ?? "국어");
@@ -697,6 +718,7 @@ function Comments({ assessmentDataBySubject, plan, roster }: { assessmentDataByS
   const [error, setError] = useState("");
   const [copied, setCopied] = useState(false);
   const [lastGeneratedAt, setLastGeneratedAt] = useState("");
+  const [history, setHistory] = useState<{ studentId: number; studentName: string; revisions: RevisionItem[] } | null>(null);
   useEffect(() => {
     setLastGeneratedAt(window.localStorage.getItem("giroksam:last-generated-at") ?? "");
   }, []);
@@ -812,6 +834,24 @@ function Comments({ assessmentDataBySubject, plan, roster }: { assessmentDataByS
       setError(confirmed ? "검수 항목을 모두 통과한 평어만 확정할 수 있습니다." : "수정한 평어를 저장하지 못했습니다. 잠시 후 다시 시도해 주세요.");
     }
   };
+  const loadHistory = async (studentId: number, studentName: string) => {
+    try {
+      const response = await fetch(`/api/revisions?type=comment&studentId=${studentId}&subject=${encodeURIComponent(selectedSubject)}`);
+      const result = await response.json() as { revisions?: RevisionItem[]; error?: string };
+      if (!response.ok) throw new Error(result.error || "이전 기록을 불러오지 못했습니다.");
+      setHistory({ studentId, studentName, revisions: result.revisions ?? [] });
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : "이전 기록을 불러오지 못했습니다.");
+    }
+  };
+  const restoreComment = async (revision: RevisionItem) => {
+    if (!history) return;
+    const key = `${history.studentId}|${selectedSubject}`;
+    setComments((current) => ({ ...current, [key]: revision.content }));
+    setConfirmedComments((current) => ({ ...current, [key]: false }));
+    await saveComment(history.studentId, selectedSubject, revision.content, false);
+    setHistory(null);
+  };
 
   return (
     <section>
@@ -823,6 +863,7 @@ function Comments({ assessmentDataBySubject, plan, roster }: { assessmentDataByS
             <button className="copy-comments" onClick={() => void copySubjectComments()} disabled={!roster.some((student) => comments[`${student.id}|${selectedSubject}`])}>{copied ? "복사됨 ✓" : "평어만 복사하기"}</button>
           </div>
           {error && <p className="generation-error">! {error}</p>}
+          {history && <RevisionPanel title={`${history.studentName} · ${selectedSubject}`} revisions={history.revisions} onRestore={(revision) => void restoreComment(revision)} onClose={() => setHistory(null)} />}
           {loading && <div className="comment-loading class-loading"><span>✦</span><p>모든 학생의 전 과목 평어를 생성하고 있어요.</p></div>}
           <div className="comments-table-wrap">
             <table className="comments-table">
@@ -839,7 +880,7 @@ function Comments({ assessmentDataBySubject, plan, roster }: { assessmentDataByS
                   <td>{student.number ?? student.id}</td>
                   <td><strong>{student.name}</strong><small>{text ? `${new TextEncoder().encode(text).length}B` : hasLevel ? "생성 대기" : "수준 미입력"}</small></td>
                   <td><textarea value={text} onChange={(event) => { setComments((current) => ({ ...current, [key]: event.target.value })); setConfirmedComments((current) => ({ ...current, [key]: false })); setCopied(false); }} onBlur={(event) => void saveComment(student.id, selectedSubject, event.target.value)} placeholder={hasLevel ? "AI 평어 생성 버튼을 누르면 결과가 표시됩니다." : "평가 수준이 입력되지 않았습니다."} /></td>
-                  <td className="validation-cell"><div><span className={validation.endingsOk ? "pass" : "fail"}>종결 {validation.endingsOk ? "정상" : "확인"}</span><span className={!validation.forbidden.length ? "pass" : "fail"}>금지어 {!validation.forbidden.length ? "없음" : "확인"}</span><span className={!similarStudents.length ? "pass" : "fail"} title={similarStudents.map((item) => item.name).join(", ")}>중복 {!similarStudents.length ? "없음" : `${similarStudents.length}명`}</span></div><button className={confirmed ? "confirmed" : ""} disabled={!validation.valid || !!similarStudents.length} onMouseDown={(event) => event.preventDefault()} onClick={() => void saveComment(student.id, selectedSubject, text, !confirmed)}>{confirmed ? "확정됨 ✓" : "최종 확정"}</button></td>
+                  <td className="validation-cell"><div><span className={validation.endingsOk ? "pass" : "fail"}>종결 {validation.endingsOk ? "정상" : "확인"}</span><span className={!validation.forbidden.length ? "pass" : "fail"}>금지어 {!validation.forbidden.length ? "없음" : "확인"}</span><span className={!similarStudents.length ? "pass" : "fail"} title={similarStudents.map((item) => item.name).join(", ")}>중복 {!similarStudents.length ? "없음" : `${similarStudents.length}명`}</span></div><button className="history-button" disabled={!text} onClick={() => void loadHistory(student.id, student.name)}>이전 기록</button><button className={confirmed ? "confirmed" : ""} disabled={!validation.valid || !!similarStudents.length} onMouseDown={(event) => event.preventDefault()} onClick={() => void saveComment(student.id, selectedSubject, text, !confirmed)}>{confirmed ? "확정됨 ✓" : "최종 확정"}</button></td>
                 </tr>;
               })}</tbody>
             </table>
@@ -859,6 +900,7 @@ function Behavior({ roster }: { roster: AssessmentStudent[] }) {
   const [referenceOpen, setReferenceOpen] = useState(false);
   const [activeCategory, setActiveCategory] = useState(behaviorReferences[0].category);
   const [activeStudentId, setActiveStudentId] = useState<number | null>(roster[0]?.id ?? null);
+  const [history, setHistory] = useState<{ studentId: number; studentName: string; revisions: RevisionItem[] } | null>(null);
 
   useEffect(() => {
     const load = async () => {
@@ -935,6 +977,23 @@ function Behavior({ roster }: { roster: AssessmentStudent[] }) {
   const formattedLastGeneratedAt = lastGeneratedAt
     ? new Intl.DateTimeFormat("ko-KR", { month: "numeric", day: "numeric", hour: "numeric", minute: "2-digit" }).format(new Date(lastGeneratedAt))
     : "";
+  const loadHistory = async (studentId: number, studentName: string) => {
+    try {
+      const response = await fetch(`/api/revisions?type=behavior&studentId=${studentId}`);
+      const result = await response.json() as { revisions?: RevisionItem[]; error?: string };
+      if (!response.ok) throw new Error(result.error || "이전 기록을 불러오지 못했습니다.");
+      setHistory({ studentId, studentName, revisions: result.revisions ?? [] });
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : "이전 기록을 불러오지 못했습니다.");
+    }
+  };
+  const restoreBehavior = async (revision: RevisionItem) => {
+    if (!history) return;
+    const restored = { characteristic: revision.characteristic, behavior: revision.content, confirmed: false };
+    updateRecord(history.studentId, restored);
+    await saveRecord(history.studentId, restored, false);
+    setHistory(null);
+  };
 
   return (
     <section>
@@ -945,6 +1004,7 @@ function Behavior({ roster }: { roster: AssessmentStudent[] }) {
       <div className="review-content behavior-table-content">
         <div className="behavior-table-toolbar"><span>특성 입력 {roster.filter((student) => records[student.id]?.characteristic.trim()).length} / {roster.length}명</span><div><button className="reference-open-button" onClick={() => setReferenceOpen((current) => !current)}>{referenceOpen ? "참고자료 닫기" : "참고자료 열기"}</button><button className="copy-comments" onClick={() => void copyBehaviors()} disabled={!roster.some((student) => records[student.id]?.behavior)}>{copied ? "복사됨 ✓" : "행동특성만 복사하기"}</button></div></div>
         {error && <p className="generation-error">! {error}</p>}
+        {history && <RevisionPanel title={history.studentName} revisions={history.revisions} onRestore={(revision) => void restoreBehavior(revision)} onClose={() => setHistory(null)} />}
         {loading && <div className="comment-loading class-loading"><span>✦</span><p>입력된 모든 학생의 행동특성을 생성하고 있어요.</p></div>}
         <div className={`behavior-work-area ${referenceOpen ? "with-reference" : ""}`}>
           <div className="comments-table-wrap">
@@ -954,7 +1014,7 @@ function Behavior({ roster }: { roster: AssessmentStudent[] }) {
                 const record = records[student.id] ?? { characteristic: "", behavior: "", confirmed: false };
                 const validation = validateRecord(record.behavior, true);
                 const similarStudents = roster.filter((other) => other.id !== student.id && recordSimilarity(record.behavior, records[other.id]?.behavior ?? "") >= 0.82);
-                return <tr className={activeStudentId === student.id ? "active-reference-row" : ""} key={student.id}><td>{student.number ?? student.id}</td><td><strong>{student.name}</strong></td><td><textarea value={record.characteristic} onFocus={() => setActiveStudentId(student.id)} onChange={(event) => updateRecord(student.id, { characteristic: event.target.value, confirmed: false })} onBlur={() => void saveRecord(student.id, records[student.id] ?? record)} placeholder="관찰한 행동과 변화 모습을 입력하세요." /></td><td><textarea value={record.behavior} onChange={(event) => updateRecord(student.id, { behavior: event.target.value, confirmed: false })} onBlur={() => void saveRecord(student.id, records[student.id] ?? record)} placeholder={record.characteristic ? "AI 행특 생성 버튼을 누르면 결과가 표시됩니다." : "특성을 먼저 입력해 주세요."} /><small>{record.behavior ? `${validation.bytes} bytes` : ""}</small></td><td className="validation-cell behavior-validation"><div><span className={validation.lengthOk ? "pass" : "fail"}>500~550B</span><span className={validation.endingsOk ? "pass" : "fail"}>종결</span><span className={validation.growthIncluded ? "pass" : "fail"}>성장</span><span className={!validation.forbidden.length ? "pass" : "fail"}>금지어</span><span className={!validation.repeated.length ? "pass" : "fail"}>반복</span><span className={!similarStudents.length ? "pass" : "fail"} title={similarStudents.map((item) => item.name).join(", ")}>유사 {!similarStudents.length ? "없음" : `${similarStudents.length}명`}</span></div><button className={record.confirmed ? "confirmed" : ""} disabled={!validation.valid || !!similarStudents.length} onMouseDown={(event) => event.preventDefault()} onClick={() => void saveRecord(student.id, record, !record.confirmed)}>{record.confirmed ? "확정됨 ✓" : "최종 확정"}</button></td></tr>;
+                return <tr className={activeStudentId === student.id ? "active-reference-row" : ""} key={student.id}><td>{student.number ?? student.id}</td><td><strong>{student.name}</strong></td><td><textarea value={record.characteristic} onFocus={() => setActiveStudentId(student.id)} onChange={(event) => updateRecord(student.id, { characteristic: event.target.value, confirmed: false })} onBlur={() => void saveRecord(student.id, records[student.id] ?? record)} placeholder="관찰한 행동과 변화 모습을 입력하세요." /></td><td><textarea value={record.behavior} onChange={(event) => updateRecord(student.id, { behavior: event.target.value, confirmed: false })} onBlur={() => void saveRecord(student.id, records[student.id] ?? record)} placeholder={record.characteristic ? "AI 행특 생성 버튼을 누르면 결과가 표시됩니다." : "특성을 먼저 입력해 주세요."} /><small>{record.behavior ? `${validation.bytes} bytes` : ""}</small></td><td className="validation-cell behavior-validation"><div><span className={validation.lengthOk ? "pass" : "fail"}>500~550B</span><span className={validation.endingsOk ? "pass" : "fail"}>종결</span><span className={validation.growthIncluded ? "pass" : "fail"}>성장</span><span className={!validation.forbidden.length ? "pass" : "fail"}>금지어</span><span className={!validation.repeated.length ? "pass" : "fail"}>반복</span><span className={!similarStudents.length ? "pass" : "fail"} title={similarStudents.map((item) => item.name).join(", ")}>유사 {!similarStudents.length ? "없음" : `${similarStudents.length}명`}</span></div><button className="history-button" disabled={!record.behavior} onClick={() => void loadHistory(student.id, student.name)}>이전 기록</button><button className={record.confirmed ? "confirmed" : ""} disabled={!validation.valid || !!similarStudents.length} onMouseDown={(event) => event.preventDefault()} onClick={() => void saveRecord(student.id, record, !record.confirmed)}>{record.confirmed ? "확정됨 ✓" : "최종 확정"}</button></td></tr>;
               })}</tbody>
             </table>
           </div>

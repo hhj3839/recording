@@ -3,7 +3,7 @@ import { eq, selectRows, supabaseRequest } from "../../../db/supabase";
 import { dataError, getDataScope } from "../../data-scope";
 import { ACCESS_COOKIE, REFRESH_COOKIE } from "../../supabase-auth";
 
-const classTables = ["assessment_levels", "generated_comments", "student_behaviors", "assessment_plans", "students", "ai_usage_events"] as const;
+const classTables = ["assessment_levels", "generated_comments", "student_behaviors", "record_revisions", "assessment_plans", "students", "ai_usage_events"] as const;
 
 export async function GET() {
   try {
