@@ -4,7 +4,9 @@
 
 ## 웹앱 바로가기
 
-**[기록샘 공개 웹앱 실행하기](https://giroksam-recording.hhj3839.chatgpt.site/)**
+**[기록샘 공개 웹앱 실행하기](https://giroksam-recording.vercel.app/)**
+
+GitHub `main` 브랜치와 Vercel이 연결되어 있어 `main`에 푸시하면 자동으로 새 버전이 배포됩니다.
 
 ## 현재 구현 범위
 
