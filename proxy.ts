@@ -7,6 +7,8 @@ export function proxy(request: NextRequest) {
     pathname === "/login" ||
     pathname === "/auth/callback" ||
     pathname.startsWith("/api/auth/") ||
+    pathname === "/api/comment-jobs/pump" ||
+    pathname === "/api/comment-jobs/run" ||
     pathname.startsWith("/_next/") ||
     pathname.includes(".");
   if (publicPath || request.cookies.has(ACCESS_COOKIE)) return NextResponse.next();
