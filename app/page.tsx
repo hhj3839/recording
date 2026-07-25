@@ -731,6 +731,7 @@ function RevisionPanel({ title, revisions, onRestore, onClose }: { title: string
 }
 
 function Comments({ assessmentDataBySubject, plan, roster }: { assessmentDataBySubject: Record<string, AssessmentStudent[]>; plan: AssessmentPlan[]; roster: AssessmentStudent[] }) {
+  type CommentJob = { id: string; status: string; totalItems: number; completedItems: number; failedItems: number; totalBatches: number; currentBatch: number; error?: string; completedAt?: string | null };
   const subjects = [...new Set(plan.map((item) => item.subject))];
   const [selectedSubject, setSelectedSubject] = useState(subjects[0] ?? "국어");
   const [comments, setComments] = useState<Record<string, string>>({});
@@ -740,29 +741,64 @@ function Comments({ assessmentDataBySubject, plan, roster }: { assessmentDataByS
   const [error, setError] = useState("");
   const [copied, setCopied] = useState(false);
   const [lastGeneratedAt, setLastGeneratedAt] = useState("");
+  const [activeJob, setActiveJob] = useState<CommentJob | null>(null);
   const [history, setHistory] = useState<{ studentId: number; studentName: string; revisions: RevisionItem[] } | null>(null);
   useEffect(() => {
     setLastGeneratedAt(window.localStorage.getItem("giroksam:last-generated-at") ?? "");
   }, []);
+  const loadGeneratedComments = async () => {
+    try {
+      const response = await fetch("/api/generated-comments");
+      const result = await response.json() as { comments?: Array<{ studentId: number; subject: string; comment: string; confirmed: boolean; updatedAt: string }> };
+      if (!response.ok || !result.comments?.length) return;
+      setComments(Object.fromEntries(result.comments.map((item) => [`${item.studentId}|${item.subject}`, item.comment])));
+      setConfirmedComments(Object.fromEntries(result.comments.map((item) => [`${item.studentId}|${item.subject}`, item.confirmed])));
+      const latest = result.comments.map((item) => item.updatedAt).sort().at(-1);
+      if (latest) {
+        setLastGeneratedAt(latest);
+        window.localStorage.setItem("giroksam:last-generated-at", latest);
+      }
+    } catch {
+      // 저장된 결과를 불러오지 못해도 새 생성은 계속 사용할 수 있음.
+    }
+  };
   useEffect(() => {
-    const loadGeneratedComments = async () => {
+    void loadGeneratedComments();
+    fetch("/api/comment-jobs").then(async (response) => {
+      const result = await response.json() as { job?: CommentJob | null };
+      if (response.ok && result.job) {
+        setActiveJob(result.job);
+        if (["queued", "running"].includes(result.job.status)) setLoading(true);
+      }
+    }).catch(() => undefined);
+  }, []);
+  useEffect(() => {
+    if (!activeJob || !["queued", "running"].includes(activeJob.status)) return;
+    setGenerationProgress(`${activeJob.completedItems}/${activeJob.totalItems}`);
+    const timer = window.setInterval(async () => {
       try {
-        const response = await fetch("/api/generated-comments");
-        const result = await response.json() as { comments?: Array<{ studentId: number; subject: string; comment: string; confirmed: boolean; updatedAt: string }> };
-        if (!response.ok || !result.comments?.length) return;
-        setComments(Object.fromEntries(result.comments.map((item) => [`${item.studentId}|${item.subject}`, item.comment])));
-        setConfirmedComments(Object.fromEntries(result.comments.map((item) => [`${item.studentId}|${item.subject}`, item.confirmed])));
-        const latest = result.comments.map((item) => item.updatedAt).sort().at(-1);
-        if (latest) {
-          setLastGeneratedAt(latest);
-          window.localStorage.setItem("giroksam:last-generated-at", latest);
+        const response = await fetch("/api/comment-jobs");
+        const result = await response.json() as { job?: CommentJob | null };
+        if (!response.ok || !result.job) return;
+        setActiveJob(result.job);
+        setGenerationProgress(`${result.job.completedItems}/${result.job.totalItems}`);
+        if (!["queued", "running"].includes(result.job.status)) {
+          window.clearInterval(timer);
+          setLoading(false);
+          setGenerationProgress("");
+          await loadGeneratedComments();
+          if (result.job.failedItems) setError(`${result.job.failedItems}건이 생성되지 않았습니다. AI 평어 생성을 다시 누르면 전체 작업을 재시도합니다.`);
+          else setError("");
+          const generatedAt = result.job.completedAt || new Date().toISOString();
+          setLastGeneratedAt(generatedAt);
+          window.localStorage.setItem("giroksam:last-generated-at", generatedAt);
         }
       } catch {
-        // 저장된 결과를 불러오지 못해도 새 생성은 계속 사용할 수 있음.
+        // 페이지 연결이 잠시 끊겨도 서버 작업은 계속 진행됨.
       }
-    };
-    void loadGeneratedComments();
-  }, []);
+    }, 3000);
+    return () => window.clearInterval(timer);
+  }, [activeJob?.id, activeJob?.status]);
   const formattedLastGeneratedAt = lastGeneratedAt
     ? new Intl.DateTimeFormat("ko-KR", { month: "numeric", day: "numeric", hour: "numeric", minute: "2-digit" }).format(new Date(lastGeneratedAt))
     : "";
@@ -779,65 +815,25 @@ function Comments({ assessmentDataBySubject, plan, roster }: { assessmentDataByS
   const generateAllComments = async () => {
     setLoading(true);
     setError("");
-    setGenerationProgress("");
+    setGenerationProgress("작업 등록 중…");
     try {
-      const jobs = Object.entries(assessmentDataBySubject).flatMap(([subject, data]) => {
-        const studentsWithLevels = data.filter((student) => student.assessments.some((level) => level !== "-"));
-        return Array.from({ length: Math.ceil(studentsWithLevels.length / 10) }, (_, index) => ({
-          subject,
-          students: studentsWithLevels.slice(index * 10, index * 10 + 10),
-        }));
+      const scores = Object.fromEntries(Object.entries(assessmentDataBySubject).map(([subject, data]) => [
+        subject,
+        data.filter((student) => student.assessments.some((level) => level !== "-"))
+          .map((student) => ({ studentId: student.id, levels: student.assessments })),
+      ]));
+      const response = await fetch("/api/comment-jobs", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ scores }),
       });
-      if (!jobs.length) throw new Error("전 과목 중 평가 수준을 한 개 이상 입력해 주세요.");
-      let completed = 0;
-      let generatedCount = 0;
-      const failedSubjects = new Set<string>();
-      for (const job of jobs) {
-        setGenerationProgress(`${job.subject} · ${completed + 1}/${jobs.length}`);
-        try {
-          let pendingStudents = job.students;
-          for (let attempt = 0; attempt < 2 && pendingStudents.length; attempt += 1) {
-            const response = await fetch("/api/generate-all-comments", {
-              method: "POST",
-              headers: { "Content-Type": "application/json" },
-              body: JSON.stringify({
-                scores: {
-                  [job.subject]: pendingStudents.map((student) => ({ studentId: student.id, levels: student.assessments })),
-                },
-              }),
-            });
-            const result = await response.json() as { comments?: Array<{ studentId: number; subject: string; comment: string }>; error?: string };
-            if (!response.ok || !result.comments?.length) {
-              if (attempt === 0) continue;
-              throw new Error(result.error || "생성 실패");
-            }
-            const returnedIds = new Set(result.comments.map((item) => item.studentId));
-            generatedCount += result.comments.length;
-            setComments((current) => ({
-              ...current,
-              ...Object.fromEntries(result.comments!.map((item) => [`${item.studentId}|${item.subject}`, item.comment])),
-            }));
-            setConfirmedComments((current) => ({
-              ...current,
-              ...Object.fromEntries(result.comments!.map((item) => [`${item.studentId}|${item.subject}`, false])),
-            }));
-            pendingStudents = pendingStudents.filter((student) => !returnedIds.has(student.id));
-          }
-          if (pendingStudents.length) failedSubjects.add(job.subject);
-        } catch {
-          failedSubjects.add(job.subject);
-        }
-        completed += 1;
-      }
-      if (!generatedCount) throw new Error("전 과목 교과 평어를 생성하지 못했습니다.");
-      if (failedSubjects.size) setError(`${[...failedSubjects].join(", ")} 일부 평어가 생성되지 않았습니다. 버튼을 다시 눌러 재시도해 주세요.`);
-      const generatedAt = new Date().toISOString();
-      setLastGeneratedAt(generatedAt);
-      window.localStorage.setItem("giroksam:last-generated-at", generatedAt);
+      const result = await response.json() as { job?: CommentJob; error?: string };
+      if (!response.ok || !result.job) throw new Error(result.error || "백그라운드 생성 작업을 시작하지 못했습니다.");
+      setActiveJob(result.job);
+      setGenerationProgress(`${result.job.completedItems}/${result.job.totalItems}`);
       setCopied(false);
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : "전 과목 교과 평어를 생성하지 못했습니다.");
-    } finally {
       setLoading(false);
       setGenerationProgress("");
     }

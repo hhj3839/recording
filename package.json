@@ -15,7 +15,8 @@
     "db:migrate-auth": "node scripts/migrate-auth-ownership.mjs",
     "db:migrate-confirmation": "node scripts/migrate-confirmation-status.mjs",
     "db:migrate-ai-usage": "node scripts/migrate-ai-usage.mjs",
-    "db:migrate-revisions": "node scripts/migrate-record-revisions.mjs"
+    "db:migrate-revisions": "node scripts/migrate-record-revisions.mjs",
+    "db:migrate-generation-jobs": "node scripts/migrate-generation-jobs.mjs"
   },
   "dependencies": {
     "@supabase/ssr": "^0.12.3",

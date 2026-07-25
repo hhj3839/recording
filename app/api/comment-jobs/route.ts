@@ -1,0 +1,134 @@
+import { after } from "next/server";
+import { eq, insertRows, selectRows } from "../../../db/supabase";
+import { getAiUsage, MONTHLY_AI_LIMIT } from "../../ai-usage";
+import { CommentEvidence, signCommentJob } from "../../comment-generation";
+import { dataError, getDataScope, requireOwnedStudentIds } from "../../data-scope";
+
+type Level = "상" | "중" | "하" | "-";
+type ScoreStudent = { studentId: number; levels: Level[] };
+type JobRow = {
+  id: string;
+  status: string;
+  current_batch: number;
+  total_batches: number;
+  total_items: number;
+  completed_items: number;
+  failed_items: number;
+  error_message: string;
+  created_at: string;
+  completed_at: string | null;
+};
+
+const present = (row: JobRow) => ({
+  id: row.id,
+  status: row.status,
+  currentBatch: Number(row.current_batch),
+  totalBatches: Number(row.total_batches),
+  totalItems: Number(row.total_items),
+  completedItems: Number(row.completed_items),
+  failedItems: Number(row.failed_items),
+  error: row.error_message,
+  createdAt: row.created_at,
+  completedAt: row.completed_at,
+});
+
+function startRunner(request: Request, jobId: string) {
+  const url = new URL("/api/comment-jobs/run", request.url);
+  const signature = signCommentJob(jobId);
+  after(async () => {
+    await fetch(url, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ jobId, signature }),
+    }).catch(() => undefined);
+  });
+}
+
+export async function GET() {
+  try {
+    const { user, classId } = await getDataScope();
+    const jobs = await selectRows<JobRow>("generation_jobs", {
+      owner_id: eq(user.id),
+      class_id: eq(classId),
+      job_type: eq("comments"),
+      order: "created_at.desc",
+      limit: 1,
+    });
+    return Response.json({ job: jobs[0] ? present(jobs[0]) : null });
+  } catch (error) {
+    return dataError(error, "교과 평어 생성 상태를 불러오지 못했습니다.");
+  }
+}
+
+export async function POST(request: Request) {
+  try {
+    const body = await request.json() as { scores?: unknown };
+    if (!body.scores || typeof body.scores !== "object" || Array.isArray(body.scores)) {
+      return Response.json({ error: "평가 수준을 다시 확인해 주세요." }, { status: 400 });
+    }
+    const { user, classId } = await getDataScope();
+    const active = await selectRows<JobRow>("generation_jobs", {
+      owner_id: eq(user.id),
+      class_id: eq(classId),
+      job_type: eq("comments"),
+      status: "in.(queued,running)",
+      limit: 1,
+    });
+    if (active[0]) return Response.json({ job: present(active[0]), alreadyRunning: true }, { status: 202 });
+
+    const planRows = await selectRows<Record<string, string | number>>("assessment_plans", {
+      owner_id: eq(user.id), class_id: eq(classId), order: "sort_order.asc",
+    });
+    const plan = planRows.map((row) => ({
+      subject: String(row.subject), unit: String(row.unit), goal: String(row.goal), domain: String(row.domain),
+      perspective: String(row.perspective), high: String(row.high), middle: String(row.middle), low: String(row.low),
+    }));
+    const scores = body.scores as Record<string, ScoreStudent[]>;
+    const evidence: CommentEvidence[] = [];
+    for (const subject of [...new Set(plan.map((item) => item.subject))]) {
+      const subjectPlan = plan.filter((item) => item.subject === subject);
+      for (const student of Array.isArray(scores[subject]) ? scores[subject] : []) {
+        if (!Number.isInteger(student.studentId) || !Array.isArray(student.levels) || student.levels.length !== subjectPlan.length) continue;
+        const items = subjectPlan.flatMap((item, index) => {
+          const level = student.levels[index];
+          if (!["상", "중", "하"].includes(level)) return [];
+          const criterion = level === "상" ? item.high : level === "중" ? item.middle : item.low;
+          return [`${item.unit} | ${item.domain} | 목표: ${item.goal} | 관점: ${item.perspective} | 수준: ${level} | 기준: ${criterion}`];
+        });
+        if (items.length) evidence.push({ studentId: student.studentId, subject, items });
+      }
+    }
+    if (!evidence.length) return Response.json({ error: "전 과목 중 평가 수준을 한 개 이상 입력해 주세요." }, { status: 400 });
+    await requireOwnedStudentIds(evidence.map((item) => item.studentId), user.id, classId);
+
+    const batches = [...new Set(evidence.map((item) => item.subject))].flatMap((subject) => {
+      const items = evidence.filter((item) => item.subject === subject);
+      return Array.from({ length: Math.ceil(items.length / 10) }, (_, index) => items.slice(index * 10, index * 10 + 10));
+    });
+    const usage = await getAiUsage(user.id);
+    if (usage.monthly + batches.length > MONTHLY_AI_LIMIT) {
+      return Response.json({ error: `이번 작업에는 AI 요청 ${batches.length}회가 필요하지만 이번 달 잔여 한도는 ${Math.max(0, MONTHLY_AI_LIMIT - usage.monthly)}회입니다.` }, { status: 429 });
+    }
+
+    const rows = await insertRows<JobRow>("generation_jobs", [{
+      owner_id: user.id,
+      owner_email: user.email,
+      class_id: classId,
+      job_type: "comments",
+      status: "queued",
+      batches,
+      current_batch: 0,
+      total_batches: batches.length,
+      total_items: evidence.length,
+      completed_items: 0,
+      failed_items: 0,
+      error_message: "",
+      created_at: new Date().toISOString(),
+      updated_at: new Date().toISOString(),
+    }]);
+    startRunner(request, rows[0].id);
+    return Response.json({ job: present(rows[0]) }, { status: 202 });
+  } catch (error) {
+    return dataError(error, "교과 평어 백그라운드 작업을 시작하지 못했습니다.");
+  }
+}
