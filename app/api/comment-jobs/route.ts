@@ -1,4 +1,4 @@
-import { after } from "next/server";
+import { waitUntil } from "@vercel/functions";
 import { eq, insertRows, selectRows } from "../../../db/supabase";
 import { getAiUsage, MONTHLY_AI_LIMIT } from "../../ai-usage";
 import { CommentEvidence, signCommentJob } from "../../comment-generation";
@@ -35,13 +35,13 @@ const present = (row: JobRow) => ({
 function startRunner(request: Request, jobId: string) {
   const url = new URL("/api/comment-jobs/run", request.url);
   const signature = signCommentJob(jobId);
-  after(async () => {
-    await fetch(url, {
+  waitUntil(
+    fetch(url, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ jobId, signature }),
-    }).catch(() => undefined);
-  });
+    }).catch(() => undefined),
+  );
 }
 
 export async function GET() {
@@ -74,7 +74,10 @@ export async function POST(request: Request) {
       status: "in.(queued,running)",
       limit: 1,
     });
-    if (active[0]) return Response.json({ job: present(active[0]), alreadyRunning: true }, { status: 202 });
+    if (active[0]) {
+      startRunner(request, active[0].id);
+      return Response.json({ job: present(active[0]), alreadyRunning: true }, { status: 202 });
+    }
 
     const planRows = await selectRows<Record<string, string | number>>("assessment_plans", {
       owner_id: eq(user.id), class_id: eq(classId), order: "sort_order.asc",

@@ -1,4 +1,4 @@
-import { after } from "next/server";
+import { waitUntil } from "@vercel/functions";
 import { eq, selectRows, updateRows } from "../../../../db/supabase";
 import { CommentEvidence, GeneratedComment, generateCommentBatch, saveGeneratedComments, signCommentJob, verifyCommentJob } from "../../../comment-generation";
 
@@ -23,13 +23,13 @@ type JobRow = {
 function queueNext(request: Request, jobId: string) {
   const url = new URL("/api/comment-jobs/run", request.url);
   const signature = signCommentJob(jobId);
-  after(async () => {
-    await fetch(url, {
+  waitUntil(
+    fetch(url, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ jobId, signature }),
-    }).catch(() => undefined);
-  });
+    }).catch(() => undefined),
+  );
 }
 
 export async function POST(request: Request) {
