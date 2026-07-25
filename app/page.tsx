@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 
-type View = "dashboard" | "students" | "plans" | "assessments" | "comments" | "behavior" | "export";
+type View = "dashboard" | "students" | "plans" | "assessments" | "comments" | "behavior" | "export" | "settings";
 type Level = "상" | "중" | "하" | "-";
 type AssessmentPlan = {
   id?: number;
@@ -914,6 +914,79 @@ function ExportResults({ roster, plan, classroom }: { roster: AssessmentStudent[
   </section>;
 }
 
+type PrivacySummary = {
+  account: { email: string; displayName: string };
+  classroom: ClassroomInfo;
+  counts: { students: number; plans: number; levels: number; comments: number; behaviors: number };
+};
+
+function PrivacySettings() {
+  const [summary, setSummary] = useState<PrivacySummary | null>(null);
+  const [classConfirmation, setClassConfirmation] = useState("");
+  const [accountConfirmation, setAccountConfirmation] = useState("");
+  const [message, setMessage] = useState("");
+  const [busy, setBusy] = useState(false);
+  useEffect(() => {
+    fetch("/api/privacy-data").then(async (response) => {
+      const result = await response.json() as PrivacySummary & { error?: string };
+      if (!response.ok) throw new Error(result.error || "저장 현황을 불러오지 못했습니다.");
+      setSummary(result);
+    }).catch((error: Error) => setMessage(error.message));
+  }, []);
+  const remove = async (scope: "class" | "account", confirmation: string) => {
+    const label = scope === "class" ? "현재 학급의 모든 자료" : "계정과 모든 학급 자료";
+    if (!window.confirm(`${label}를 영구 삭제합니다. 이 작업은 되돌릴 수 없습니다. 계속할까요?`)) return;
+    setBusy(true);
+    setMessage("");
+    try {
+      const response = await fetch("/api/privacy-data", {
+        method: "DELETE", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ scope, confirmation }),
+      });
+      const result = await response.json() as { error?: string };
+      if (!response.ok) throw new Error(result.error || "삭제하지 못했습니다.");
+      if (scope === "account") {
+        window.location.href = "/login";
+        return;
+      }
+      setMessage("현재 학급 자료를 삭제했습니다. 새로고침하면 빈 학급으로 시작합니다.");
+      setSummary((current) => current ? { ...current, counts: { students: 0, plans: 0, levels: 0, comments: 0, behaviors: 0 } } : current);
+      setClassConfirmation("");
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : "삭제하지 못했습니다.");
+    } finally { setBusy(false); }
+  };
+  const countItems = summary ? [
+    ["학생", summary.counts.students], ["평가계획", summary.counts.plans], ["평가수준", summary.counts.levels],
+    ["교과 평어", summary.counts.comments], ["행동특성", summary.counts.behaviors],
+  ] : [];
+  return <section>
+    <div className="page-heading"><div><p className="eyebrow">PRIVACY & SECURITY</p><h1>개인정보·데이터 관리</h1><p>로그인한 교사와 현재 학급에 연결된 자료만 표시됩니다.</p></div></div>
+    {message && <p className="student-message">{message}</p>}
+    <section className="privacy-card">
+      <div className="section-heading"><div><p className="eyebrow">DATA SCOPE</p><h2>현재 저장 범위</h2></div><span className="security-badge">교사·학급별 격리</span></div>
+      {summary ? <>
+        <dl className="privacy-meta"><div><dt>교사 계정</dt><dd>{summary.account.email}</dd></div><div><dt>학교·학급</dt><dd>{summary.classroom.schoolName} · {summary.classroom.schoolYear}학년도 {summary.classroom.semester}학기 · {summary.classroom.grade}학년 {summary.classroom.classNumber}반</dd></div></dl>
+        <div className="privacy-counts">{countItems.map(([label, value]) => <article key={label}><span>{label}</span><strong>{value}</strong></article>)}</div>
+      </> : <p>저장 현황을 확인하고 있습니다.</p>}
+      <ul className="security-list"><li>로그인 세션은 보안 쿠키로 관리됩니다.</li><li>OpenAI API 키와 Supabase 관리 키는 서버에만 저장됩니다.</li><li>모든 조회·수정 요청에서 교사 ID와 학급 ID를 함께 확인합니다.</li></ul>
+    </section>
+    <div className="danger-grid">
+      <section className="danger-card">
+        <h2>현재 학급 자료 삭제</h2>
+        <p>학생, 평가계획, 평가수준, 교과 평어와 행동특성을 모두 삭제합니다. 교사 계정은 유지됩니다.</p>
+        <label><span>계속하려면 <b>학급자료삭제</b> 입력</span><input value={classConfirmation} onChange={(event) => setClassConfirmation(event.target.value)} /></label>
+        <button disabled={busy || classConfirmation !== "학급자료삭제"} onClick={() => void remove("class", classConfirmation)}>현재 학급 자료 영구 삭제</button>
+      </section>
+      <section className="danger-card account">
+        <h2>교사 계정 탈퇴</h2>
+        <p>계정과 소유한 모든 학급 자료를 삭제하고 즉시 로그아웃합니다. 복구할 수 없습니다.</p>
+        <label><span>계속하려면 <b>계정탈퇴</b> 입력</span><input value={accountConfirmation} onChange={(event) => setAccountConfirmation(event.target.value)} /></label>
+        <button disabled={busy || accountConfirmation !== "계정탈퇴"} onClick={() => void remove("account", accountConfirmation)}>계정과 모든 자료 영구 삭제</button>
+      </section>
+    </div>
+  </section>;
+}
+
 export default function Home() {
   const [view, setView] = useState<View>("dashboard");
   const [currentUser, setCurrentUser] = useState("선생님");
@@ -1045,11 +1118,11 @@ export default function Home() {
         <button className="brand" onClick={() => setView("dashboard")}><span>기록</span>샘<i>교사의 기록을 더 가치 있게</i></button>
         <nav>{navItems.map((item) => <button className={view === item.id ? "active" : ""} key={item.id} onClick={() => setView(item.id)}><span>{item.icon}</span>{item.label}</button>)}</nav>
         <div className="nav-divider" />
-        <nav><button className={view === "export" ? "active" : ""} onClick={() => setView("export")}><span>⇧</span>결과 내보내기</button></nav>
+        <nav><button className={view === "export" ? "active" : ""} onClick={() => setView("export")}><span>⇧</span>결과 내보내기</button><button className={view === "settings" ? "active" : ""} onClick={() => setView("settings")}><span>⚙</span>개인정보·설정</button></nav>
         <div className="sidebar-bottom"><div className="storage"><span>이번 달 AI 생성</span><strong>128 / 300</strong><div><i /></div></div><div className="profile"><span className="avatar">{currentUser.slice(0, 1)}</span><span><b>{currentUser}</b><small>{classroom?.schoolName ?? "학교 정보 확인 중"}</small></span><form action="/api/auth/logout" method="post"><button type="submit">로그아웃</button></form></div></div>
       </aside>
       <main>
-        <header className="mobile-header"><button className="brand" onClick={() => setView("dashboard")}><span>기록</span>샘</button><select value={view} onChange={(e) => setView(e.target.value as View)}>{navItems.map((item) => <option value={item.id} key={item.id}>{item.label}</option>)}<option value="export">결과 내보내기</option></select></header>
+        <header className="mobile-header"><button className="brand" onClick={() => setView("dashboard")}><span>기록</span>샘</button><select value={view} onChange={(e) => setView(e.target.value as View)}>{navItems.map((item) => <option value={item.id} key={item.id}>{item.label}</option>)}<option value="export">결과 내보내기</option><option value="settings">개인정보·설정</option></select></header>
         <div className="content">
           {view === "dashboard" && <Dashboard move={setView} teacherName={currentUser} classroom={classroom} studentCount={roster.length} completedLevels={completedLevels} totalLevels={totalLevels} />}
           {view === "students" && <StudentManager roster={roster} onAdded={mergeStudentIntoState} onChanged={mergeStudentIntoState} onDeleted={(id) => void deleteStudent(id)} onImported={mergeImportedStudents} />}
@@ -1058,6 +1131,7 @@ export default function Home() {
           {view === "comments" && <Comments assessmentDataBySubject={assessmentDataBySubject} plan={plan} roster={roster} />}
           {view === "behavior" && <Behavior roster={roster} />}
           {view === "export" && <ExportResults roster={roster} plan={plan} classroom={classroom} />}
+          {view === "settings" && <PrivacySettings />}
         </div>
       </main>
     </div>
