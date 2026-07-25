@@ -957,6 +957,9 @@ function Comments({ assessmentDataBySubject, plan, roster }: { assessmentDataByS
   const [lastGeneratedAt, setLastGeneratedAt] = useState("");
   const [activeJob, setActiveJob] = useState<CommentJob | null>(null);
   const [history, setHistory] = useState<{ studentId: number; studentName: string; revisions: RevisionItem[] } | null>(null);
+  const [evidenceKey, setEvidenceKey] = useState("");
+  const [rewriteBusyKey, setRewriteBusyKey] = useState("");
+  const [selectedText, setSelectedText] = useState<Record<string, string>>({});
   useEffect(() => {
     setLastGeneratedAt(window.localStorage.getItem("giroksam:last-generated-at") ?? "");
   }, []);
@@ -1084,6 +1087,37 @@ function Comments({ assessmentDataBySubject, plan, roster }: { assessmentDataByS
     await saveComment(history.studentId, selectedSubject, revision.content, false);
     setHistory(null);
   };
+  const rewriteComment = async (studentId: number, subject: string, mode: "shorter" | "specific" | "selection") => {
+    const key = `${studentId}|${subject}`;
+    const subjectPlan = plan.filter((item) => item.subject === subject);
+    const assessment = assessmentDataBySubject[subject]?.find((item) => item.id === studentId);
+    if (!assessment) return;
+    setRewriteBusyKey(`${key}|${mode}`);
+    setError("");
+    try {
+      const response = await fetch("/api/generate-comment", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          studentId,
+          levels: assessment.assessments,
+          plan: subjectPlan,
+          mode,
+          currentComment: comments[key] ?? "",
+          selectedText: selectedText[key] ?? "",
+        }),
+      });
+      const result = await response.json() as { comment?: string; error?: string };
+      if (!response.ok || !result.comment) throw new Error(result.error || "평어를 다시 작성하지 못했습니다.");
+      setComments((current) => ({ ...current, [key]: result.comment! }));
+      setConfirmedComments((current) => ({ ...current, [key]: false }));
+      await saveComment(studentId, subject, result.comment, false);
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : "평어를 다시 작성하지 못했습니다.");
+    } finally {
+      setRewriteBusyKey("");
+    }
+  };
 
   return (
     <section>
@@ -1104,14 +1138,20 @@ function Comments({ assessmentDataBySubject, plan, roster }: { assessmentDataByS
                 const key = `${student.id}|${selectedSubject}`;
                 const text = comments[key] ?? "";
                 const assessment = assessmentDataBySubject[selectedSubject]?.[index];
-                const hasLevel = assessment?.assessments.some((level) => level !== "-");
+                const hasLevel = assessment?.assessments.some((level) => ["상", "중", "하"].includes(level));
+                const evidence = plan.filter((item) => item.subject === selectedSubject).map((item, planIndex) => ({
+                  ...item, level: assessment?.assessments[planIndex] ?? "-",
+                })).filter((item) => ["상", "중", "하"].includes(item.level));
                 const validation = validateRecord(text);
                 const confirmed = confirmedComments[key] ?? false;
                 const similarStudents = roster.filter((other) => other.id !== student.id && recordSimilarity(text, comments[`${other.id}|${selectedSubject}`] ?? "") >= 0.82);
                 return <tr id={`comment-${student.id}`} key={student.id}>
                   <td>{student.number ?? student.id}</td>
                   <td><strong>{student.name}</strong><small>{text ? `${new TextEncoder().encode(text).length}B` : hasLevel ? "생성 대기" : "수준 미입력"}</small></td>
-                  <td><textarea value={text} onChange={(event) => { setComments((current) => ({ ...current, [key]: event.target.value })); setConfirmedComments((current) => ({ ...current, [key]: false })); setCopied(false); }} onBlur={(event) => void saveComment(student.id, selectedSubject, event.target.value)} placeholder={hasLevel ? "AI 평어 생성 버튼을 누르면 결과가 표시됩니다." : "평가 수준이 입력되지 않았습니다."} /></td>
+                  <td><textarea value={text} onSelect={(event) => { const target = event.currentTarget; setSelectedText((current) => ({ ...current, [key]: target.value.slice(target.selectionStart, target.selectionEnd) })); }} onChange={(event) => { setComments((current) => ({ ...current, [key]: event.target.value })); setConfirmedComments((current) => ({ ...current, [key]: false })); setCopied(false); }} onBlur={(event) => void saveComment(student.id, selectedSubject, event.target.value)} placeholder={hasLevel ? "AI 평어 생성 버튼을 누르면 결과가 표시됩니다." : "상·중·하 평가 수준이 입력되지 않았습니다."} />
+                    <div className="comment-row-actions"><button disabled={!text || !!rewriteBusyKey} onMouseDown={(event) => event.preventDefault()} onClick={() => void rewriteComment(student.id, selectedSubject, "shorter")}>짧게</button><button disabled={!text || !!rewriteBusyKey} onMouseDown={(event) => event.preventDefault()} onClick={() => void rewriteComment(student.id, selectedSubject, "specific")}>구체적으로</button><button disabled={!selectedText[key] || !!rewriteBusyKey} onMouseDown={(event) => event.preventDefault()} onClick={() => void rewriteComment(student.id, selectedSubject, "selection")}>{rewriteBusyKey === `${key}|selection` ? "생성 중…" : "선택 문장 재생성"}</button><button className="evidence-button" onMouseDown={(event) => event.preventDefault()} onClick={() => setEvidenceKey((current) => current === key ? "" : key)}>생성 근거 {evidenceKey === key ? "닫기" : "보기"}</button></div>
+                    {evidenceKey === key && <div className="comment-evidence">{evidence.length ? evidence.map((item, evidenceIndex) => <article key={`${item.unit}-${evidenceIndex}`}><strong>{item.unit} · {item.domain} · {item.level}</strong><span>{item.level === "상" ? item.high : item.level === "중" ? item.middle : item.low}</span></article>) : <p>평어 생성에 사용된 상·중·하 평가 근거가 없습니다.</p>}</div>}
+                  </td>
                   <td className="validation-cell"><div><span className={validation.endingsOk ? "pass" : "fail"}>종결 {validation.endingsOk ? "정상" : "확인"}</span><span className={!validation.forbidden.length ? "pass" : "fail"}>금지어 {!validation.forbidden.length ? "없음" : "확인"}</span><span className={!similarStudents.length ? "pass" : "fail"} title={similarStudents.map((item) => item.name).join(", ")}>중복 {!similarStudents.length ? "없음" : `${similarStudents.length}명`}</span></div><button className="history-button" disabled={!text} onClick={() => void loadHistory(student.id, student.name)}>이전 기록</button><button className={confirmed ? "confirmed" : ""} disabled={!validation.valid || !!similarStudents.length} onMouseDown={(event) => event.preventDefault()} onClick={() => void saveComment(student.id, selectedSubject, text, !confirmed)}>{confirmed ? "확정됨 ✓" : "최종 확정"}</button></td>
                 </tr>;
               })}</tbody>
