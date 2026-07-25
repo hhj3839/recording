@@ -240,6 +240,25 @@ function ClassroomManager({ current }: { current: ClassroomInfo | null }) {
       setBusy(false);
     }
   };
+  const deleteClassroom = async (item: ManagedClassroom) => {
+    const label = `${item.schoolName} ${item.schoolYear}학년도 ${item.semester}학기 ${item.grade}학년 ${item.classNumber}반`;
+    if (!window.confirm(`${label}과 연결된 학생·평가·생성 문장을 모두 영구 삭제할까요?\n\n삭제한 자료는 복구할 수 없습니다.`)) return;
+    setBusy(true);
+    setMessage("");
+    try {
+      const response = await fetch("/api/classrooms", {
+        method: "DELETE",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ id: item.id, confirmation: "학급삭제" }),
+      });
+      const result = await response.json() as { error?: string };
+      if (!response.ok) throw new Error(result.error || "학급을 삭제하지 못했습니다.");
+      window.location.reload();
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : "학급을 삭제하지 못했습니다.");
+      setBusy(false);
+    }
+  };
   const updateForm = (key: keyof typeof form, value: string) => setForm((currentForm) => ({
     ...currentForm,
     [key]: key === "schoolName" ? value : Number(value),
@@ -252,11 +271,14 @@ function ClassroomManager({ current }: { current: ClassroomInfo | null }) {
         <div className="section-heading"><div><p className="eyebrow">MY CLASSES</p><h2>내 학급 · {classrooms.length}개</h2></div></div>
         <div className="classroom-list">{classrooms.map((item) => {
           const active = item.id === current?.id;
-          return <button className={active ? "active" : ""} disabled={busy} onClick={() => void selectClassroom(item.id)} key={item.id}>
-            <span className="classroom-icon">{item.grade}</span>
-            <span><b>{item.schoolName}</b><small>{item.schoolYear}학년도 {item.semester}학기 · {item.grade}학년 {item.classNumber}반</small></span>
-            <i>{active ? "사용 중" : "전환"}</i>
-          </button>;
+          return <article className={active ? "active" : ""} key={item.id}>
+            <button className="classroom-select" disabled={busy} onClick={() => void selectClassroom(item.id)}>
+              <span className="classroom-icon">{item.grade}</span>
+              <span><b>{item.schoolName}</b><small>{item.schoolYear}학년도 {item.semester}학기 · {item.grade}학년 {item.classNumber}반</small></span>
+              <i>{active ? "사용 중" : "전환"}</i>
+            </button>
+            <button className="classroom-delete" disabled={busy || classrooms.length <= 1} title={classrooms.length <= 1 ? "새 학급을 추가한 뒤 삭제할 수 있습니다." : "학급과 연결 자료 삭제"} onClick={() => void deleteClassroom(item)}>삭제</button>
+          </article>;
         })}</div>
       </section>
       <section className="classroom-create-panel">

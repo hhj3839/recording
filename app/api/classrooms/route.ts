@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { eq, selectRows, upsertRows } from "../../../db/supabase";
+import { eq, selectRows, supabaseRequest, upsertRows } from "../../../db/supabase";
 import { ACTIVE_CLASS_COOKIE, AuthenticationRequiredError, dataError } from "../../data-scope";
 import { getAuthUser } from "../../supabase-auth";
 
@@ -12,6 +12,8 @@ type ClassroomRow = {
   class_number: number;
   created_at: string;
 };
+
+const classTables = ["assessment_levels", "generated_comments", "student_behaviors", "record_revisions", "assessment_plans", "students", "ai_usage_events"] as const;
 
 const present = (row: ClassroomRow) => ({
   id: Number(row.id),
@@ -88,5 +90,47 @@ export async function PUT(request: Request) {
     return response;
   } catch (error) {
     return dataError(error, "학급을 전환하지 못했습니다.");
+  }
+}
+
+export async function DELETE(request: Request) {
+  try {
+    const user = await userOrThrow();
+    const body = await request.json() as { id?: unknown; confirmation?: unknown };
+    const id = Number(body.id);
+    const confirmation = typeof body.confirmation === "string" ? body.confirmation.trim() : "";
+    if (!Number.isInteger(id) || confirmation !== "학급삭제") {
+      return Response.json({ error: "학급 정보 또는 확인 문구가 올바르지 않습니다." }, { status: 400 });
+    }
+
+    const classrooms = await selectRows<ClassroomRow>("classrooms", {
+      owner_id: eq(user.id),
+      order: "school_year.desc,semester.desc,grade.asc,class_number.asc",
+    });
+    const classroom = classrooms.find((item) => Number(item.id) === id);
+    if (!classroom) return Response.json({ error: "삭제할 수 없는 학급입니다." }, { status: 403 });
+    if (classrooms.length <= 1) {
+      return Response.json({ error: "사용할 학급이 하나는 필요합니다. 새 학급을 추가한 뒤 이 학급을 삭제해 주세요." }, { status: 409 });
+    }
+
+    for (const table of classTables) {
+      await supabaseRequest(table, {
+        method: "DELETE",
+        query: { owner_id: eq(user.id), class_id: eq(id) },
+      });
+    }
+    await supabaseRequest("classrooms", {
+      method: "DELETE",
+      query: { id: eq(id), owner_id: eq(user.id) },
+    });
+
+    const nextClassroom = classrooms.find((item) => Number(item.id) !== id)!;
+    const response = NextResponse.json({ ok: true, classroom: present(nextClassroom) });
+    response.cookies.set(ACTIVE_CLASS_COOKIE, String(nextClassroom.id), {
+      httpOnly: true, secure: process.env.NODE_ENV === "production", sameSite: "lax", path: "/", maxAge: 60 * 60 * 24 * 365,
+    });
+    return response;
+  } catch (error) {
+    return dataError(error, "학급을 삭제하지 못했습니다.");
   }
 }
