@@ -24,9 +24,16 @@
 Node.js 22.13 이상과 pnpm 11 이상이 필요합니다.
 
 ```bash
+git clone https://github.com/hhj3839/recording.git
+cd recording
+copy .env.example .env.local
 pnpm install
 pnpm dev
 ```
+
+macOS 또는 Linux에서는 `copy` 대신 `cp .env.example .env.local`을 사용합니다.
+`.env.local`에 기존 Supabase와 OpenAI 값을 입력해야 로그인, 데이터 저장, AI 생성이 작동합니다.
+실제 키가 담긴 `.env.local`은 GitHub에 올리지 않습니다.
 
 검증:
 
