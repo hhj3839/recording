@@ -691,7 +691,7 @@ function Behavior({ roster }: { roster: AssessmentStudent[] }) {
   }, []);
 
   const updateRecord = (studentId: number, patch: Partial<{ characteristic: string; behavior: string }>) => {
-    setRecords((current) => ({ ...current, [studentId]: { characteristic: "", behavior: "", ...current[studentId], ...patch } }));
+    setRecords((current) => ({ ...current, [studentId]: { ...(current[studentId] ?? { characteristic: "", behavior: "" }), ...patch } }));
     setCopied(false);
   };
   const addReferencePhrase = (phrase: string) => {
