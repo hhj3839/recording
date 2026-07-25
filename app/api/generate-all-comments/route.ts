@@ -1,5 +1,6 @@
 import { eq, selectRows, upsertRows } from "../../../db/supabase";
 import { dataError, getDataScope, requireOwnedStudentIds } from "../../data-scope";
+import { checkAiUsage, recordAiUsage } from "../../ai-usage";
 
 type Level = "상" | "중" | "하" | "-";
 type ScoreStudent = { studentId: number; levels: Level[] };
@@ -20,6 +21,8 @@ export async function POST(request: Request) {
       return Response.json({ error: "평가 수준을 다시 확인해 주세요." }, { status: 400 });
     }
     const { user, classId } = await getDataScope();
+    const usage = await checkAiUsage(user.id);
+    if (!usage.allowed) return Response.json({ error: usage.reason === "monthly" ? "이번 달 AI 생성 한도 300회를 모두 사용했습니다." : "요청이 너무 빠릅니다. 1분 후 다시 시도해 주세요.", usage }, { status: 429 });
     const rows = await selectRows<Record<string, string | number>>("assessment_plans", {
       owner_id: eq(user.id), class_id: eq(classId), order: "sort_order.asc",
     });
@@ -94,6 +97,7 @@ export async function POST(request: Request) {
       owner_id: user.id,
       class_id: classId,
     })), "class_id,student_id,subject");
+    await recordAiUsage({ ownerId: user.id, ownerEmail: user.email, classId, feature: "all-comments" });
     return Response.json({ comments });
   } catch (error) {
     return dataError(error, "전 과목 교과 평어 생성 중 오류가 발생했습니다.");

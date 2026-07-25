@@ -1,4 +1,5 @@
 import { dataError, getDataScope } from "../../data-scope";
+import { checkAiUsage, recordAiUsage } from "../../ai-usage";
 
 type Level = "상" | "중" | "하" | "-";
 
@@ -73,7 +74,9 @@ function extractOutputText(payload: unknown): string {
 
 export async function POST(request: Request) {
   try {
-    await getDataScope();
+    const { user, classId } = await getDataScope();
+    const usage = await checkAiUsage(user.id);
+    if (!usage.allowed) return Response.json({ error: usage.reason === "monthly" ? "이번 달 AI 생성 한도 300회를 모두 사용했습니다." : "요청이 너무 빠릅니다. 1분 후 다시 시도해 주세요.", usage }, { status: 429 });
     const body = await request.json() as { studentId?: unknown; levels?: unknown; plan?: unknown };
     const uploadedPlan = parsePlan(body.plan);
     const plan = uploadedPlan ?? defaultAssessmentPlan.map((item) => ({
@@ -138,6 +141,7 @@ export async function POST(request: Request) {
 
     const comment = extractOutputText(payload);
     if (!comment) return Response.json({ error: "AI가 문장을 반환하지 않았습니다. 다시 시도해 주세요." }, { status: 502 });
+    await recordAiUsage({ ownerId: user.id, ownerEmail: user.email, classId, feature: "single-comment" });
     return Response.json({ comment });
   } catch (error) {
     return dataError(error, "교과 평어 생성 중 오류가 발생했습니다.");

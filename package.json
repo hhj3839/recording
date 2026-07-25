@@ -13,7 +13,8 @@
     "lint": "eslint . --ignore-pattern dist --ignore-pattern .next",
     "db:generate": "drizzle-kit generate",
     "db:migrate-auth": "node scripts/migrate-auth-ownership.mjs",
-    "db:migrate-confirmation": "node scripts/migrate-confirmation-status.mjs"
+    "db:migrate-confirmation": "node scripts/migrate-confirmation-status.mjs",
+    "db:migrate-ai-usage": "node scripts/migrate-ai-usage.mjs"
   },
   "dependencies": {
     "@supabase/ssr": "^0.12.3",

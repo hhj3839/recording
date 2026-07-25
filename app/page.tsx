@@ -1189,6 +1189,7 @@ export default function Home() {
   const [activeSubject, setActiveSubject] = useState("");
   const [generatedCommentCount, setGeneratedCommentCount] = useState(0);
   const [generatedBehaviorCount, setGeneratedBehaviorCount] = useState(0);
+  const [aiUsage, setAiUsage] = useState({ monthly: 0, limit: 300 });
   useEffect(() => {
     const loadClassData = async () => {
       try {
@@ -1251,6 +1252,20 @@ export default function Home() {
     };
     void refreshGeneratedCounts();
   }, [view]);
+  useEffect(() => {
+    const loadUsage = async () => {
+      try {
+        const response = await fetch("/api/usage");
+        const result = await response.json() as { monthly?: number; limit?: number };
+        if (response.ok) setAiUsage({ monthly: Number(result.monthly ?? 0), limit: Number(result.limit ?? 300) });
+      } catch {
+        // 사용량 표시 실패는 AI 작성 기능을 막지 않음.
+      }
+    };
+    void loadUsage();
+    const timer = window.setInterval(() => void loadUsage(), 30_000);
+    return () => window.clearInterval(timer);
+  }, []);
   const addStudent = async () => {
     const name = window.prompt("추가할 학생 이름을 입력해 주세요.");
     if (!name?.trim()) return;
@@ -1337,7 +1352,7 @@ export default function Home() {
         <nav>{navItems.map((item) => <button className={view === item.id ? "active" : ""} key={item.id} onClick={() => setView(item.id)}><span>{item.icon}</span>{item.label}</button>)}</nav>
         <div className="nav-divider" />
         <nav><button className={view === "export" ? "active" : ""} onClick={() => setView("export")}><span>⇧</span>결과 내보내기</button><button className={view === "settings" ? "active" : ""} onClick={() => setView("settings")}><span>⚙</span>개인정보·설정</button></nav>
-        <div className="sidebar-bottom"><div className="storage"><span>이번 달 AI 생성</span><strong>128 / 300</strong><div><i /></div></div><div className="profile"><span className="avatar">{currentUser.slice(0, 1)}</span><span><b>{currentUser}</b><small>{classroom?.schoolName ?? "학교 정보 확인 중"}</small></span><form action="/api/auth/logout" method="post"><button type="submit">로그아웃</button></form></div></div>
+        <div className="sidebar-bottom"><div className="storage"><span>이번 달 AI 생성</span><strong>{aiUsage.monthly} / {aiUsage.limit}</strong><div><i style={{ width: `${Math.min(100, aiUsage.limit ? (aiUsage.monthly / aiUsage.limit) * 100 : 0)}%` }} /></div></div><div className="profile"><span className="avatar">{currentUser.slice(0, 1)}</span><span><b>{currentUser}</b><small>{classroom?.schoolName ?? "학교 정보 확인 중"}</small></span><form action="/api/auth/logout" method="post"><button type="submit">로그아웃</button></form></div></div>
       </aside>
       <main>
         <header className="mobile-header"><button className="brand" onClick={() => setView("dashboard")}><span>기록</span>샘</button><select value={view} onChange={(e) => setView(e.target.value as View)}>{navItems.map((item) => <option value={item.id} key={item.id}>{item.label}</option>)}<option value="export">결과 내보내기</option><option value="settings">개인정보·설정</option></select></header>

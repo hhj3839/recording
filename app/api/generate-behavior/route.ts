@@ -1,4 +1,5 @@
 import { dataError, getDataScope } from "../../data-scope";
+import { checkAiUsage, recordAiUsage } from "../../ai-usage";
 
 function extractOutputText(payload: unknown): string {
   if (!payload || typeof payload !== "object") return "";
@@ -11,7 +12,9 @@ function extractOutputText(payload: unknown): string {
 
 export async function POST(request: Request) {
   try {
-    await getDataScope();
+    const { user, classId } = await getDataScope();
+    const usage = await checkAiUsage(user.id);
+    if (!usage.allowed) return Response.json({ error: usage.reason === "monthly" ? "이번 달 AI 생성 한도 300회를 모두 사용했습니다." : "요청이 너무 빠릅니다. 1분 후 다시 시도해 주세요.", usage }, { status: 429 });
     const body = await request.json() as { observation?: unknown };
     const observation = typeof body.observation === "string" ? body.observation.trim().slice(0, 4000) : "";
     if (!observation) return Response.json({ error: "관찰 사실을 입력해 주세요." }, { status: 400 });
@@ -36,6 +39,7 @@ export async function POST(request: Request) {
     if (!response.ok) return Response.json({ error: "AI 생성 요청을 처리하지 못했습니다." }, { status: 502 });
     const behavior = extractOutputText(payload);
     if (!behavior) return Response.json({ error: "AI가 문장을 반환하지 않았습니다." }, { status: 502 });
+    await recordAiUsage({ ownerId: user.id, ownerEmail: user.email, classId, feature: "single-behavior" });
     return Response.json({ behavior });
   } catch (error) {
     return dataError(error, "행동특성 생성 중 오류가 발생했습니다.");

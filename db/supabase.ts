@@ -40,6 +40,7 @@ export async function supabaseRequest<T>(
 }
 
 export const eq = (value: QueryValue) => `eq.${value}`;
+export const gte = (value: QueryValue) => `gte.${value}`;
 
 export function selectRows<T>(table: string, query: Record<string, QueryValue> = {}) {
   return supabaseRequest<T[]>(table, { query: { select: "*", ...query } });
