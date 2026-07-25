@@ -16,7 +16,8 @@
     "db:migrate-confirmation": "node scripts/migrate-confirmation-status.mjs",
     "db:migrate-ai-usage": "node scripts/migrate-ai-usage.mjs",
     "db:migrate-revisions": "node scripts/migrate-record-revisions.mjs",
-    "db:migrate-generation-jobs": "node scripts/migrate-generation-jobs.mjs"
+    "db:migrate-generation-jobs": "node scripts/migrate-generation-jobs.mjs",
+    "db:configure-generation-cron": "node scripts/configure-generation-job-cron.mjs"
   },
   "dependencies": {
     "@supabase/ssr": "^0.12.3",

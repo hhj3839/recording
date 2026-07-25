@@ -103,3 +103,6 @@ export function verifyCommentJob(jobId: string, signature: string) {
   if (signature.length !== expected.length) return false;
   return timingSafeEqual(Buffer.from(signature), Buffer.from(expected));
 }
+
+export const commentJobCronSecret = () =>
+  createHmac("sha256", signingKey()).update("comment-job-cron:v1").digest("hex");
