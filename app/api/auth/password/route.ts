@@ -1,11 +1,12 @@
 import { cookies } from "next/headers";
 import { ACCESS_COOKIE, REFRESH_COOKIE, createAuthClient } from "../../../supabase-auth";
+import { isStrongPassword, PASSWORD_POLICY_MESSAGE } from "../../../password-policy";
 
 export async function POST(request: Request) {
   const body = await request.json().catch(() => ({}));
   const password = String(body.password ?? "");
-  if (password.length < 12 || !/[A-Z]/.test(password) || !/[a-z]/.test(password) || !/\d/.test(password)) {
-    return Response.json({ error: "비밀번호는 12자 이상이며 영문 대문자·소문자·숫자를 각각 포함해야 합니다." }, { status: 400 });
+  if (!isStrongPassword(password)) {
+    return Response.json({ error: PASSWORD_POLICY_MESSAGE }, { status: 400 });
   }
   const cookieStore = await cookies();
   const accessToken = cookieStore.get(ACCESS_COOKIE)?.value;

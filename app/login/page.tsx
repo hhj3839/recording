@@ -52,7 +52,7 @@ export default function LoginPage() {
             </div>
           </>}
           <label>이메일<input name="email" type="email" required autoComplete="email" /></label>
-          {mode !== "forgot" && <label>비밀번호<input name="password" type="password" minLength={8} required autoComplete={mode === "login" ? "current-password" : "new-password"} /></label>}
+          {mode !== "forgot" && <label>비밀번호<input name="password" type="password" minLength={mode === "signup" ? 12 : 8} pattern={mode === "signup" ? "(?=.*[a-z])(?=.*[A-Z])(?=.*\\d).{12,}" : undefined} title={mode === "signup" ? "12자 이상이며 영문 대문자·소문자·숫자를 각각 포함해 주세요." : undefined} required autoComplete={mode === "login" ? "current-password" : "new-password"} />{mode === "signup" && <small>12자 이상 · 영문 대문자·소문자·숫자 포함</small>}</label>}
           {mode === "signup" && <label className="auth-consent"><input type="checkbox" checked={accepted} onChange={(event) => setAccepted(event.target.checked)} required /><span><a href="/terms" target="_blank">서비스 이용약관</a>과 <a href="/privacy" target="_blank">개인정보 처리방침</a>을 확인했으며 필수 개인정보 처리에 동의합니다.</span></label>}
           {message && <p className="auth-message" role="status">{message}</p>}
           <button className="auth-submit" disabled={busy || (mode === "signup" && !accepted)}>{busy ? "처리 중..." : mode === "login" ? "로그인" : mode === "signup" ? "인증 메일 받기" : "재설정 메일 받기"}</button>

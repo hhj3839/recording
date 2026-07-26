@@ -1605,7 +1605,7 @@ export default function Home() {
   const [activeSubject, setActiveSubject] = useState("");
   const [generatedCommentCount, setGeneratedCommentCount] = useState(0);
   const [generatedBehaviorCount, setGeneratedBehaviorCount] = useState(0);
-  const [aiUsage, setAiUsage] = useState({ monthly: 0, limit: 300 });
+  const [aiUsage, setAiUsage] = useState({ monthly: 0, limit: 150 });
   useEffect(() => {
     const loadClassData = async () => {
       try {
@@ -1673,7 +1673,7 @@ export default function Home() {
       try {
         const response = await fetch("/api/usage");
         const result = await response.json() as { monthly?: number; limit?: number };
-        if (response.ok) setAiUsage({ monthly: Number(result.monthly ?? 0), limit: Number(result.limit ?? 300) });
+        if (response.ok) setAiUsage({ monthly: Number(result.monthly ?? 0), limit: Number(result.limit ?? 150) });
       } catch {
         // 사용량 표시 실패는 AI 작성 기능을 막지 않음.
       }

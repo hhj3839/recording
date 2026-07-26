@@ -25,6 +25,15 @@ async function login(page: Page) {
   await expect(page.getByRole("heading", { name: "안녕하세요" })).toBeVisible();
 }
 
+async function navigate(page: Page, label: string, view: string) {
+  const mobileNavigation = page.locator(".mobile-header select");
+  if (await mobileNavigation.isVisible()) {
+    await mobileNavigation.selectOption(view);
+    return;
+  }
+  await page.getByRole("button", { name: label }).click();
+}
+
 test("로그인부터 명단·평가계획·평가수준·교과 평어 화면까지 연결된다", async ({ page }) => {
   await login(page);
 
@@ -54,7 +63,7 @@ test("로그인부터 명단·평가계획·평가수준·교과 평어 화면�
 
   let classroomId: number | undefined;
   try {
-    await page.getByRole("button", { name: "학급 관리" }).click();
+    await navigate(page, "학급 관리", "classes");
     const form = page.locator(".classroom-create-panel form");
     await form.locator("input").nth(0).fill("기록샘E2E검증초");
     await form.locator("input").nth(1).fill(String(candidate!.schoolYear));
@@ -78,9 +87,9 @@ test("로그인부터 명단·평가계획·평가수준·교과 평어 화면�
     const selectedClassroom = await page.request.put("/api/classrooms", { data: { id: classroomId } });
     expect(selectedClassroom.ok()).toBeTruthy();
     await page.reload();
-    await expect(page.getByText("기록샘E2E검증초", { exact: true }).first()).toBeVisible();
+    await expect(page.getByRole("button", { name: /기록샘E2E검증초/ })).toBeVisible();
 
-    await page.getByRole("button", { name: "학생 관리" }).click();
+    await navigate(page, "학생 관리", "students");
     await page.getByLabel("번호와 이름 명단").fill("1\t테스트가람\n2\t테스트나래");
     const rosterResponse = page.waitForResponse((response) =>
       response.url().endsWith("/api/students") && response.request().method() === "PUT");
@@ -89,7 +98,7 @@ test("로그인부터 명단·평가계획·평가수준·교과 평어 화면�
     await expect(page.locator('input[value="테스트가람"]')).toBeVisible();
     await expect(page.locator('input[value="테스트나래"]')).toBeVisible();
 
-    await page.getByRole("button", { name: "평가계획 관리" }).click();
+    await navigate(page, "평가계획 관리", "plans");
     const planRow = [
       "국어", "1. 표현하기", "상황에 맞게 표현할 수 있다.", "듣기·말하기", "구술 평가",
       "상황에 맞는 표현을 사용하는가?", "상황을 정확히 파악하여 실감 나게 표현할 수 있다.",
@@ -105,7 +114,7 @@ test("로그인부터 명단·평가계획·평가수준·교과 평어 화면�
     expect((await planResponse).ok()).toBeTruthy();
     await expect(page.getByRole("heading", { name: "저장된 평가계획 · 1개" })).toBeVisible();
 
-    await page.getByRole("button", { name: "평가 수준 입력" }).click();
+    await navigate(page, "평가 수준 입력", "assessments");
     await expect(page.getByRole("heading", { name: "평가 수준 입력" })).toBeVisible();
     await expect(page.locator(".assessment-workspace-toolbar .unified-subject-tabs").getByRole("button", { name: /국어/ })).toBeVisible();
     await page.getByText("일괄 입력 도구", { exact: true }).click();
@@ -131,7 +140,7 @@ test("로그인부터 명단·평가계획·평가수준·교과 평어 화면�
       expect(saved.ok(), `${student.name} 학생의 E2E 평어 저장에 실패했습니다.`).toBeTruthy();
     }
 
-    await page.getByRole("button", { name: "교과 평어" }).click();
+    await navigate(page, "교과 평어", "comments");
     await expect(page.getByRole("heading", { name: "전 과목 교과 평어" })).toBeVisible();
     await expect(page.getByRole("button", { name: "✦ AI 평어 생성" })).toBeVisible();
     await expect(page.locator(".comments-toolbar .unified-subject-tabs").getByRole("button", { name: /국어/ })).toBeVisible();
@@ -143,7 +152,7 @@ test("로그인부터 명단·평가계획·평가수준·교과 평어 화면�
     const clipboardText = await page.evaluate(() => navigator.clipboard.readText());
     expect(clipboardText.replaceAll("\r\n", "\n")).toBe(seededComments.join("\n"));
 
-    await page.getByRole("button", { name: "행동특성" }).click();
+    await navigate(page, "행동특성", "behavior");
     await expect(page.getByRole("heading", { name: "행동특성 작성" })).toBeVisible();
     await expect(page.getByText("특성을 입력한 학생은 자동 포함", { exact: false })).toBeVisible();
     await expect(page.getByLabel("관찰 사실 입력 학생 전체 선택")).toHaveCount(0);

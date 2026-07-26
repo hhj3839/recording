@@ -6,6 +6,15 @@ import { createCommentVariations } from "../app/comment-variation.ts";
 import { countBehaviorCharacteristics, recordSimilarity, recordSimilarityDetails, validateBehaviorSource, validateRecord } from "../app/record-validation.ts";
 import { parseStudentRosterText } from "../app/student-roster-parser.ts";
 import { parseAssessmentPlanText } from "../app/assessment-plan-parser.ts";
+import { isStrongPassword } from "../app/password-policy.ts";
+
+test("requires the same strong password policy for signup and password changes", () => {
+  assert.equal(isStrongPassword("shortA1"), false);
+  assert.equal(isStrongPassword("alllowercase123"), false);
+  assert.equal(isStrongPassword("NOLOWERCASE123"), false);
+  assert.equal(isStrongPassword("NoNumbersHere"), false);
+  assert.equal(isStrongPassword("StrongPass123"), true);
+});
 
 test("parses pasted student numbers and names separated by tabs or spaces", () => {
   assert.deepEqual(parseStudentRosterText("1\t강예린\n2 김민성\n3   김민준\n4\t김선").students, [

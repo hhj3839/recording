@@ -1,5 +1,6 @@
 import { NextRequest } from "next/server";
 import { createAuthClient } from "../../../supabase-auth";
+import { isStrongPassword, PASSWORD_POLICY_MESSAGE } from "../../../password-policy";
 
 export async function POST(request: NextRequest) {
   const body = await request.json().catch(() => ({}));
@@ -8,8 +9,11 @@ export async function POST(request: NextRequest) {
   if (body.termsAccepted !== true) {
     return Response.json({ error: "서비스 이용약관과 개인정보 처리방침 동의가 필요합니다." }, { status: 400 });
   }
-  if (!email || password.length < 8) {
-    return Response.json({ error: "이메일과 8자 이상의 비밀번호를 입력해 주세요." }, { status: 400 });
+  if (!email) {
+    return Response.json({ error: "이메일을 입력해 주세요." }, { status: 400 });
+  }
+  if (!isStrongPassword(password)) {
+    return Response.json({ error: PASSWORD_POLICY_MESSAGE }, { status: 400 });
   }
   const origin = request.nextUrl.origin;
   const { data, error } = await createAuthClient().auth.signUp({
