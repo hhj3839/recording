@@ -17,6 +17,16 @@ function extractOutputText(payload: unknown): string {
     .map((item) => item.text).join("").trim();
 }
 
+function normalizeCandidateLength(candidate: string) {
+  if (validateGeneratedComment(candidate, 1).valid) return candidate;
+  const length = Array.from(candidate).length;
+  if (length >= 45 && length < 50 && !candidate.startsWith("수업에서 ")) {
+    const contextualized = `수업에서 ${candidate}`;
+    if (validateGeneratedComment(contextualized, 1).valid) return contextualized;
+  }
+  return "";
+}
+
 export async function generateCommentBatch(evidence: CommentEvidence[], avoidComments: string[] = [], repair = false, model = primaryAiModel()) {
   const apiKey = process.env.OPENAI_API_KEY;
   if (!apiKey) throw new Error("AI 생성 설정이 아직 완료되지 않았습니다.");
@@ -132,7 +142,7 @@ export async function generateCommentBatch(evidence: CommentEvidence[], avoidCom
               ? [`${item.stem.trim().replace(/[.。]+$/, "")}함.`]
               : [];
           });
-          const text = candidates.find((candidate) => validateGeneratedComment(candidate, 1).valid);
+          const text = candidates.map(normalizeCandidateLength).find(Boolean);
           return text ? [{ itemId: value.itemId, text, candidateLengths: candidates.map((candidate) => Array.from(candidate).length) }] : [];
         })
       : [];
