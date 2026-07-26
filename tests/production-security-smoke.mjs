@@ -68,6 +68,37 @@ test("signup rejects weak passwords before creating an account", async () => {
   }
 });
 
+test("signup rejects missing or invalid classroom metadata before creating an account", async () => {
+  const valid = {
+    email: "signup-profile-check@example.invalid",
+    password: "StrongPass123",
+    termsAccepted: true,
+    displayName: "검증교사",
+    schoolName: "검증초등학교",
+    schoolYear: 2026,
+    semester: 1,
+    grade: 3,
+    classNumber: 1,
+  };
+  const invalidProfiles = [
+    [{ ...valid, schoolName: "" }, /학교명/],
+    [{ ...valid, schoolYear: 1999 }, /학년도/],
+    [{ ...valid, semester: 3 }, /학기/],
+    [{ ...valid, grade: 7 }, /학년/],
+    [{ ...valid, classNumber: 0 }, /반/],
+  ];
+  for (const [body, expected] of invalidProfiles) {
+    const response = await fetch(`${baseUrl}/api/auth/signup`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+    });
+    assert.equal(response.status, 400);
+    const result = await response.json();
+    assert.match(result.error ?? "", expected);
+  }
+});
+
 test("all sensitive read APIs reject unauthenticated access", async () => {
   for (const route of protectedReads) {
     const response = await fetch(`${baseUrl}${route}`, { redirect: "manual" });
