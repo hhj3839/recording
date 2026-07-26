@@ -404,12 +404,13 @@ function StudentManager({ roster, onAdded, onChanged, onDeleted, onImported }: {
   }
   return <section>
     <div className="page-heading"><div><p className="eyebrow">CLASS ROSTER</p><h1>학생 관리</h1><p>번호와 이름 두 열을 붙여넣으면 명단을 인식해 현재 학급에 등록합니다.</p></div></div>
-    <div className="student-tools roster-paste-tools">
-      <form className="roster-text-form" onSubmit={addStudentsFromText}>
-        <label><span>번호와 이름 붙여넣기</span><small>엑셀이나 문서에서 번호와 이름 두 열을 복사해 그대로 붙여넣으세요.</small><textarea aria-label="번호와 이름 명단" value={rosterText} onChange={(event) => setRosterText(event.target.value)} placeholder={"1\t김○○\n2\t이○○\n3\t박○○\n4\t최○○"} required /></label>
-        <button type="submit" disabled={busy}>{busy ? "추가 중…" : "명단 인식·추가"}</button>
+    <section className="roster-paste-entry">
+      <form onSubmit={addStudentsFromText}>
+        <div className="section-heading"><div><p className="eyebrow">PASTE ROSTER</p><h2>학생 명단 붙여넣기</h2><p>엑셀이나 한글 표에서 번호와 이름 두 열을 복사해 그대로 붙여넣으세요.</p></div><button type="submit" disabled={busy || !rosterText.trim()}>{busy ? "추가 중…" : "명단 인식·추가"}</button></div>
+        <div className="roster-paste-columns">번호 → 이름</div>
+        <textarea aria-label="번호와 이름 명단" value={rosterText} onChange={(event) => setRosterText(event.target.value)} placeholder={"1\t김○○\n2\t이○○\n3\t박○○\n4\t최○○"} required />
       </form>
-    </div>
+    </section>
     {message && <p className="student-message" role="status">{message}</p>}
     <div className="student-status-tabs">
       <div><button className={studentTab === "active" ? "active" : ""} onClick={() => setStudentTab("active")}>재학생 {roster.length}</button>
@@ -685,7 +686,6 @@ function PlanManager({ plan, onChanged, current }: { plan: AssessmentPlan[]; onC
       {sharedPreview && <section className="shared-plan-preview"><div className="section-heading"><div><p className="eyebrow">PREVIEW</p><h3>{sharedPreview.name} · {sharedPreview.items.length}개</h3></div><button className="secondary" onClick={() => setSharedPreview(null)}>미리보기 닫기</button></div><div>{sharedPreview.items.map((item, index) => <details key={`${item.subject}-${item.unit}-${index}`}><summary>{index + 1}. {item.subject} · {item.unit} <span>{item.domain}</span></summary><p><b>평가목표</b>{item.goal}</p><p><b>평가관점</b>{item.perspective || "미입력"}</p><dl><div><dt>상</dt><dd>{item.high}</dd></div><div><dt>중</dt><dd>{item.middle}</dd></div><div><dt>하</dt><dd>{item.low}</dd></div></dl>{item.caution && <p><b>유의점</b>{item.caution}</p>}</details>)}</div></section>}
       <div className="shared-plan-list">{filteredSharedPlans.length ? filteredSharedPlans.map((shared) => <article key={shared.id}><div><strong>{shared.name}</strong><span>{shared.schoolYear}학년도 {shared.semester}학기 · {shared.grade}학년 · {shared.itemCount}개</span><small>{shared.subjects.join(" · ") || "과목 정보 없음"} · {new Date(shared.updatedAt).toLocaleString("ko-KR")}</small></div><button className="secondary" disabled={busy} onClick={() => void previewSharedPlan(shared)}>미리보기</button><button disabled={busy} onClick={() => void importSharedPlan(shared)}>현재 학급에 적용</button>{shared.canDelete && <button className="danger-text" disabled={busy} onClick={() => void deleteSharedPlan(shared)}>삭제</button>}</article>) : <p className="empty-cell">{sharedPlans.length ? "검색 조건에 맞는 공동 평가계획이 없습니다." : "아직 공유된 평가계획이 없습니다."}</p>}</div>
     </section>}
-    <div className="plan-help"><strong>필수 열</strong> 과목 · 단원 · 평가목표 · 영역 · 평가 관점 · 상 · 중 · 하 <span>평가 유형과 유의점은 선택 항목입니다.</span></div>
     <section className="plan-paste-entry">
       <div className="section-heading"><div><p className="eyebrow">PASTE TABLE</p><h2>평가계획 표 붙여넣기</h2><p>엑셀이나 한글 표에서 10개 열을 복사하거나 탭으로 구분된 여러 행을 그대로 붙여넣으세요.</p></div><button disabled={busy || !planText.trim()} onClick={interpretPlanText}>표 이해하기</button></div>
       <div className="plan-paste-columns">과목 → 단원 → 평가목표 → 영역 → 평가유형 → 평가관점 → 상 → 중 → 하 → 유의점</div>
@@ -826,7 +826,7 @@ function Assessments({ data, setData, plan, activeSubject, setActiveSubject, onD
     <section>
       <div className="page-heading">
         <div><p className="eyebrow">{activeSubject} · 1학기</p><h1>평가 수준 입력</h1><p>셀을 눌러 학생별 성취 수준을 빠르게 입력하세요.</p></div>
-        <div className="heading-actions"><span className={`autosave-state ${saving ? "saving" : dirty ? "dirty" : "saved"}`}>{saving ? "자동 저장 중…" : dirty ? "저장 대기 중" : saved ? "자동 저장됨" : "변경 시 자동 저장"}</span><button onClick={() => void save()} disabled={saving || !dirty}>{saving ? "저장 중…" : "지금 저장"}</button></div>
+        <div className="heading-actions"><span className={`autosave-state ${saving ? "saving" : dirty ? "dirty" : "saved"}`}>{saving ? "자동 저장 중…" : dirty ? "저장 대기 중" : saved ? "자동 저장됨" : "변경 시 자동 저장"}</span><button onClick={() => void save()} disabled={saving || !dirty}>{saving ? "저장 중…" : "저장"}</button></div>
       </div>
       <div className="table-tools">
         <div className="subject-tabs">{subjects.map((subject) => <button className={subject === activeSubject ? "active" : ""} onClick={() => changeSubject(subject)} key={subject}>{subject}</button>)}</div>
@@ -1030,11 +1030,8 @@ function Comments({ assessmentDataBySubject, plan, roster }: { assessmentDataByS
       <div className="page-heading"><div><p className="eyebrow">AI DRAFT</p><h1>전 과목 교과 평어</h1><p>과목을 선택하면 해당 과목의 학생별 평어를 한 화면에서 확인할 수 있습니다.</p></div><div className="ai-generate-actions">{formattedLastGeneratedAt && <span>마지막 사용 {formattedLastGeneratedAt}</span>}<button onClick={() => void generateAllComments()} disabled={loading}>{loading ? generationProgress || "전 과목 생성 중…" : "✦ AI 평어 생성"}</button></div></div>
       <div className="review-layout comments-review-layout">
         <div className="review-content">
-          <div className="comment-generation-settings">
-            <p className="comment-auto-policy">등록된 모든 학생을 대상으로 입력된 전체 평가 영역과 수준을 반영해 분량을 자동 조정합니다.</p>
-          </div>
           <div className="comments-toolbar">
-            <div className="subject-tabs review-subject-tabs">{subjects.map((subject) => <button className={subject === selectedSubject ? "active" : ""} onClick={() => { setSelectedSubject(subject); setCopied(false); }} key={subject}>{subject}<small>{roster.filter((student) => comments[`${student.id}|${subject}`]).length}/{roster.length}</small></button>)}</div>
+            <div className="subject-navigator"><span>과목 선택</span><div className="subject-tabs review-subject-tabs">{subjects.map((subject) => <button className={subject === selectedSubject ? "active" : ""} onClick={() => { setSelectedSubject(subject); setCopied(false); }} key={subject}><b>{subject}</b><small>{roster.filter((student) => comments[`${student.id}|${subject}`]).length}/{roster.length}명</small></button>)}</div></div>
             <button className="copy-comments" onClick={() => void copySubjectComments()} disabled={!roster.some((student) => comments[`${student.id}|${selectedSubject}`])}>{copied ? "복사됨 ✓" : "평어만 복사하기"}</button>
           </div>
           {error && <p className="generation-error">! {error}</p>}
@@ -1296,7 +1293,7 @@ function Behavior({ roster }: { roster: AssessmentStudent[] }) {
           </div>
           {referenceOpen && <aside className="behavior-reference-drawer">
             <button className="drawer-close" onClick={() => setReferenceOpen(false)} aria-label="참고자료 닫기">×</button>
-            <div className="reference-guide"><div><strong>작성 참고자료</strong><p>실제로 관찰한 행동과 변화에 맞는 표현만 선택해 주세요.</p></div><span>현재 입력 대상: {activeStudentId ? `${roster.find((student) => student.id === activeStudentId)?.number ?? roster.find((student) => student.id === activeStudentId)?.id}번 ${roster.find((student) => student.id === activeStudentId)?.name}` : "특성 입력칸을 선택하세요"}</span></div>
+            <div className="reference-guide"><div><strong>작성 참고자료</strong><p>실제로 관찰한 행동과 변화에 맞는 표현만 선택해 주세요.</p></div><ol><li>표에서 작성할 학생의 특성 입력칸을 먼저 누릅니다.</li><li>영역을 바꾸며 학생에게 맞는 키워드 4~5개를 선택합니다.</li><li>자동 입력된 문장을 실제 관찰 내용에 맞게 구체적으로 다듬습니다.</li></ol><span>현재 입력 대상: {activeStudentId ? `${roster.find((student) => student.id === activeStudentId)?.number ?? roster.find((student) => student.id === activeStudentId)?.id}번 ${roster.find((student) => student.id === activeStudentId)?.name}` : "특성 입력칸을 선택하세요"}</span></div>
             <div className="reference-tabs">{behaviorReferences.map((group) => <button className={activeCategory === group.category ? "active" : ""} onClick={() => setActiveCategory(group.category)} key={group.category}>{group.category}</button>)}</div>
             {behaviorReferences.filter((group) => group.category === activeCategory).map((group) => <div className="reference-groups" key={group.category}>
               <section><h3>강점 키워드</h3><div>{group.strengths.map((phrase) => <button onClick={() => addReferencePhrase(phrase)} key={phrase}>{phrase}</button>)}</div></section>
