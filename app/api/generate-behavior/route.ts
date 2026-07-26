@@ -1,7 +1,7 @@
 import { dataError, getDataScope } from "../../data-scope";
 import { checkAiUsage, recordAiUsage } from "../../ai-usage";
 import { createBehaviorVariations } from "../../behavior-variation";
-import { validateBehaviorSource } from "../../record-validation";
+import { validateBehaviorSource, validateRecord } from "../../record-validation";
 import { eq, selectRows } from "../../../db/supabase";
 
 function extractOutputText(payload: unknown): string {
@@ -23,11 +23,6 @@ export async function POST(request: Request) {
     const observation = typeof body.observation === "string" ? body.observation.trim().slice(0, 4000) : "";
     const currentBehavior = typeof body.currentBehavior === "string" ? body.currentBehavior.trim().slice(0, 8000) : "";
     const mode = body.mode === "length" ? "length" : "regenerate";
-    const options = {
-      sentenceCount: 4,
-      maxBytes: 550,
-      emphasis: "balanced",
-    };
     if (!observation) return Response.json({ error: "관찰 사실을 입력해 주세요." }, { status: 400 });
     const sourceValidation = validateBehaviorSource(observation);
     if (!sourceValidation.valid) return Response.json({
@@ -56,10 +51,10 @@ export async function POST(request: Request) {
         store: false,
         max_output_tokens: 1200,
         input: [
-          { role: "system", content: [{ type: "input_text", text: "대한민국 초등학교 담임교사로서 행동특성 및 발달상황을 작성한다. 입력된 관찰 사실만 활용하고 새로운 사실을 만들지 않는다. 학생 이름·성별·가정환경·수상·사교육·비교 표현을 포함하지 않는다. 지정된 variation의 문장 구조·시작 방식·특성 순서를 따르며 피해야 할 기존 행동특성과 첫 구절, 핵심 동사, 문장 구조가 겹치지 않게 작성한다. 장점과 성장 가능성을 구체적으로 연결하고 모든 문장을 명사형 종결어미로 끝낸다. 3~5문장, UTF-8 약 500~550바이트로 작성하며 제목이나 설명 없이 본문만 출력한다." }] },
+          { role: "system", content: [{ type: "input_text", text: "너는 대한민국 초등학교 담임교사이며 행동특성 및 발달상황을 작성한다. 입력된 학습 태도, 교우관계, 책임감, 생활 습관, 의사소통, 협력, 자기관리, 성장 모습 등 교사의 관찰 사실만 활용한다. 장점과 발전 가능성을 구체적으로 드러내고 부정적인 내용은 변화와 성장 중심으로 순화하며, 단순 나열보다 행동의 특징·과정·변화를 연결한다. 사실을 과장하거나 새로운 사실을 만들지 않고 학생 이름·성별·학생 간 비교를 쓰지 않는다. 대회·수상 실적, 사교육, 공인시험, 특정 기관명, 부모 직업·사회경제적 배경을 포함하지 않는다. variation을 따르되 기존 학생 문장과 표현을 반복하지 않는다. UTF-8 기준 반드시 500~550바이트로 작성하고 모든 문장은 글자 그대로 ‘음’ 또는 ‘임’으로 끝낸다. 출력 전 분량·종결·반복·성장·금지 내용·맞춤법을 검수하며 제목이나 설명 없이 본문만 출력한다." }] },
           { role: "user", content: [{ type: "input_text", text: mode === "length" && currentBehavior
             ? `다음 관찰 사실과 기존 문장만 활용하여 기존 행동특성을 UTF-8 500~550바이트로 다시 작성해 줘. 사실을 추가하거나 삭제하지 말고 자연스럽게 길이만 조정해 줘.\n\n관찰 사실:\n${observation}\n\n기존 행동특성:\n${currentBehavior}`
-            : `다음 관찰 사실을 바탕으로 표현과 문장 구조가 다른 행동특성을 새로 작성해 줘. ${options.sentenceCount}문장, UTF-8 ${options.maxBytes}바이트 이내로 작성하고 작성 방향은 ${options.emphasis}임.\n표현 방식: ${JSON.stringify(variation)}\n피해야 할 기존 행동특성: ${JSON.stringify(avoidBehaviors.map((item) => item.slice(0, 800)))}\n관찰 사실: ${observation}` }] },
+            : `다음 4~5가지 학생 특성을 바탕으로 표현과 문장 구조가 다른 행동특성을 작성해 줘. UTF-8 500~550바이트를 엄수해 줘.\n표현 방식: ${JSON.stringify(variation)}\n피해야 할 기존 행동특성: ${JSON.stringify(avoidBehaviors.map((item) => item.slice(0, 800)))}\n학생 특성: ${observation}` }] },
         ],
         text: { verbosity: "low" },
       }),
@@ -80,6 +75,11 @@ export async function POST(request: Request) {
     }
     const behavior = extractOutputText(payload);
     if (!behavior) return Response.json({ error: "AI가 문장을 반환하지 않았습니다." }, { status: 502 });
+    const validation = validateRecord(behavior, true);
+    if (!validation.valid) return Response.json({
+      error: "생성 결과가 500~550바이트·음/임 종결·성장·금지어 검수를 통과하지 못했습니다. 다시 생성해 주세요.",
+      validation,
+    }, { status: 502 });
     await recordAiUsage({ ownerId: user.id, ownerEmail: user.email, classId, feature: "single-behavior" });
     return Response.json({ behavior });
   } catch (error) {

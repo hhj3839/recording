@@ -2,7 +2,7 @@ import { upsertRows } from "../db/supabase";
 import { recordAiUsage } from "./ai-usage";
 import { BehaviorVariation } from "./behavior-variation";
 import { archiveBehavior } from "./record-revisions";
-import { validateBehaviorSource } from "./record-validation";
+import { validateBehaviorSource, validateRecord } from "./record-validation";
 
 export type BehaviorOptions = { sentenceCount: number; maxBytes: number; emphasis: "balanced" | "strength" | "growth" };
 export type BehaviorInput = { studentId: number; characteristic: string; options?: BehaviorOptions; variation?: BehaviorVariation };
@@ -33,7 +33,7 @@ export async function generateBehaviorBatch(inputs: BehaviorInput[], avoidBehavi
       store: false,
       max_output_tokens: Math.min(7000, Math.max(1800, inputs.length * 700)),
       input: [
-        { role: "system", content: [{ type: "input_text", text: "대한민국 초등학교 담임교사로서 학생별 행동특성 및 발달상황을 작성한다. 입력된 특성만 활용하고 새로운 사실을 만들지 않는다. 학생 이름·성별·가정환경·수상·사교육·비교 표현을 포함하지 않는다. 각 입력의 variation에 지정된 문장 구조·시작 방식·특성 순서를 따르되 관찰 사실에 없는 내용을 만들지 않는다. 같은 묶음의 학생끼리 첫 구절, 핵심 동사, 문장 구조, 종결 표현이 겹치지 않게 적극적으로 분산하고 avoidBehaviors의 문장을 복사하거나 비슷하게 바꾸어 쓰지 않는다. 각 입력의 options에 지정된 sentenceCount와 maxBytes에 최대한 맞춘다. emphasis가 strength이면 장점을, growth이면 변화와 발전 가능성을, balanced이면 전체 특성을 균형 있게 연결한다. 모든 문장을 명사형 종결어미로 끝낸다. 반드시 JSON 배열만 출력하며 각 원소는 studentId와 behavior 필드를 가진다." }] },
+        { role: "system", content: [{ type: "input_text", text: "너는 대한민국 초등학교 담임교사이며 학생별 행동특성 및 발달상황을 작성한다. 교사가 입력한 학습 태도, 교우관계, 책임감, 생활 습관, 의사소통, 협력, 자기관리, 성장 모습 등의 관찰 사실만 활용한다. 학생의 장점과 발전 가능성이 구체적으로 드러나게 하고, 부정적인 내용은 사실을 바꾸지 않는 범위에서 변화와 성장 중심으로 순화한다. 활동을 단순 나열하지 말고 행동의 특징·과정·변화를 자연스럽게 연결한다. 입력된 사실을 과장하거나 새로운 사실을 만들지 않으며 학생 이름·성별·학생 간 비교를 쓰지 않는다. 대회·수상 실적, 사교육, 공인시험, 특정 기관명, 부모 직업·사회경제적 배경 등 기재 금지 내용을 포함하지 않는다. variation의 문장 구조·시작 방식·특성 순서를 따르고 같은 묶음 학생 및 avoidBehaviors와 첫 구절, 핵심 동사, 문장 구조가 겹치지 않게 분산한다. 각 학생 결과는 UTF-8 기준 반드시 500바이트 이상 550바이트 이하로 작성하고, 모든 문장은 글자 그대로 ‘음’ 또는 ‘임’으로 끝낸다. 출력 전 분량, 종결어미, 표현 반복, 구체적인 변화·성장, 금지 내용, 맞춤법과 띄어쓰기를 스스로 검수한다. 반드시 JSON 배열만 출력하며 각 원소는 studentId와 behavior 필드를 가진다." }] },
         { role: "user", content: [{ type: "input_text", text: `다음 학생 식별번호별 특성을 바탕으로 각각 행동특성을 작성해 줘.\n입력: ${JSON.stringify(inputs)}\n피해야 할 기존 시작 표현: ${JSON.stringify(avoidanceHints)}` }] },
       ],
       text: { verbosity: "low" },
@@ -55,9 +55,11 @@ export async function generateBehaviorBatch(inputs: BehaviorInput[], avoidBehavi
   const behaviors = Array.isArray(parsed) ? parsed.flatMap((item) => {
     const studentId = Number(item.studentId);
     const behavior = typeof item.behavior === "string" ? item.behavior.trim() : "";
-    return inputMap.has(studentId) && behavior ? [{ studentId, characteristic: inputMap.get(studentId)!, behavior }] : [];
+    return inputMap.has(studentId) && behavior && validateRecord(behavior, true).valid
+      ? [{ studentId, characteristic: inputMap.get(studentId)!, behavior }]
+      : [];
   }) : [];
-  if (!behaviors.length) throw new Error("AI가 행동특성을 반환하지 않았습니다.");
+  if (!behaviors.length) throw new Error("AI 결과가 500~550바이트·음/임 종결·성장·금지어 검수를 통과하지 못했습니다.");
   return behaviors;
 }
 

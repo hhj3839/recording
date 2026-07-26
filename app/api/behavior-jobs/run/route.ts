@@ -35,6 +35,7 @@ export async function POST(request: Request) {
   });
   let behaviors: GeneratedBehavior[] = [];
   let errorMessage = "";
+  let pending = batch;
   const batchStudentIds = new Set(batch.map((item) => item.studentId));
   const existingBehaviors = await selectRows<{ student_id: number; behavior: string }>("student_behaviors", {
     owner_id: eq(job.owner_id), class_id: eq(job.class_id),
@@ -43,8 +44,13 @@ export async function POST(request: Request) {
     .filter((item) => !batchStudentIds.has(Number(item.student_id)))
     .map((item) => item.behavior)
     .filter(Boolean);
-  for (let attempt = 0; attempt < 2 && !behaviors.length; attempt += 1) {
-    try { behaviors = await generateBehaviorBatch(batch, avoidBehaviors); }
+  for (let attempt = 0; attempt < 2 && pending.length; attempt += 1) {
+    try {
+      const generated = await generateBehaviorBatch(pending, avoidBehaviors);
+      behaviors = [...behaviors, ...generated];
+      const generatedIds = new Set(generated.map((item) => item.studentId));
+      pending = pending.filter((item) => !generatedIds.has(item.studentId));
+    }
     catch (error) { errorMessage = error instanceof Error ? error.message : "AI 생성 오류"; }
   }
   if (behaviors.length) {

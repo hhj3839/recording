@@ -70,14 +70,16 @@ test("detects repeated sentences", () => {
 
 test("checks behavior byte length and growth expression", () => {
   let text = "꾸준한 노력으로 성장하는 모습을 보이며 ";
-  while (new TextEncoder().encode(`${text}책임감 있게 생활함.`).length < 500) {
+  while (new TextEncoder().encode(`${text}책임감 있는 태도가 돋보임.`).length < 500) {
     text += "학습 활동에 성실하게 참여하고 친구의 의견을 존중하며 ";
   }
-  text += "책임감 있게 생활함.";
+  text += "책임감 있는 태도가 돋보임.";
   const result = validateRecord(text, true);
   assert.equal(result.bytes >= 500 && result.bytes <= 550, true);
   assert.equal(result.growthIncluded, true);
   assert.equal(result.valid, true);
+  const looseEnding = validateRecord(text.replace(/돋보임\.$/, "생활함."), true);
+  assert.equal(looseEnding.endingsOk, false);
 });
 
 test("measures similar records without using student identity", () => {
