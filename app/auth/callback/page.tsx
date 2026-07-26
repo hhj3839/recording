@@ -10,7 +10,7 @@ export default function AuthCallback() {
     const refreshToken = hash.get("refresh_token");
     const authType = hash.get("type");
     if (!accessToken || !refreshToken) {
-      setMessage("인증 정보가 없습니다. 인증 메일의 링크를 다시 열어 주세요.");
+      queueMicrotask(() => setMessage("인증 정보가 없습니다. 인증 메일의 링크를 다시 열어 주세요."));
       return;
     }
     fetch("/api/auth/session", {

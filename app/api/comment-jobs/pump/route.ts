@@ -1,5 +1,5 @@
 import { timingSafeEqual } from "node:crypto";
-import { eq, selectRows } from "../../../../db/supabase";
+import { selectRows } from "../../../../db/supabase";
 import { commentJobCronSecret, signCommentJob } from "../../../comment-generation";
 
 export const maxDuration = 60;

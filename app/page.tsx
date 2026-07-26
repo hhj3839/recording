@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import { recordSimilarityDetails, validateBehaviorSource, validateRecord } from "./record-validation";
 
-type View = "dashboard" | "classes" | "students" | "plans" | "assessments" | "comments" | "behavior" | "export" | "pilot" | "settings";
+type View = "dashboard" | "classes" | "students" | "plans" | "assessments" | "comments" | "behavior" | "export" | "settings";
 type Level = "상" | "중" | "하" | "미응시" | "평가 예정" | "-";
 type AssessmentPlan = {
   id?: number;
@@ -28,12 +28,6 @@ type ClassroomInfo = {
   classNumber: number;
 };
 
-const defaultPlan: AssessmentPlan[] = [
-  { subject: "국어", unit: "1단원", goal: "상황과 인물의 마음을 살려 표현하기", domain: "듣기·말하기", type: "수행평가", perspective: "표정, 몸짓, 목소리 활용", high: "실감 나게 표현함", middle: "알맞게 표현함", low: "도움을 받아 표현함", caution: "" },
-  { subject: "국어", unit: "2단원", goal: "문장의 기본 짜임을 이해하기", domain: "문법", type: "서술형", perspective: "문장 짜임 이해", high: "정확히 나타냄", middle: "대체로 나타냄", low: "도움을 받아 나타냄", caution: "" },
-  { subject: "국어", unit: "3단원", goal: "작품의 느낌과 생각 표현하기", domain: "문학", type: "서술형", perspective: "근거를 들어 표현", high: "구체적으로 표현함", middle: "알맞게 표현함", low: "도움을 받아 표현함", caution: "" },
-];
-
 const behaviorReferences = [
   { category: "학습 관련", strengths: ["과제에 끈기 있게 참여함", "탐구적 태도가 돋보임", "문제 해결 능력이 우수함", "자기주도적으로 학습함"], growth: ["기초를 차근차근 다지는 중임", "학습 몰입 시간을 늘려 가고 있음", "꾸준한 학습 습관을 형성하는 중임"] },
   { category: "수업 태도", strengths: ["바른 자세로 경청함", "수업 집중도가 높음", "과제를 성실히 수행함", "질문을 통해 문제를 해결함"], growth: ["집중을 유지하려고 노력함", "수업 참여 경험을 넓혀 가고 있음", "발표와 대화의 적절한 시기를 익혀 가는 중임"] },
@@ -44,45 +38,6 @@ const behaviorReferences = [
   { category: "예체능·특기", strengths: ["예술적 감수성이 풍부함", "신체 활동 능력이 우수함", "음악적 감각이 풍부함", "문화예술에 관심이 많음"], growth: ["자신의 소질을 꾸준히 계발할 필요가 있음", "예체능 활동에 적극적으로 참여하는 경험이 필요함", "관심과 흥미를 지속하는 태도를 기르는 중임"] },
   { category: "자기관리·생활", strengths: ["규칙을 잘 준수함", "시간을 계획적으로 관리함", "주변을 깨끗하게 정리함", "건강한 생활 습관을 실천함"], growth: ["정리정돈 습관을 형성해 가고 있음", "규칙을 스스로 지키려는 노력이 필요함", "계획한 일을 스스로 실천하는 힘을 기르는 중임"] },
 ];
-
-const students = [
-  { id: 1, name: "김도윤", assessments: ["상", "중", "상"] as Level[], status: "확정", note: "친구의 발표를 경청하고 자신의 생각을 또렷하게 표현함" },
-  { id: 2, name: "이서아", assessments: ["중", "중", "상"] as Level[], status: "검토 중", note: "모둠 활동에서 역할을 끝까지 책임감 있게 수행함" },
-  { id: 3, name: "박지후", assessments: ["하", "중", "-"] as Level[], status: "미생성", note: "교사의 도움을 받아 활동 과정을 차근차근 완성함" },
-  { id: 4, name: "최하린", assessments: ["상", "상", "중"] as Level[], status: "확정", note: "상황에 알맞은 목소리와 표정으로 실감 나게 발표함" },
-  { id: 5, name: "정시우", assessments: ["중", "상", "중"] as Level[], status: "검토 중", note: "새로운 문제에도 여러 방법을 시도하며 해결함" },
-  { id: 6, name: "한예준", assessments: ["-", "-", "-"] as Level[], status: "미생성", note: "" },
-  { id: 7, name: "윤서윤", assessments: ["-", "-", "-"] as Level[], status: "미생성", note: "" },
-  { id: 8, name: "강민재", assessments: ["-", "-", "-"] as Level[], status: "미생성", note: "" },
-  { id: 9, name: "조유나", assessments: ["-", "-", "-"] as Level[], status: "미생성", note: "" },
-  { id: 10, name: "임도현", assessments: ["-", "-", "-"] as Level[], status: "미생성", note: "" },
-  { id: 11, name: "신채원", assessments: ["-", "-", "-"] as Level[], status: "미생성", note: "" },
-  { id: 12, name: "오준서", assessments: ["-", "-", "-"] as Level[], status: "미생성", note: "" },
-  { id: 13, name: "서지아", assessments: ["-", "-", "-"] as Level[], status: "미생성", note: "" },
-  { id: 14, name: "권하준", assessments: ["-", "-", "-"] as Level[], status: "미생성", note: "" },
-  { id: 15, name: "황수빈", assessments: ["-", "-", "-"] as Level[], status: "미생성", note: "" },
-  { id: 16, name: "송지호", assessments: ["-", "-", "-"] as Level[], status: "미생성", note: "" },
-  { id: 17, name: "안다은", assessments: ["-", "-", "-"] as Level[], status: "미생성", note: "" },
-  { id: 18, name: "류건우", assessments: ["-", "-", "-"] as Level[], status: "미생성", note: "" },
-  { id: 19, name: "전소율", assessments: ["-", "-", "-"] as Level[], status: "미생성", note: "" },
-  { id: 20, name: "홍현우", assessments: ["-", "-", "-"] as Level[], status: "미생성", note: "" },
-  { id: 21, name: "문예린", assessments: ["-", "-", "-"] as Level[], status: "미생성", note: "" },
-  { id: 22, name: "배도경", assessments: ["-", "-", "-"] as Level[], status: "미생성", note: "" },
-  { id: 23, name: "백나윤", assessments: ["-", "-", "-"] as Level[], status: "미생성", note: "" },
-  { id: 24, name: "남태윤", assessments: ["-", "-", "-"] as Level[], status: "미생성", note: "" },
-  { id: 25, name: "노가은", assessments: ["-", "-", "-"] as Level[], status: "미생성", note: "" },
-];
-
-const seededLevel = (studentId: number, subjectIndex: number, assessmentIndex: number): Level => {
-  const levels: Level[] = ["상", "중", "하"];
-  const mixed = (studentId * 17 + subjectIndex * 11 + assessmentIndex * 7 + studentId * assessmentIndex) % levels.length;
-  return levels[mixed];
-};
-
-const withSampleLevels = (student: (typeof students)[number], subjectIndex: number, count: number): AssessmentStudent => ({
-  ...student,
-  assessments: Array.from({ length: count }, (_, assessmentIndex) => seededLevel(student.id, subjectIndex, assessmentIndex)),
-});
 
 const navItems: { id: View; label: string; icon: string }[] = [
   { id: "dashboard", label: "대시보드", icon: "⌂" },
@@ -197,16 +152,16 @@ function ClassroomManager({ current }: { current: ClassroomInfo | null }) {
     if (!response.ok) return setMessage(result.error || "학급 목록을 불러오지 못했습니다.");
     setClassrooms(result.classrooms ?? []);
   };
-  useEffect(() => { void load(); }, []);
+  useEffect(() => { queueMicrotask(() => void load()); }, []);
   useEffect(() => {
     if (!current) return;
-    setForm({
-      schoolName: current.schoolName,
-      schoolYear: current.schoolYear,
-      semester: current.semester,
-      grade: current.grade,
-      classNumber: current.classNumber,
-    });
+    queueMicrotask(() => setForm({
+        schoolName: current.schoolName,
+        schoolYear: current.schoolYear,
+        semester: current.semester,
+        grade: current.grade,
+        classNumber: current.classNumber,
+      }));
   }, [current]);
   const createClassroom = async (event: React.FormEvent) => {
     event.preventDefault();
@@ -318,7 +273,7 @@ function ClassroomCollaboration() {
       setMemberId((current) => current || String(result.availableMembers?.[0]?.id ?? ""));
     } catch (error) { setMessage(error instanceof Error ? error.message : "학급 협업 권한을 불러오지 못했습니다."); }
   };
-  useEffect(() => { void load(); }, []);
+  useEffect(() => { queueMicrotask(() => void load()); }, []);
   const save = async (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault(); setBusy(true); setMessage("");
     try {
@@ -375,16 +330,18 @@ function StudentManager({ roster, currentClassId, onAdded, onChanged, onDeleted,
   const [copyTargetId, setCopyTargetId] = useState("");
 
   useEffect(() => {
-    setDrafts(Object.fromEntries(roster.map((student) => [student.id, {
-      number: student.number ?? student.id,
-      name: student.name,
-    }])));
+    queueMicrotask(() => {
+      setDrafts(Object.fromEntries(roster.map((student) => [student.id, {
+        number: student.number ?? student.id,
+        name: student.name,
+      }])));
+      setOrderedIds(roster.map((student) => student.id));
+      setOrderDirty(false);
+    });
     fetch("/api/students/status").then(async (response) => {
       const result = await response.json() as { students?: Array<{ id: number; number: number; name: string }> };
       if (response.ok) setInactiveStudents(result.students ?? []);
     }).catch(() => undefined);
-    setOrderedIds(roster.map((student) => student.id));
-    setOrderDirty(false);
   }, [roster]);
   useEffect(() => {
     fetch("/api/classrooms").then(async (response) => {
@@ -1147,12 +1104,14 @@ function Comments({ assessmentDataBySubject, plan, roster }: { assessmentDataByS
   const [selectedStudentIds, setSelectedStudentIds] = useState<number[]>(roster.map((student) => student.id));
   const [generationOptions, setGenerationOptions] = useState({ candidateCount: 1, sentenceCount: 2, maxBytes: 500, emphasis: "balanced" as "balanced" | "strength" });
   const [preferencesLoaded, setPreferencesLoaded] = useState(false);
-  useEffect(() => setSelectedStudentIds((current) => {
-    const valid = current.filter((id) => roster.some((student) => student.id === id));
-    return valid.length ? valid : roster.map((student) => student.id);
-  }), [roster]);
   useEffect(() => {
-    setLastGeneratedAt(window.localStorage.getItem("giroksam:last-generated-at") ?? "");
+    queueMicrotask(() => setSelectedStudentIds((current) => {
+      const valid = current.filter((id) => roster.some((student) => student.id === id));
+      return valid.length ? valid : roster.map((student) => student.id);
+    }));
+  }, [roster]);
+  useEffect(() => {
+    queueMicrotask(() => setLastGeneratedAt(window.localStorage.getItem("giroksam:last-generated-at") ?? ""));
     fetch("/api/auth/preferences").then(async (response) => {
       const result = await response.json() as { preferences?: { comments?: typeof generationOptions } };
       if (response.ok && result.preferences?.comments) setGenerationOptions(result.preferences.comments);
@@ -1172,7 +1131,7 @@ function Comments({ assessmentDataBySubject, plan, roster }: { assessmentDataByS
   const loadGeneratedComments = async () => {
     try {
       const response = await fetch("/api/generated-comments");
-      const result = await response.json() as { comments?: Array<{ studentId: number; subject: string; comment: string; candidates: string[]; confirmed: boolean; updatedAt: string; evidenceStatus: "unchecked" | "pass" | "review"; evidenceIssues: string[] }> };
+      const result = await response.json() as { comments?: Array<{ studentId: number; subject: string; comment: string; candidates: string[]; confirmed: boolean; updatedAt: string }> };
       if (!response.ok || !result.comments?.length) return;
       setComments(Object.fromEntries(result.comments.map((item) => [`${item.studentId}|${item.subject}`, item.comment])));
       setCommentCandidates(Object.fromEntries(result.comments.map((item) => [`${item.studentId}|${item.subject}`, item.candidates ?? []])));
@@ -1187,7 +1146,7 @@ function Comments({ assessmentDataBySubject, plan, roster }: { assessmentDataByS
     }
   };
   useEffect(() => {
-    void loadGeneratedComments();
+    queueMicrotask(() => void loadGeneratedComments());
     fetch("/api/comment-jobs").then(async (response) => {
       const result = await response.json() as { job?: CommentJob | null };
       if (response.ok && result.job) {
@@ -1198,7 +1157,7 @@ function Comments({ assessmentDataBySubject, plan, roster }: { assessmentDataByS
   }, []);
   useEffect(() => {
     if (!activeJob || !["queued", "running"].includes(activeJob.status)) return;
-    setGenerationProgress(`${activeJob.completedItems}/${activeJob.totalItems}`);
+    queueMicrotask(() => setGenerationProgress(`${activeJob.completedItems}/${activeJob.totalItems}`));
     const timer = window.setInterval(async () => {
       try {
         const response = await fetch("/api/comment-jobs");
@@ -1393,8 +1352,8 @@ function Comments({ assessmentDataBySubject, plan, roster }: { assessmentDataByS
 
 function Behavior({ roster }: { roster: AssessmentStudent[] }) {
   type BehaviorJob = { id: string; status: string; totalItems: number; completedItems: number; failedItems: number; error?: string; completedAt?: string | null };
-  type BehaviorRecord = { characteristic: string; behavior: string; confirmed: boolean; evidenceStatus: "unchecked" | "pass" | "review"; evidenceIssues: string[] };
-  const emptyBehaviorRecord = (): BehaviorRecord => ({ characteristic: "", behavior: "", confirmed: false, evidenceStatus: "unchecked", evidenceIssues: [] });
+  type BehaviorRecord = { characteristic: string; behavior: string; confirmed: boolean };
+  const emptyBehaviorRecord = (): BehaviorRecord => ({ characteristic: "", behavior: "", confirmed: false });
   const [records, setRecords] = useState<Record<number, BehaviorRecord>>({});
   const [loading, setLoading] = useState(false);
   const [generationProgress, setGenerationProgress] = useState("");
@@ -1408,21 +1367,23 @@ function Behavior({ roster }: { roster: AssessmentStudent[] }) {
   const [history, setHistory] = useState<{ studentId: number; studentName: string; revisions: RevisionItem[] } | null>(null);
   const [rewriteBusyKey, setRewriteBusyKey] = useState("");
   const [excludedStudentIds, setExcludedStudentIds] = useState<number[]>([]);
-  useEffect(() => setExcludedStudentIds((current) => current.filter((id) => roster.some((student) => student.id === id))), [roster]);
+  useEffect(() => {
+    queueMicrotask(() => setExcludedStudentIds((current) => current.filter((id) => roster.some((student) => student.id === id))));
+  }, [roster]);
 
   const loadBehaviors = async () => {
     try {
       const response = await fetch("/api/student-behaviors");
-      const result = await response.json() as { behaviors?: Array<{ studentId: number; characteristic: string; behavior: string; confirmed: boolean; updatedAt: string; evidenceStatus: "unchecked" | "pass" | "review"; evidenceIssues: string[] }> };
+      const result = await response.json() as { behaviors?: Array<{ studentId: number; characteristic: string; behavior: string; confirmed: boolean; updatedAt: string }> };
       if (!response.ok || !result.behaviors) return;
-      setRecords(Object.fromEntries(result.behaviors.map((item) => [item.studentId, { characteristic: item.characteristic, behavior: item.behavior, confirmed: item.confirmed, evidenceStatus: item.evidenceStatus ?? "unchecked", evidenceIssues: item.evidenceIssues ?? [] }])));
+      setRecords(Object.fromEntries(result.behaviors.map((item) => [item.studentId, { characteristic: item.characteristic, behavior: item.behavior, confirmed: item.confirmed }])));
       setLastGeneratedAt(result.behaviors.map((item) => item.updatedAt).sort().at(-1) ?? "");
     } catch {
       setError("저장된 행동특성을 불러오지 못했습니다.");
     }
   };
   useEffect(() => {
-    void loadBehaviors();
+    queueMicrotask(() => void loadBehaviors());
     fetch("/api/behavior-jobs").then(async (response) => {
       const result = await response.json() as { job?: BehaviorJob | null };
       if (response.ok && result.job) {
@@ -1433,7 +1394,7 @@ function Behavior({ roster }: { roster: AssessmentStudent[] }) {
   }, []);
   useEffect(() => {
     if (!activeJob || !["queued", "running"].includes(activeJob.status)) return;
-    setGenerationProgress(`${activeJob.completedItems}/${activeJob.totalItems}`);
+    queueMicrotask(() => setGenerationProgress(`${activeJob.completedItems}/${activeJob.totalItems}`));
     const timer = window.setInterval(async () => {
       try {
         const response = await fetch("/api/behavior-jobs");
@@ -1464,7 +1425,7 @@ function Behavior({ roster }: { roster: AssessmentStudent[] }) {
   const addReferencePhrase = (phrase: string) => {
     if (activeStudentId === null) return setError("먼저 학생의 특성 입력칸을 선택해 주세요.");
     const current = records[activeStudentId]?.characteristic?.trim() ?? "";
-    updateRecord(activeStudentId, { characteristic: current ? `${current} · ${phrase}` : phrase, confirmed: false, evidenceStatus: "unchecked", evidenceIssues: [] });
+    updateRecord(activeStudentId, { characteristic: current ? `${current} · ${phrase}` : phrase, confirmed: false });
     setError("");
   };
   const generateAll = async () => {
@@ -1530,7 +1491,7 @@ function Behavior({ roster }: { roster: AssessmentStudent[] }) {
       });
       const result = await response.json() as { behavior?: string; error?: string };
       if (!response.ok || !result.behavior) throw new Error(result.error || "행동특성을 다시 생성하지 못했습니다.");
-      const rewritten = { ...record, behavior: result.behavior, confirmed: false, evidenceStatus: "unchecked" as const, evidenceIssues: [] };
+      const rewritten = { ...record, behavior: result.behavior, confirmed: false };
       updateRecord(studentId, rewritten);
       await saveRecord(studentId, rewritten, false);
       setLastGeneratedAt(new Date().toISOString());
@@ -1555,7 +1516,7 @@ function Behavior({ roster }: { roster: AssessmentStudent[] }) {
   };
   const restoreBehavior = async (revision: RevisionItem) => {
     if (!history) return;
-    const restored: BehaviorRecord = { characteristic: revision.characteristic, behavior: revision.content, confirmed: false, evidenceStatus: "unchecked", evidenceIssues: [] };
+    const restored: BehaviorRecord = { characteristic: revision.characteristic, behavior: revision.content, confirmed: false };
     updateRecord(history.studentId, restored);
     await saveRecord(history.studentId, restored, false);
     setHistory(null);
@@ -1595,7 +1556,7 @@ function Behavior({ roster }: { roster: AssessmentStudent[] }) {
                 const closest = comparisons[0];
                 const eligible = Boolean(record.characteristic.trim());
                 const selected = eligible && !excludedStudentIds.includes(student.id);
-                return <tr className={activeStudentId === student.id ? "active-reference-row" : ""} key={student.id}><td><input aria-label={`${student.name} 행동특성 생성 대상`} type="checkbox" disabled={!eligible} checked={selected} onChange={(event) => setExcludedStudentIds((current) => event.target.checked ? current.filter((id) => id !== student.id) : [...new Set([...current, student.id])])} /></td><td>{student.number ?? student.id}</td><td><strong>{student.name}</strong></td><td><textarea className={sourceIssues.length ? "input-blocked" : ""} value={record.characteristic} onFocus={() => setActiveStudentId(student.id)} onChange={(event) => updateRecord(student.id, { characteristic: event.target.value, confirmed: false, evidenceStatus: "unchecked", evidenceIssues: [] })} onBlur={() => void saveRecord(student.id, records[student.id] ?? record)} placeholder="관찰한 행동과 변화 모습을 입력하세요." />{sourceIssues.length > 0 && <small className="source-warning">AI 전송 불가: {sourceIssues.join(" · ")}</small>}</td><td><textarea value={record.behavior} onChange={(event) => updateRecord(student.id, { behavior: event.target.value, confirmed: false, evidenceStatus: "unchecked", evidenceIssues: [] })} onBlur={() => void saveRecord(student.id, records[student.id] ?? record)} placeholder={record.characteristic ? "AI 행특 생성 버튼을 누르면 결과가 표시됩니다." : "특성을 먼저 입력해 주세요."} /><small>{record.behavior ? `${validation.bytes} bytes` : ""}</small><div className="comment-row-actions"><button disabled={!record.characteristic || !sourceValidation.valid || !!rewriteBusyKey} onMouseDown={(event) => event.preventDefault()} onClick={() => void rewriteBehavior(student.id, record, "regenerate")}>{rewriteBusyKey === `${student.id}|regenerate` ? "생성 중…" : "다시 생성"}</button><button disabled={!record.characteristic || !record.behavior || !sourceValidation.valid || !!rewriteBusyKey} onMouseDown={(event) => event.preventDefault()} onClick={() => void rewriteBehavior(student.id, record, "length")}>{rewriteBusyKey === `${student.id}|length` ? "조정 중…" : "500~550B 맞춤"}</button></div></td><td className="validation-cell behavior-validation"><div><span className={validation.lengthOk ? "pass" : "fail"}>500~550B</span><span className={validation.endingsOk ? "pass" : "fail"}>종결</span><span className={validation.growthIncluded ? "pass" : "fail"}>성장</span><span className={!validation.forbidden.length ? "pass" : "fail"}>금지어</span><span className={validation.spellingOk ? "pass" : "fail"} title={validation.spellingIssues.join("\n")}>맞춤법 {validation.spellingOk ? "정상" : `${validation.spellingIssues.length}건`}</span><span className={!validation.repeated.length ? "pass" : "fail"}>반복</span><span className={!similarStudents.length ? "pass" : "fail"}>최대 중복 {closest?.score ? `${Math.round(closest.score * 100)}%` : "0%"}</span></div>{closest?.score > 0 && <div className="similarity-detail"><strong>{closest.student.name} 학생과 {Math.round(closest.score * 100)}%</strong>{closest.overlaps.length > 0 && <span>겹치는 표현: {closest.overlaps.join(" · ")}</span>}</div>}{!validation.spellingOk && <ul className="spelling-issues">{validation.spellingIssues.map((issue, issueIndex) => <li key={issueIndex}>{issue}</li>)}</ul>}<button className="history-button" disabled={!record.behavior} onClick={() => void loadHistory(student.id, student.name)}>이전 기록</button><button className={record.confirmed ? "confirmed" : ""} disabled={!validation.valid || !!similarStudents.length || !!rewriteBusyKey} onMouseDown={(event) => event.preventDefault()} onClick={() => void saveRecord(student.id, record, !record.confirmed)}>{record.confirmed ? "확정됨 ✓" : "최종 확정"}</button></td></tr>;
+                return <tr className={activeStudentId === student.id ? "active-reference-row" : ""} key={student.id}><td><input aria-label={`${student.name} 행동특성 생성 대상`} type="checkbox" disabled={!eligible} checked={selected} onChange={(event) => setExcludedStudentIds((current) => event.target.checked ? current.filter((id) => id !== student.id) : [...new Set([...current, student.id])])} /></td><td>{student.number ?? student.id}</td><td><strong>{student.name}</strong></td><td><textarea className={sourceIssues.length ? "input-blocked" : ""} value={record.characteristic} onFocus={() => setActiveStudentId(student.id)} onChange={(event) => updateRecord(student.id, { characteristic: event.target.value, confirmed: false })} onBlur={() => void saveRecord(student.id, records[student.id] ?? record)} placeholder="관찰한 행동과 변화 모습을 입력하세요." />{sourceIssues.length > 0 && <small className="source-warning">AI 전송 불가: {sourceIssues.join(" · ")}</small>}</td><td><textarea value={record.behavior} onChange={(event) => updateRecord(student.id, { behavior: event.target.value, confirmed: false })} onBlur={() => void saveRecord(student.id, records[student.id] ?? record)} placeholder={record.characteristic ? "AI 행특 생성 버튼을 누르면 결과가 표시됩니다." : "특성을 먼저 입력해 주세요."} /><small>{record.behavior ? `${validation.bytes} bytes` : ""}</small><div className="comment-row-actions"><button disabled={!record.characteristic || !sourceValidation.valid || !!rewriteBusyKey} onMouseDown={(event) => event.preventDefault()} onClick={() => void rewriteBehavior(student.id, record, "regenerate")}>{rewriteBusyKey === `${student.id}|regenerate` ? "생성 중…" : "다시 생성"}</button><button disabled={!record.characteristic || !record.behavior || !sourceValidation.valid || !!rewriteBusyKey} onMouseDown={(event) => event.preventDefault()} onClick={() => void rewriteBehavior(student.id, record, "length")}>{rewriteBusyKey === `${student.id}|length` ? "조정 중…" : "500~550B 맞춤"}</button></div></td><td className="validation-cell behavior-validation"><div><span className={validation.lengthOk ? "pass" : "fail"}>500~550B</span><span className={validation.endingsOk ? "pass" : "fail"}>종결</span><span className={validation.growthIncluded ? "pass" : "fail"}>성장</span><span className={!validation.forbidden.length ? "pass" : "fail"}>금지어</span><span className={validation.spellingOk ? "pass" : "fail"} title={validation.spellingIssues.join("\n")}>맞춤법 {validation.spellingOk ? "정상" : `${validation.spellingIssues.length}건`}</span><span className={!validation.repeated.length ? "pass" : "fail"}>반복</span><span className={!similarStudents.length ? "pass" : "fail"}>최대 중복 {closest?.score ? `${Math.round(closest.score * 100)}%` : "0%"}</span></div>{closest?.score > 0 && <div className="similarity-detail"><strong>{closest.student.name} 학생과 {Math.round(closest.score * 100)}%</strong>{closest.overlaps.length > 0 && <span>겹치는 표현: {closest.overlaps.join(" · ")}</span>}</div>}{!validation.spellingOk && <ul className="spelling-issues">{validation.spellingIssues.map((issue, issueIndex) => <li key={issueIndex}>{issue}</li>)}</ul>}<button className="history-button" disabled={!record.behavior} onClick={() => void loadHistory(student.id, student.name)}>이전 기록</button><button className={record.confirmed ? "confirmed" : ""} disabled={!validation.valid || !!similarStudents.length || !!rewriteBusyKey} onMouseDown={(event) => event.preventDefault()} onClick={() => void saveRecord(student.id, record, !record.confirmed)}>{record.confirmed ? "확정됨 ✓" : "최종 확정"}</button></td></tr>;
               })}</tbody>
             </table>
           </div>
@@ -1753,79 +1714,6 @@ type PrivacySummary = {
   counts: { students: number; plans: number; levels: number; comments: number; behaviors: number };
 };
 
-type PilotAggregate = {
-  participants: number; responses: number; timeReduction: number; usablePercent: number;
-  satisfaction: number; reusePercent: number;
-  targets: { timeReduction: boolean; usablePercent: boolean; satisfaction: boolean; reusePercent: boolean };
-};
-
-function PilotFeedback() {
-  const [form, setForm] = useState({ beforeMinutes: 180, actualMinutes: 90, usablePercent: 80, satisfaction: 4, reuseIntent: true, feedback: "" });
-  const [aggregate, setAggregate] = useState<PilotAggregate | null>(null);
-  const [latestAt, setLatestAt] = useState("");
-  const [message, setMessage] = useState("");
-  const [busy, setBusy] = useState(false);
-  useEffect(() => {
-    fetch("/api/pilot-feedback").then(async (response) => {
-      const result = await response.json() as { latest?: typeof form & { submittedAt: string }; aggregate?: PilotAggregate; error?: string };
-      if (!response.ok) throw new Error(result.error || "파일럿 결과를 불러오지 못했습니다.");
-      if (result.latest) {
-        setForm(({ ...result.latest, feedback: result.latest!.feedback ?? "" }));
-        setLatestAt(result.latest.submittedAt);
-      }
-      setAggregate(result.aggregate ?? null);
-    }).catch((error: Error) => setMessage(error.message));
-  }, []);
-  const update = <K extends keyof typeof form>(key: K, value: (typeof form)[K]) => setForm((current) => ({ ...current, [key]: value }));
-  const submit = async (event: React.FormEvent) => {
-    event.preventDefault();
-    setBusy(true);
-    setMessage("");
-    try {
-      const response = await fetch("/api/pilot-feedback", {
-        method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(form),
-      });
-      const result = await response.json() as { aggregate?: PilotAggregate; error?: string };
-      if (!response.ok) throw new Error(result.error || "파일럿 결과를 저장하지 못했습니다.");
-      setAggregate(result.aggregate ?? null);
-      setLatestAt(new Date().toISOString());
-      setMessage("파일럿 응답을 저장했습니다. 학생 이름이나 작성 내용은 수집하지 않습니다.");
-    } catch (error) {
-      setMessage(error instanceof Error ? error.message : "파일럿 결과를 저장하지 못했습니다.");
-    } finally {
-      setBusy(false);
-    }
-  };
-  const metrics = aggregate ? [
-    { label: "작성 시간 단축", value: `${aggregate.timeReduction}%`, target: "목표 50% 이상", pass: aggregate.targets.timeReduction },
-    { label: "수정 후 사용 가능", value: `${aggregate.usablePercent}%`, target: "목표 80% 이상", pass: aggregate.targets.usablePercent },
-    { label: "교사 만족도", value: `${aggregate.satisfaction} / 5`, target: "목표 4점 이상", pass: aggregate.targets.satisfaction },
-    { label: "재사용 의향", value: `${aggregate.reusePercent}%`, target: "목표 70% 이상", pass: aggregate.targets.reusePercent },
-  ] : [];
-  return <section>
-    <div className="page-heading"><div><p className="eyebrow">TEACHER PILOT</p><h1>교사 파일럿 측정</h1><p>실제 사용 경험을 PRD 성공 지표와 비교합니다. 학생 정보와 생성 문장은 수집하지 않습니다.</p></div></div>
-    {message && <p className="student-message">{message}</p>}
-    <div className="pilot-layout">
-      <form className="pilot-form" onSubmit={(event) => void submit(event)}>
-        <div className="section-heading"><div><p className="eyebrow">MY RESPONSE</p><h2>이번 학급 사용 결과</h2></div>{latestAt && <small>마지막 제출 {new Date(latestAt).toLocaleString("ko-KR")}</small>}</div>
-        <div className="pilot-fields">
-          <label><span>기존 방식 예상 시간(분)</span><input type="number" min="1" max="3000" value={form.beforeMinutes} onChange={(event) => update("beforeMinutes", Number(event.target.value))} required /></label>
-          <label><span>기록샘 실제 소요 시간(분)</span><input type="number" min="1" max="3000" value={form.actualMinutes} onChange={(event) => update("actualMinutes", Number(event.target.value))} required /></label>
-          <label><span>수정 후 사용 가능 문장 비율(%)</span><input type="number" min="0" max="100" value={form.usablePercent} onChange={(event) => update("usablePercent", Number(event.target.value))} required /></label>
-          <label><span>전반적 만족도</span><select value={form.satisfaction} onChange={(event) => update("satisfaction", Number(event.target.value))}>{[1, 2, 3, 4, 5].map((score) => <option key={score} value={score}>{score}점</option>)}</select></label>
-        </div>
-        <label className="pilot-reuse"><input type="checkbox" checked={form.reuseIntent} onChange={(event) => update("reuseIntent", event.target.checked)} /><span>다음 학기에도 기록샘을 사용할 의향이 있습니다.</span></label>
-        <label><span>개선 의견(선택)</span><textarea maxLength={2000} value={form.feedback} onChange={(event) => update("feedback", event.target.value)} placeholder="시간이 오래 걸린 단계, 수정이 필요했던 표현, 원하는 기능 등을 적어 주세요." /></label>
-        <button disabled={busy}>{busy ? "저장 중…" : "파일럿 응답 저장"}</button>
-      </form>
-      <section className="pilot-results">
-        <div className="section-heading"><div><p className="eyebrow">SUCCESS METRICS</p><h2>누적 성공 지표</h2></div></div>
-        {aggregate?.responses ? <><p>교사 {aggregate.participants}명 · 응답 {aggregate.responses}건</p><div className="pilot-metrics">{metrics.map((metric) => <article className={metric.pass ? "pass" : "pending"} key={metric.label}><span>{metric.label}</span><strong>{metric.value}</strong><small>{metric.pass ? "목표 달성" : metric.target}</small></article>)}</div></> : <p className="pilot-empty">아직 실제 파일럿 응답이 없습니다. 첫 응답이 제출되면 목표 달성 여부를 계산합니다.</p>}
-      </section>
-    </div>
-  </section>;
-}
-
 function SchoolTeam() {
   type Member = { id: number; email: string; role: "admin" | "teacher"; status: "invited" | "active"; isMe: boolean };
   const [organization, setOrganization] = useState<{ name: string } | null>(null);
@@ -1847,7 +1735,7 @@ function SchoolTeam() {
       setMessage(error instanceof Error ? error.message : "학교 구성원을 불러오지 못했습니다.");
     }
   };
-  useEffect(() => { void load(); }, []);
+  useEffect(() => { queueMicrotask(() => void load()); }, []);
   const invite = async (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     setBusy(true); setMessage("");
@@ -1891,7 +1779,7 @@ function PrivacySettings({ currentName, onNameChanged }: { currentName: string; 
   const [password, setPassword] = useState("");
   const [passwordConfirmation, setPasswordConfirmation] = useState("");
   const [displayName, setDisplayName] = useState(currentName);
-  useEffect(() => setDisplayName(currentName), [currentName]);
+  useEffect(() => { queueMicrotask(() => setDisplayName(currentName)); }, [currentName]);
   useEffect(() => {
     fetch("/api/privacy-data").then(async (response) => {
       const result = await response.json() as PrivacySummary & { error?: string };

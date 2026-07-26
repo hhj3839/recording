@@ -11,7 +11,7 @@ export default function ResetPasswordPage() {
     const accessToken = hash.get("access_token");
     const refreshToken = hash.get("refresh_token");
     if (!accessToken || !refreshToken) {
-      setMessage("재설정 링크가 올바르지 않거나 만료되었습니다.");
+      queueMicrotask(() => setMessage("재설정 링크가 올바르지 않거나 만료되었습니다."));
       return;
     }
     fetch("/api/auth/session", {

@@ -34,7 +34,8 @@ export async function getAuthUser(): Promise<AuthUser | null> {
   let token = cookieStore.get(ACCESS_COOKIE)?.value;
   if (!token) return null;
   const client = createAuthClient();
-  let { data, error } = await client.auth.getUser(token);
+  const { data: initialData, error } = await client.auth.getUser(token);
+  let data = initialData;
   if (error || !data.user?.email) {
     const refreshToken = cookieStore.get(REFRESH_COOKIE)?.value;
     if (!refreshToken) return null;
