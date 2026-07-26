@@ -1,6 +1,13 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { hasCompleteEvidenceCoverage, validateGeneratedComment } from "../app/comment-generation-policy.ts";
+import { generationModel } from "../app/ai-model-policy.ts";
+
+test("uses GPT-5.4 mini first and Terra only for the final retry", () => {
+  assert.equal(generationModel(0, 3), "gpt-5.4-mini");
+  assert.equal(generationModel(1, 3), "gpt-5.4-mini");
+  assert.equal(generationModel(2, 3), "gpt-5.6-terra");
+});
 
 test("accepts coverage only when every expected assessment item is present", () => {
   assert.equal(hasCompleteEvidenceCoverage(["e1", "e2", "e3"], ["e3", "e1", "e2"]), true);

@@ -3,6 +3,7 @@ import { checkAiUsage, recordAiUsage } from "../../ai-usage";
 import { createBehaviorVariations } from "../../behavior-variation";
 import { validateBehaviorSource, validateRecord } from "../../record-validation";
 import { eq, selectRows } from "../../../db/supabase";
+import { primaryAiModel } from "../../ai-model-policy";
 
 function extractOutputText(payload: unknown): string {
   if (!payload || typeof payload !== "object") return "";
@@ -46,7 +47,7 @@ export async function POST(request: Request) {
       method: "POST",
       headers: { Authorization: `Bearer ${apiKey}`, "Content-Type": "application/json" },
       body: JSON.stringify({
-        model: process.env.OPENAI_MODEL || "gpt-5.6-terra",
+        model: primaryAiModel(),
         reasoning: { effort: "low" },
         store: false,
         max_output_tokens: 1200,

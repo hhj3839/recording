@@ -3,6 +3,7 @@ import { eq, selectRows, updateRows } from "../../../../db/supabase";
 import { getAiUsage, MONTHLY_AI_LIMIT, recordAiUsage } from "../../../ai-usage";
 import { selectMostDiverseComments } from "../../../comment-diversity";
 import { CommentEvidence, GeneratedComment, generateCommentBatch, saveGeneratedComments, signCommentJob, verifyCommentJob } from "../../../comment-generation";
+import { generationModel } from "../../../ai-model-policy";
 
 export const maxDuration = 300;
 const MAX_GENERATION_ATTEMPTS = 3;
@@ -81,7 +82,7 @@ export async function POST(request: Request) {
       break;
     }
     try {
-      const generated = await generateCommentBatch(pending, avoidComments, attempt > 0);
+      const generated = await generateCommentBatch(pending, avoidComments, attempt > 0, generationModel(attempt, MAX_GENERATION_ATTEMPTS));
       comments = [...comments, ...generated];
       const generatedKeys = new Set(generated.map((item) => `${item.studentId}|${item.subject}`));
       pending = pending.filter((item) => !generatedKeys.has(`${item.studentId}|${item.subject}`));

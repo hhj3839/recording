@@ -2,6 +2,7 @@ import { eq, selectRows, upsertRows } from "../../../db/supabase";
 import { dataError, getDataScope, requireOwnedStudentIds } from "../../data-scope";
 import { checkAiUsage, recordAiUsage } from "../../ai-usage";
 import { archiveComment } from "../../record-revisions";
+import { primaryAiModel } from "../../ai-model-policy";
 
 type Level = "상" | "중" | "하" | "미응시" | "평가 예정" | "-";
 type ScoreStudent = { studentId: number; levels: Level[] };
@@ -57,7 +58,7 @@ export async function POST(request: Request) {
       method: "POST",
       headers: { Authorization: `Bearer ${apiKey}`, "Content-Type": "application/json" },
       body: JSON.stringify({
-        model: process.env.OPENAI_MODEL || "gpt-5.6-terra",
+        model: primaryAiModel(),
         reasoning: { effort: "low" },
         store: false,
         max_output_tokens: Math.min(10000, Math.max(1200, evidence.length * 220)),

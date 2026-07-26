@@ -2,6 +2,7 @@ import { dataError, getDataScope } from "../../data-scope";
 import { checkAiUsage, recordAiUsage } from "../../ai-usage";
 import { createCommentVariations } from "../../comment-variation";
 import { eq, selectRows } from "../../../db/supabase";
+import { primaryAiModel } from "../../ai-model-policy";
 
 type Level = "상" | "중" | "하" | "미응시" | "평가 예정" | "-";
 
@@ -143,7 +144,7 @@ export async function POST(request: Request) {
         "Content-Type": "application/json",
       },
       body: JSON.stringify({
-        model: process.env.OPENAI_MODEL || "gpt-5.6-terra",
+        model: primaryAiModel(),
         reasoning: { effort: "low" },
         store: false,
         max_output_tokens: 300,

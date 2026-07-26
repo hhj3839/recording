@@ -3,6 +3,7 @@ import { upsertRows } from "../db/supabase";
 import { hasCompleteEvidenceCoverage, validateGeneratedComment } from "./comment-generation-policy";
 import { CommentVariation } from "./comment-variation";
 import { archiveComment } from "./record-revisions";
+import { primaryAiModel } from "./ai-model-policy";
 
 export type CommentEvidence = { studentId: number; subject: string; items: string[]; variation?: CommentVariation };
 export type GeneratedComment = { studentId: number; subject: string; comment: string; candidates: string[] };
@@ -16,7 +17,7 @@ function extractOutputText(payload: unknown): string {
     .map((item) => item.text).join("").trim();
 }
 
-export async function generateCommentBatch(evidence: CommentEvidence[], avoidComments: string[] = [], repair = false) {
+export async function generateCommentBatch(evidence: CommentEvidence[], avoidComments: string[] = [], repair = false, model = primaryAiModel()) {
   const apiKey = process.env.OPENAI_API_KEY;
   if (!apiKey) throw new Error("AI 생성 설정이 아직 완료되지 않았습니다.");
   const evidenceItems = [...new Set(evidence.flatMap((item) => item.items))];
@@ -35,7 +36,7 @@ export async function generateCommentBatch(evidence: CommentEvidence[], avoidCom
     method: "POST",
     headers: { Authorization: `Bearer ${apiKey}`, "Content-Type": "application/json" },
     body: JSON.stringify({
-      model: process.env.OPENAI_MODEL || "gpt-5.6-terra",
+      model,
       reasoning: { effort: "none" },
       store: false,
       max_output_tokens: 10000,

@@ -3,6 +3,7 @@ import { eq, selectRows, updateRows } from "../../../../db/supabase";
 import { getAiUsage, MONTHLY_AI_LIMIT, recordAiUsage } from "../../../ai-usage";
 import { BehaviorInput, GeneratedBehavior, generateBehaviorBatch, saveGeneratedBehaviors } from "../../../behavior-generation";
 import { signCommentJob, verifyCommentJob } from "../../../comment-generation";
+import { generationModel } from "../../../ai-model-policy";
 
 export const maxDuration = 300;
 const MAX_GENERATION_ATTEMPTS = 3;
@@ -53,7 +54,7 @@ export async function POST(request: Request) {
       break;
     }
     try {
-      const generated = await generateBehaviorBatch(pending, avoidBehaviors);
+      const generated = await generateBehaviorBatch(pending, avoidBehaviors, generationModel(attempt, MAX_GENERATION_ATTEMPTS));
       behaviors = [...behaviors, ...generated];
       const generatedIds = new Set(generated.map((item) => item.studentId));
       pending = pending.filter((item) => !generatedIds.has(item.studentId));

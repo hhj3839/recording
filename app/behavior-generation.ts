@@ -2,6 +2,7 @@ import { upsertRows } from "../db/supabase";
 import { BehaviorVariation } from "./behavior-variation";
 import { archiveBehavior } from "./record-revisions";
 import { validateBehaviorSource, validateRecord } from "./record-validation";
+import { primaryAiModel } from "./ai-model-policy";
 
 export type BehaviorOptions = { sentenceCount: number; maxBytes: number; emphasis: "balanced" | "strength" | "growth" };
 export type BehaviorInput = { studentId: number; characteristic: string; options?: BehaviorOptions; variation?: BehaviorVariation };
@@ -16,7 +17,7 @@ function outputText(payload: unknown) {
     .map((item) => item.text).join("").trim();
 }
 
-export async function generateBehaviorBatch(inputs: BehaviorInput[], avoidBehaviors: string[] = []) {
+export async function generateBehaviorBatch(inputs: BehaviorInput[], avoidBehaviors: string[] = [], model = primaryAiModel()) {
   if (inputs.some((item) => !validateBehaviorSource(item.characteristic).valid)) {
     throw new Error("금지 내용이나 개인정보가 포함된 관찰 사실은 AI로 전송할 수 없습니다.");
   }
@@ -27,7 +28,7 @@ export async function generateBehaviorBatch(inputs: BehaviorInput[], avoidBehavi
     method: "POST",
     headers: { Authorization: `Bearer ${apiKey}`, "Content-Type": "application/json" },
     body: JSON.stringify({
-      model: process.env.OPENAI_MODEL || "gpt-5.6-terra",
+      model,
       reasoning: { effort: "low" },
       store: false,
       max_output_tokens: Math.min(7000, Math.max(1800, inputs.length * 700)),
