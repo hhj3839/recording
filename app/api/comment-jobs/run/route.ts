@@ -78,11 +78,8 @@ export async function POST(request: Request) {
       errorMessage = error instanceof Error ? error.message : "AI 생성 오류";
     }
   }
-  comments = selectMostDiverseComments(comments, avoidComments).map((item) => {
-    const source = batch.find((entry) => entry.studentId === item.studentId && entry.subject === item.subject);
-    const visibleCandidateCount = source?.options?.candidateCount ?? 1;
-    return { ...item, candidates: item.candidates.slice(0, visibleCandidateCount) };
-  });
+  comments = selectMostDiverseComments(comments, avoidComments)
+    .map((item) => ({ ...item, candidates: item.candidates.slice(0, 1) }));
   if (comments.length) {
     await saveGeneratedComments({
       ownerId: job.owner_id,
