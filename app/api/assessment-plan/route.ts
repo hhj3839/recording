@@ -15,6 +15,7 @@ type PlanInput = {
   low?: unknown;
   caution?: unknown;
   sortOrder?: unknown;
+  confirmAffected?: unknown;
 };
 
 const text = (value: unknown) => typeof value === "string" ? value.trim() : "";
@@ -108,6 +109,21 @@ export async function PATCH(request: Request) {
     const error = validate(item);
     if (error) return Response.json({ error }, { status: 400 });
     const { user, classId } = await getDataScope();
+    const target = (await selectRows<{ subject: string; unit: string }>("assessment_plans", {
+      id: eq(id), owner_id: eq(user.id), class_id: eq(classId), limit: 1,
+    }))[0];
+    if (!target) return Response.json({ error: "수정 권한이 없거나 평가계획이 없습니다." }, { status: 404 });
+    if (item.confirmAffected !== true) {
+      const levels = await selectRows<{ id: number }>("assessment_levels", {
+        owner_id: eq(user.id), class_id: eq(classId), subject: eq(target.subject), limit: 1,
+      });
+      if (levels.length) {
+        return Response.json({
+          error: `${target.subject}에 학생 평가수준이 입력되어 있습니다. 평가 기준을 수정하면 이후 생성되는 평어의 근거가 달라질 수 있습니다.`,
+          requiresConfirmation: true,
+        }, { status: 409 });
+      }
+    }
     const rows = await updateRows<Record<string, unknown>>("assessment_plans", {
       id: eq(id), owner_id: eq(user.id), class_id: eq(classId),
     }, fields(item));

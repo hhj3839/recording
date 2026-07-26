@@ -125,6 +125,22 @@ test("로그인부터 명단·평가계획·평가수준·교과 평어 화면�
     expect((await levelResponse).ok()).toBeTruthy();
     await expect(page.getByText("변경사항을 저장했습니다.")).toBeVisible();
 
+    await navigate(page, "평가계획 관리", "plans");
+    await page.locator(".plan-card-details summary").click();
+    const goalInput = page.locator(".plan-card-fields input").nth(0);
+    await goalInput.fill("상황에 맞는 표현을 활용하여 자연스럽게 발표할 수 있다.");
+    page.once("dialog", async (dialog) => {
+      expect(dialog.message()).toMatch(/학생 평가수준이 입력되어 있습니다/);
+      await dialog.accept();
+    });
+    const confirmedPlanUpdate = page.waitForResponse((response) =>
+      response.url().endsWith("/api/assessment-plan")
+      && response.request().method() === "PATCH"
+      && response.status() === 200);
+    await page.getByRole("button", { name: "수정 저장" }).click();
+    expect((await confirmedPlanUpdate).ok()).toBeTruthy();
+    await expect(page.getByText("평가계획을 수정했습니다.")).toBeVisible();
+
     const classData = await (await page.request.get("/api/class-data")).json() as {
       students: Array<{ id: number; number: number; name: string }>;
     };

@@ -537,10 +537,20 @@ function PlanManager({ plan, onChanged, current }: { plan: AssessmentPlan[]; onC
   const updateItem = async (item: AssessmentPlan) => {
     setBusy(true);
     try {
-      const response = await fetch("/api/assessment-plan", {
-        method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify(item),
+      const requestUpdate = (confirmAffected = false) => fetch("/api/assessment-plan", {
+        method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ ...item, confirmAffected }),
       });
-      const result = await response.json() as { item?: AssessmentPlan; error?: string };
+      let response = await requestUpdate();
+      let result = await response.json() as { item?: AssessmentPlan; error?: string; requiresConfirmation?: boolean };
+      if (response.status === 409 && result.requiresConfirmation) {
+        const confirmed = window.confirm(`${result.error}\n\n그래도 수정하시겠습니까? 기존 평가수준은 유지됩니다.`);
+        if (!confirmed) {
+          setMessage("평가계획 수정을 취소했습니다.");
+          return;
+        }
+        response = await requestUpdate(true);
+        result = await response.json() as typeof result;
+      }
       if (!response.ok || !result.item) throw new Error(result.error || "수정하지 못했습니다.");
       onChanged(plan.map((current) => current.id === item.id ? result.item! : current));
       setMessage("평가계획을 수정했습니다.");
