@@ -55,11 +55,11 @@ const request = async (route, options = {}) => {
   return data;
 };
 
-if (mode === "start" || mode === "sample" || mode === "preflight") {
+if (mode === "start" || mode === "subject" || mode === "sample" || mode === "preflight") {
   const [classData, planData] = await Promise.all([request("/api/class-data"), request("/api/assessment-plan")]);
   if (classData.students.length !== 25) throw new Error(`Expected 25 active students, found ${classData.students.length}`);
   const subjects = [...new Set(planData.plan.map((item) => item.subject))];
-  const selectedSubjects = mode === "sample" ? subjects.slice(0, 1) : subjects;
+  const selectedSubjects = mode === "sample" || mode === "subject" ? subjects.slice(0, 1) : subjects;
   const selectedStudents = mode === "sample" ? classData.students.slice(0, 5) : classData.students;
   const planCounts = Object.fromEntries(selectedSubjects.map((subject) => [subject, planData.plan.filter((item) => item.subject === subject).length]));
   const levelLookup = new Map(classData.levels.map((item) => [`${item.studentId}|${item.subject}|${item.assessmentIndex}`, item.level]));
