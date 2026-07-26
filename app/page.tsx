@@ -1677,6 +1677,8 @@ function PrivacySettings() {
   const [accountConfirmation, setAccountConfirmation] = useState("");
   const [message, setMessage] = useState("");
   const [busy, setBusy] = useState(false);
+  const [password, setPassword] = useState("");
+  const [passwordConfirmation, setPasswordConfirmation] = useState("");
   useEffect(() => {
     fetch("/api/privacy-data").then(async (response) => {
       const result = await response.json() as PrivacySummary & { error?: string };
@@ -1706,6 +1708,24 @@ function PrivacySettings() {
       setMessage(error instanceof Error ? error.message : "삭제하지 못했습니다.");
     } finally { setBusy(false); }
   };
+  const changePassword = async (event: React.FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    if (password !== passwordConfirmation) return setMessage("새 비밀번호와 확인 값이 일치하지 않습니다.");
+    setBusy(true);
+    setMessage("");
+    try {
+      const response = await fetch("/api/auth/password", {
+        method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ password }),
+      });
+      const result = await response.json() as { error?: string };
+      if (!response.ok) throw new Error(result.error || "비밀번호를 변경하지 못했습니다.");
+      setPassword("");
+      setPasswordConfirmation("");
+      setMessage("비밀번호를 변경했습니다.");
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : "비밀번호를 변경하지 못했습니다.");
+    } finally { setBusy(false); }
+  };
   const countItems = summary ? [
     ["학생", summary.counts.students], ["평가계획", summary.counts.plans], ["평가수준", summary.counts.levels],
     ["교과 평어", summary.counts.comments], ["행동특성", summary.counts.behaviors],
@@ -1722,6 +1742,12 @@ function PrivacySettings() {
       <ul className="security-list"><li>로그인 세션은 보안 쿠키로 관리됩니다.</li><li>OpenAI API 키와 Supabase 관리 키는 서버에만 저장됩니다.</li><li>모든 조회·수정 요청에서 교사 ID와 학급 ID를 함께 확인합니다.</li></ul>
       <nav className="privacy-legal-links"><a href="/privacy" target="_blank">개인정보 처리방침</a><a href="/terms" target="_blank">서비스 이용약관</a></nav>
     </section>
+    <form className="account-security-card" onSubmit={(event) => void changePassword(event)}>
+      <div><p className="eyebrow">ACCOUNT SECURITY</p><h2>비밀번호 변경</h2><p>12자 이상이며 영문 대문자·소문자·숫자를 각각 포함해 주세요.</p></div>
+      <label><span>새 비밀번호</span><input type="password" minLength={12} pattern="(?=.*[a-z])(?=.*[A-Z])(?=.*\d).{12,}" value={password} onChange={(event) => setPassword(event.target.value)} autoComplete="new-password" required /></label>
+      <label><span>새 비밀번호 확인</span><input type="password" minLength={12} value={passwordConfirmation} onChange={(event) => setPasswordConfirmation(event.target.value)} autoComplete="new-password" required /></label>
+      <button disabled={busy || !password || password !== passwordConfirmation}>{busy ? "변경 중…" : "비밀번호 변경"}</button>
+    </form>
     <div className="danger-grid">
       <section className="danger-card">
         <h2>현재 학급 자료 삭제</h2>

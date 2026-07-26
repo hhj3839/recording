@@ -54,6 +54,12 @@ test("all sensitive read APIs reject unauthenticated access", async () => {
     const response = await fetch(`${baseUrl}${route}`, { redirect: "manual" });
     assert.equal([307, 401].includes(response.status), true, `${route} returned ${response.status}`);
   }
+  const passwordChange = await fetch(`${baseUrl}/api/auth/password`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ password: "Unauthorized123" }),
+  });
+  assert.equal(passwordChange.status, 401);
 });
 
 test("foreign identifiers cannot mutate or reveal classroom data", async () => {

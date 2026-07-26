@@ -43,7 +43,8 @@ export default function ResetPasswordPage() {
     <div className="auth-brand">기록샘</div><h1>비밀번호 재설정</h1>
     {message && <p role="status">{message}</p>}
     {ready && <form className="auth-form" onSubmit={submit}>
-      <label>새 비밀번호<input name="password" type="password" minLength={8} required autoComplete="new-password" /></label>
+      <label>새 비밀번호<input name="password" type="password" minLength={12} pattern="(?=.*[a-z])(?=.*[A-Z])(?=.*\d).{12,}" title="12자 이상이며 영문 대문자·소문자·숫자를 각각 포함해 주세요." required autoComplete="new-password" /></label>
+      <small>12자 이상 · 영문 대문자·소문자·숫자 포함</small>
       <button className="auth-submit">비밀번호 변경</button>
     </form>}
   </section></main>;
