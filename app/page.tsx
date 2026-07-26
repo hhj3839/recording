@@ -903,27 +903,6 @@ function Assessments({ data, setData, plan, activeSubject, setActiveSubject, onD
   );
 }
 
-type RevisionItem = {
-  id: number;
-  content: string;
-  characteristic: string;
-  confirmed: boolean;
-  source: string;
-  createdAt: string;
-};
-
-function RevisionPanel({ title, revisions, onRestore, onClose }: { title: string; revisions: RevisionItem[]; onRestore: (revision: RevisionItem) => void; onClose: () => void }) {
-  const sourceLabel: Record<string, string> = { "manual-edit": "직접 수정", "ai-regeneration": "AI 다시 생성", confirmation: "최종 확정" };
-  return <aside className="revision-panel">
-    <div className="revision-head"><div><p className="eyebrow">VERSION HISTORY</p><h3>{title} 이전 기록</h3></div><button onClick={onClose}>닫기</button></div>
-    {revisions.length ? <div className="revision-list">{revisions.map((revision) => <article key={revision.id}>
-      <div><span>{new Intl.DateTimeFormat("ko-KR", { dateStyle: "short", timeStyle: "short" }).format(new Date(revision.createdAt))}</span><small>{sourceLabel[revision.source] ?? revision.source}{revision.confirmed ? " · 확정본" : ""}</small></div>
-      <p>{revision.content}</p>
-      <button onClick={() => onRestore(revision)}>이 버전 복원</button>
-    </article>)}</div> : <p className="revision-empty">저장된 이전 기록이 없습니다.</p>}
-  </aside>;
-}
-
 function Comments({ assessmentDataBySubject, plan, roster }: { assessmentDataBySubject: Record<string, AssessmentStudent[]>; plan: AssessmentPlan[]; roster: AssessmentStudent[] }) {
   type CommentJob = { id: string; status: string; totalItems: number; completedItems: number; failedItems: number; totalBatches: number; currentBatch: number; error?: string; completedAt?: string | null };
   const subjects = [...new Set(plan.map((item) => item.subject))];
@@ -1141,7 +1120,6 @@ function Behavior({ roster }: { roster: AssessmentStudent[] }) {
   const [referenceOpen, setReferenceOpen] = useState(true);
   const [activeCategory, setActiveCategory] = useState(behaviorReferences[0].category);
   const [activeStudentId, setActiveStudentId] = useState<number | null>(roster[0]?.id ?? null);
-  const [history, setHistory] = useState<{ studentId: number; studentName: string; revisions: RevisionItem[] } | null>(null);
   const [rewriteBusyKey, setRewriteBusyKey] = useState("");
   const loadBehaviors = async () => {
     try {
@@ -1286,21 +1264,8 @@ function Behavior({ roster }: { roster: AssessmentStudent[] }) {
     ? new Intl.DateTimeFormat("ko-KR", { month: "numeric", day: "numeric", hour: "numeric", minute: "2-digit" }).format(new Date(lastGeneratedAt))
     : "";
   const loadHistory = async (studentId: number, studentName: string) => {
-    try {
-      const response = await fetch(`/api/revisions?type=behavior&studentId=${studentId}`);
-      const result = await response.json() as { revisions?: RevisionItem[]; error?: string };
-      if (!response.ok) throw new Error(result.error || "이전 기록을 불러오지 못했습니다.");
-      setHistory({ studentId, studentName, revisions: result.revisions ?? [] });
-    } catch (reason) {
-      setError(reason instanceof Error ? reason.message : "이전 기록을 불러오지 못했습니다.");
-    }
-  };
-  const restoreBehavior = async (revision: RevisionItem) => {
-    if (!history) return;
-    const restored: BehaviorRecord = { characteristic: revision.characteristic, behavior: revision.content, confirmed: false };
-    updateRecord(history.studentId, restored);
-    await saveRecord(history.studentId, restored, false);
-    setHistory(null);
+    void studentId;
+    void studentName;
   };
   const blockedSourceCount = roster.filter((student) => {
     const characteristic = records[student.id]?.characteristic?.trim() ?? "";
@@ -1317,12 +1282,11 @@ function Behavior({ roster }: { roster: AssessmentStudent[] }) {
       <div className="review-content behavior-table-content">
         <div className="workspace-toolbar behavior-table-toolbar"><span><strong>생성 대상 {eligibleStudentIds.length}/{roster.length}명</strong> · 특성을 입력한 학생은 자동 포함 · 500~550B 자동 작성</span><div><button className="reference-open-button" onClick={() => setReferenceOpen((current) => !current)}>{referenceOpen ? "참고자료 닫기" : "참고자료 열기"}</button><button className="copy-comments" onClick={() => void copyBehaviors()} disabled={!roster.some((student) => records[student.id]?.behavior)}>{copied ? "복사됨 ✓" : "행동특성만 복사하기"}</button></div></div>
         {error && <p className="generation-error">! {error}</p>}
-        {history && <RevisionPanel title={history.studentName} revisions={history.revisions} onRestore={(revision) => void restoreBehavior(revision)} onClose={() => setHistory(null)} />}
         {loading && <div className="comment-loading class-loading"><span>✦</span><p>입력된 모든 학생의 행동특성을 생성하고 있어요.</p></div>}
         <div className={`behavior-work-area ${referenceOpen ? "with-reference" : ""}`}>
           <div className="comments-table-wrap">
             <table className="comments-table behavior-table">
-              <thead><tr><th>번호</th><th>이름</th><th>특성</th><th>행동특성</th><th>검수·확정</th></tr></thead>
+              <thead><tr><th>번호</th><th>이름</th><th>특성</th><th>행동특성</th><th>검수</th></tr></thead>
               <tbody>{roster.map((student) => {
                 const record = records[student.id] ?? emptyBehaviorRecord();
                 const validation = validateRecord(record.behavior, true);
