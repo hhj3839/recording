@@ -50,6 +50,7 @@ const protectedReads = [
   "/api/auth/preferences",
   "/api/school-members",
   "/api/shared-assessment-plans",
+  "/api/classroom-collaborators",
 ];
 
 test("all sensitive read APIs reject unauthenticated access", async () => {

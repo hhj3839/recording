@@ -294,6 +294,63 @@ function ClassroomManager({ current }: { current: ClassroomInfo | null }) {
         </form>
       </section>
     </div>
+    <ClassroomCollaboration />
+  </section>;
+}
+
+function ClassroomCollaboration() {
+  type Collaborator = { id: number; email: string; role: "homeroom" | "subject"; subjects: string[]; canManageStudents: boolean };
+  const [collaborators, setCollaborators] = useState<Collaborator[]>([]);
+  const [members, setMembers] = useState<Array<{ id: number; email: string }>>([]);
+  const [subjects, setSubjects] = useState<string[]>([]);
+  const [memberId, setMemberId] = useState("");
+  const [role, setRole] = useState<"homeroom" | "subject">("subject");
+  const [selectedSubjects, setSelectedSubjects] = useState<string[]>([]);
+  const [canManageStudents, setCanManageStudents] = useState(false);
+  const [message, setMessage] = useState("");
+  const [busy, setBusy] = useState(false);
+  const load = async () => {
+    try {
+      const response = await fetch("/api/classroom-collaborators");
+      const result = await response.json() as { collaborators?: Collaborator[]; availableMembers?: Array<{ id: number; email: string }>; subjects?: string[]; error?: string };
+      if (!response.ok) throw new Error(result.error || "학급 협업 권한을 불러오지 못했습니다.");
+      setCollaborators(result.collaborators ?? []); setMembers(result.availableMembers ?? []); setSubjects(result.subjects ?? []);
+      setMemberId((current) => current || String(result.availableMembers?.[0]?.id ?? ""));
+    } catch (error) { setMessage(error instanceof Error ? error.message : "학급 협업 권한을 불러오지 못했습니다."); }
+  };
+  useEffect(() => { void load(); }, []);
+  const save = async (event: React.FormEvent<HTMLFormElement>) => {
+    event.preventDefault(); setBusy(true); setMessage("");
+    try {
+      const response = await fetch("/api/classroom-collaborators", {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ memberId: Number(memberId), role, subjects: selectedSubjects, canManageStudents }),
+      });
+      const result = await response.json() as { error?: string };
+      if (!response.ok) throw new Error(result.error || "협업 권한을 저장하지 못했습니다.");
+      setSelectedSubjects([]); setCanManageStudents(false); setMessage("학급 협업 권한을 저장했습니다."); await load();
+    } catch (error) { setMessage(error instanceof Error ? error.message : "협업 권한을 저장하지 못했습니다."); }
+    finally { setBusy(false); }
+  };
+  const remove = async (item: Collaborator) => {
+    if (!window.confirm(`${item.email} 교사의 학급 협업 권한을 해제할까요?`)) return;
+    const response = await fetch("/api/classroom-collaborators", {
+      method: "DELETE", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ id: item.id }),
+    });
+    const result = await response.json() as { error?: string };
+    if (!response.ok) return setMessage(result.error || "협업 권한을 해제하지 못했습니다.");
+    await load();
+  };
+  return <section className="class-collaboration-card">
+    <div className="section-heading"><div><p className="eyebrow">CLASS COLLABORATION</p><h2>담임·교과전담 협업 권한</h2><p>학교 작업공간에 가입 완료된 교사에게 현재 학급의 역할과 담당 과목을 지정합니다.</p></div></div>
+    {message && <p className="student-message">{message}</p>}
+    <form onSubmit={(event) => void save(event)}>
+      <label><span>협업 교사</span><select value={memberId} onChange={(event) => setMemberId(event.target.value)} required><option value="">교사 선택</option>{members.map((member) => <option value={member.id} key={member.id}>{member.email}</option>)}</select></label>
+      <label><span>역할</span><select value={role} onChange={(event) => setRole(event.target.value as "homeroom" | "subject")}><option value="subject">교과전담</option><option value="homeroom">공동 담임</option></select></label>
+      {role === "subject" ? <fieldset><legend>담당 과목</legend>{subjects.map((subject) => <label key={subject}><input type="checkbox" checked={selectedSubjects.includes(subject)} onChange={(event) => setSelectedSubjects((current) => event.target.checked ? [...current, subject] : current.filter((item) => item !== subject))} />{subject}</label>)}</fieldset> : <label className="manage-students"><input type="checkbox" checked={canManageStudents} onChange={(event) => setCanManageStudents(event.target.checked)} /><span>학생 명단 관리 허용</span></label>}
+      <button disabled={busy || !memberId || (role === "subject" && !selectedSubjects.length)}>{busy ? "저장 중…" : "협업 권한 부여"}</button>
+    </form>
+    <div className="class-collaborator-list">{collaborators.length ? collaborators.map((item) => <article key={item.id}><div><strong>{item.email}</strong><span>{item.role === "homeroom" ? `공동 담임${item.canManageStudents ? " · 학생 관리" : ""}` : `교과전담 · ${item.subjects.join(", ")}`}</span></div><button onClick={() => void remove(item)}>권한 해제</button></article>) : <p>현재 학급에 지정된 협업 교사가 없습니다.</p>}</div>
   </section>;
 }
 

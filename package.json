@@ -30,7 +30,8 @@
     "db:migrate-behavior-evidence": "node scripts/migrate-behavior-evidence-validation.mjs",
     "db:migrate-comment-candidates": "node scripts/migrate-comment-candidates.mjs",
     "db:migrate-school-organizations": "node scripts/migrate-school-organizations.mjs",
-    "db:migrate-shared-plans": "node scripts/migrate-shared-assessment-plans.mjs"
+    "db:migrate-shared-plans": "node scripts/migrate-shared-assessment-plans.mjs",
+    "db:migrate-classroom-collaborators": "node scripts/migrate-classroom-collaborators.mjs"
   },
   "dependencies": {
     "@supabase/ssr": "^0.12.3",
