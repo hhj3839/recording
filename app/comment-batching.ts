@@ -1,4 +1,4 @@
-export const COMMENT_BATCH_SIZE = 5;
+export const COMMENT_BATCH_SIZE = 3;
 
 export function batchCommentsBySubject<T extends { subject: string }>(items: T[], size = COMMENT_BATCH_SIZE) {
   if (!Number.isInteger(size) || size < 1) throw new Error("배치 크기는 1 이상의 정수여야 합니다.");
