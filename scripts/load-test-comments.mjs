@@ -61,7 +61,11 @@ if (mode === "start") {
   const result = await request("/api/comment-jobs", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ scores }),
+    body: JSON.stringify({
+      scores,
+      selectedStudentIds: classData.students.map((student) => student.id),
+      options: { candidateCount: 1, sentenceCount: 2, maxBytes: 500, emphasis: "balanced" },
+    }),
   });
   process.stdout.write(`${JSON.stringify({
     mode, startedAt, jobId: result.job.id, status: result.job.status,

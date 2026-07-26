@@ -1,7 +1,7 @@
 import { waitUntil } from "@vercel/functions";
 import { eq, insertRows, selectRows } from "../../../db/supabase";
 import { getAiUsage, MONTHLY_AI_LIMIT } from "../../ai-usage";
-import { CommentEvidence, signCommentJob } from "../../comment-generation";
+import { CommentEvidence, CommentOptions, signCommentJob } from "../../comment-generation";
 import { dataError, getDataScope, requireOwnedStudentIds } from "../../data-scope";
 
 type Level = "상" | "중" | "하" | "미응시" | "평가 예정" | "-";
@@ -62,11 +62,23 @@ export async function GET() {
 
 export async function POST(request: Request) {
   try {
-    const body = await request.json() as { scores?: unknown };
+    const body = await request.json() as { scores?: unknown; selectedStudentIds?: unknown; options?: unknown };
     if (!body.scores || typeof body.scores !== "object" || Array.isArray(body.scores)) {
       return Response.json({ error: "평가 수준을 다시 확인해 주세요." }, { status: 400 });
     }
     const { user, classId } = await getDataScope();
+    const selectedStudentIds = Array.isArray(body.selectedStudentIds)
+      ? [...new Set(body.selectedStudentIds.map(Number).filter(Number.isInteger))]
+      : [];
+    if (!selectedStudentIds.length) return Response.json({ error: "생성할 학생을 한 명 이상 선택해 주세요." }, { status: 400 });
+    const rawOptions = body.options && typeof body.options === "object" ? body.options as Record<string, unknown> : {};
+    const options: CommentOptions = {
+      candidateCount: Math.min(3, Math.max(1, Number(rawOptions.candidateCount) || 1)),
+      sentenceCount: Math.min(4, Math.max(1, Number(rawOptions.sentenceCount) || 2)),
+      maxBytes: Math.min(1500, Math.max(150, Number(rawOptions.maxBytes) || 500)),
+      emphasis: rawOptions.emphasis === "strength" ? "strength" : "balanced",
+    };
+    await requireOwnedStudentIds(selectedStudentIds, user.id, classId);
     const active = await selectRows<JobRow>("generation_jobs", {
       owner_id: eq(user.id),
       class_id: eq(classId),
@@ -91,6 +103,7 @@ export async function POST(request: Request) {
     for (const subject of [...new Set(plan.map((item) => item.subject))]) {
       const subjectPlan = plan.filter((item) => item.subject === subject);
       for (const student of Array.isArray(scores[subject]) ? scores[subject] : []) {
+        if (!selectedStudentIds.includes(student.studentId)) continue;
         if (!Number.isInteger(student.studentId) || !Array.isArray(student.levels) || student.levels.length !== subjectPlan.length) continue;
         const items = subjectPlan.flatMap((item, index) => {
           const level = student.levels[index];
@@ -98,7 +111,7 @@ export async function POST(request: Request) {
           const criterion = level === "상" ? item.high : level === "중" ? item.middle : item.low;
           return [`${item.unit} | ${item.domain} | 목표: ${item.goal} | 관점: ${item.perspective} | 수준: ${level} | 기준: ${criterion}`];
         });
-        if (items.length) evidence.push({ studentId: student.studentId, subject, items });
+        if (items.length) evidence.push({ studentId: student.studentId, subject, items, options });
       }
     }
     if (!evidence.length) return Response.json({ error: "전 과목 중 평가 수준을 한 개 이상 입력해 주세요." }, { status: 400 });

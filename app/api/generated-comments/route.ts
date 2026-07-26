@@ -10,7 +10,7 @@ export async function GET() {
     const rows = await selectRows<Record<string, string | number>>("generated_comments", {
       owner_id: eq(user.id), class_id: eq(classId), order: "student_id.asc,subject.asc",
     });
-    return Response.json({ comments: rows.map((row) => ({ studentId: row.student_id, subject: row.subject, comment: row.comment, confirmed: Boolean(row.confirmed), confirmedAt: row.confirmed_at, updatedAt: row.updated_at, evidenceStatus: row.evidence_status ?? "unchecked", evidenceIssues: row.evidence_issues ?? [], evidenceHash: row.evidence_hash ?? "" })) });
+    return Response.json({ comments: rows.map((row) => ({ studentId: row.student_id, subject: row.subject, comment: row.comment, candidates: row.candidates ?? [], confirmed: Boolean(row.confirmed), confirmedAt: row.confirmed_at, updatedAt: row.updated_at, evidenceStatus: row.evidence_status ?? "unchecked", evidenceIssues: row.evidence_issues ?? [], evidenceHash: row.evidence_hash ?? "" })) });
   } catch (error) {
     return dataError(error, "저장된 평어를 불러오지 못했습니다.");
   }

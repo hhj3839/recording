@@ -3,8 +3,11 @@ import { upsertRows } from "../db/supabase";
 import { recordAiUsage } from "./ai-usage";
 import { archiveComment } from "./record-revisions";
 
-export type CommentEvidence = { studentId: number; subject: string; items: string[] };
-export type GeneratedComment = { studentId: number; subject: string; comment: string };
+export type CommentOptions = { candidateCount: number; sentenceCount: number; maxBytes: number; emphasis: "balanced" | "strength" };
+export type CommentEvidence = { studentId: number; subject: string; items: string[]; options?: CommentOptions };
+export type GeneratedComment = { studentId: number; subject: string; comment: string; candidates: string[] };
+const defaultOptions: CommentOptions = { candidateCount: 1, sentenceCount: 2, maxBytes: 500, emphasis: "balanced" };
+const optionsOf = (item: CommentEvidence) => item.options ?? defaultOptions;
 
 function extractOutputText(payload: unknown): string {
   if (!payload || typeof payload !== "object") return "";
@@ -25,11 +28,11 @@ export async function generateCommentBatch(evidence: CommentEvidence[]) {
       model: process.env.OPENAI_MODEL || "gpt-5.6-terra",
       reasoning: { effort: "low" },
       store: false,
-      max_output_tokens: Math.min(5000, Math.max(1200, evidence.length * 260)),
+      max_output_tokens: Math.min(10000, Math.max(1200, evidence.reduce((sum, item) => sum + optionsOf(item).candidateCount * 320, 0))),
       input: [
         {
           role: "system",
-          content: [{ type: "input_text", text: "대한민국 초등학교 교과학습발달상황 작성 전문가이다. 제공된 평가계획과 수준만 활용한다. 학생 이름·성별·추측·학생 간 비교를 쓰지 않는다. 하 수준도 성장 중심으로 표현한다. 각 결과는 2~3문장으로 자연스럽게 연결하고 모든 문장을 함·됨·보임·돋보임 등의 명사형으로 끝낸다. 반드시 JSON 배열만 출력하며 각 원소는 studentId, subject, comment 필드를 가진다." }],
+          content: [{ type: "input_text", text: "대한민국 초등학교 교과학습발달상황 작성 전문가이다. 제공된 평가계획과 수준만 활용한다. 학생 이름·성별·추측·학생 간 비교를 쓰지 않는다. 하 수준도 성장 중심으로 표현한다. 각 입력의 options에 지정된 candidateCount만큼 서로 다른 후보를 만들고 sentenceCount와 maxBytes에 최대한 맞춘다. emphasis가 strength이면 강점 근거를 우선하고 balanced이면 서로 다른 영역을 균형 있게 반영한다. 모든 문장을 함·됨·보임·돋보임 등의 명사형으로 끝낸다. 반드시 JSON 배열만 출력하며 각 원소는 studentId, subject, candidates 문자열 배열 필드를 가진다." }],
         },
         {
           role: "user",
@@ -42,13 +45,17 @@ export async function generateCommentBatch(evidence: CommentEvidence[]) {
   const payload = await response.json() as unknown;
   if (!response.ok) throw new Error("AI 생성 요청을 처리하지 못했습니다.");
   const raw = extractOutputText(payload).replace(/^```json\s*/i, "").replace(/\s*```$/, "");
-  const parsed = JSON.parse(raw) as Array<{ studentId?: unknown; subject?: unknown; comment?: unknown }>;
+  const parsed = JSON.parse(raw) as Array<{ studentId?: unknown; subject?: unknown; comment?: unknown; candidates?: unknown }>;
   const allowed = new Set(evidence.map((item) => `${item.studentId}|${item.subject}`));
   const comments = Array.isArray(parsed) ? parsed.flatMap((item) => {
     const studentId = Number(item.studentId);
     const subject = typeof item.subject === "string" ? item.subject : "";
-    const comment = typeof item.comment === "string" ? item.comment.trim() : "";
-    return allowed.has(`${studentId}|${subject}`) && comment ? [{ studentId, subject, comment }] : [];
+    const source = evidence.find((entry) => entry.studentId === studentId && entry.subject === subject);
+    const requested = source ? optionsOf(source).candidateCount : 1;
+    const candidates = Array.isArray(item.candidates)
+      ? item.candidates.filter((candidate): candidate is string => typeof candidate === "string").map((candidate) => candidate.trim()).filter(Boolean).slice(0, requested)
+      : typeof item.comment === "string" ? [item.comment.trim()].filter(Boolean) : [];
+    return allowed.has(`${studentId}|${subject}`) && candidates.length ? [{ studentId, subject, comment: candidates[0], candidates }] : [];
   }) : [];
   if (!comments.length) throw new Error("AI가 평어를 반환하지 않았습니다.");
   return comments;
@@ -74,6 +81,7 @@ export async function saveGeneratedComments(input: {
     student_id: item.studentId,
     subject: item.subject,
     comment: item.comment,
+    candidates: item.candidates,
     confirmed: false,
     confirmed_at: null,
     updated_at: updatedAt,
