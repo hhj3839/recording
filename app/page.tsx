@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { countBehaviorCharacteristics, recordSimilarityDetails, validateBehaviorSource, validateRecord } from "./record-validation";
 import { parseStudentRosterText } from "./student-roster-parser";
+import { parseAssessmentPlanText } from "./assessment-plan-parser";
 
 type View = "dashboard" | "classes" | "students" | "plans" | "assessments" | "comments" | "behavior" | "export" | "settings";
 const SHOW_EXPORT_RESULTS = false;
@@ -525,6 +526,7 @@ const blankPlan = (): AssessmentPlan => ({
 
 function PlanManager({ plan, onChanged, current }: { plan: AssessmentPlan[]; onChanged: (plan: AssessmentPlan[]) => void; current: ClassroomInfo | null }) {
   const [draft, setDraft] = useState<AssessmentPlan>(blankPlan);
+  const [planText, setPlanText] = useState("");
   const [preview, setPreview] = useState<AssessmentPlan[]>([]);
   const [errors, setErrors] = useState<string[]>([]);
   const [warnings, setWarnings] = useState<string[]>([]);
@@ -588,6 +590,7 @@ function PlanManager({ plan, onChanged, current }: { plan: AssessmentPlan[]; onC
       });
       onChanged(merged.sort((a, b) => (a.sortOrder ?? 0) - (b.sortOrder ?? 0)));
       setPreview([]);
+      setPlanText("");
       setMessage(`${result.plan.length}개 평가계획을 저장했습니다.`);
       setDraft(blankPlan());
     } catch (error) {
@@ -595,6 +598,26 @@ function PlanManager({ plan, onChanged, current }: { plan: AssessmentPlan[]; onC
     } finally {
       setBusy(false);
     }
+  };
+  const interpretPlanText = () => {
+    setErrors([]);
+    setWarnings([]);
+    setMessage("");
+    const parsed = parseAssessmentPlanText(planText);
+    if (parsed.error) {
+      setPreview([]);
+      setErrors([parsed.error]);
+      return;
+    }
+    const rows = parsed.plans.map((item, index) => ({ ...item, sortOrder: plan.length + index }));
+    const validation = validatePlans(rows);
+    const reviewWarnings = validateWarnings(rows);
+    setPreview(rows);
+    setErrors(validation);
+    setWarnings(reviewWarnings);
+    setMessage(validation.length
+      ? "해석한 표에 저장할 수 없는 항목이 있습니다."
+      : `${rows.length}개 평가계획을 이해했습니다. 미리보기를 확인한 뒤 저장하세요.`);
   };
   const updateItem = async (item: AssessmentPlan) => {
     setBusy(true);
@@ -816,6 +839,11 @@ function PlanManager({ plan, onChanged, current }: { plan: AssessmentPlan[]; onC
       <div className="shared-plan-list">{filteredSharedPlans.length ? filteredSharedPlans.map((shared) => <article key={shared.id}><div><strong>{shared.name}</strong><span>{shared.schoolYear}학년도 {shared.semester}학기 · {shared.grade}학년 · {shared.itemCount}개</span><small>{shared.subjects.join(" · ") || "과목 정보 없음"} · {new Date(shared.updatedAt).toLocaleString("ko-KR")}</small></div><button className="secondary" disabled={busy} onClick={() => void previewSharedPlan(shared)}>미리보기</button><button disabled={busy} onClick={() => void importSharedPlan(shared)}>현재 학급에 적용</button>{shared.canDelete && <button className="danger-text" disabled={busy} onClick={() => void deleteSharedPlan(shared)}>삭제</button>}</article>) : <p className="empty-cell">{sharedPlans.length ? "검색 조건에 맞는 공동 평가계획이 없습니다." : "아직 공유된 평가계획이 없습니다."}</p>}</div>
     </section>}
     <div className="plan-help"><strong>필수 열</strong> 과목 · 단원 · 평가목표 · 영역 · 평가 관점 · 상 · 중 · 하 <span>평가 유형과 유의점은 선택 항목입니다.</span></div>
+    <section className="plan-paste-entry">
+      <div className="section-heading"><div><p className="eyebrow">PASTE TABLE</p><h2>평가계획 표 붙여넣기</h2><p>엑셀이나 한글 표에서 10개 열을 복사하거나 탭으로 구분된 여러 행을 그대로 붙여넣으세요.</p></div><button disabled={busy || !planText.trim()} onClick={interpretPlanText}>표 이해하기</button></div>
+      <div className="plan-paste-columns">과목 → 단원 → 평가목표 → 영역 → 평가유형 → 평가관점 → 상 → 중 → 하 → 유의점</div>
+      <textarea value={planText} onChange={(event) => setPlanText(event.target.value)} placeholder={"국어\t1. 생생하게 표현해요\t상황에 알맞게 표현할 수 있다.\t듣기·말하기\t구술 평가\t상황에 맞게 표현하는가?\t정확하고 실감 나게 표현할 수 있다.\t알맞게 표현할 수 있다.\t도움을 받아 표현하기 위해 노력한다.\t다양한 표현을 고려한다."} />
+    </section>
     {message && <p className="student-message">{message}</p>}
     {!!errors.length && <div className="plan-errors"><strong>확인이 필요합니다.</strong>{errors.slice(0, 8).map((error) => <p key={error}>• {error}</p>)}</div>}
     {!!warnings.length && <div className="plan-warnings"><strong>저장할 수 있지만 확인이 필요합니다.</strong>{warnings.slice(0, 8).map((warning) => <p key={warning}>• {warning}</p>)}</div>}

@@ -5,6 +5,7 @@ import { selectMostDiverseComments } from "../app/comment-diversity.ts";
 import { createCommentVariations } from "../app/comment-variation.ts";
 import { countBehaviorCharacteristics, recordSimilarity, recordSimilarityDetails, validateBehaviorSource, validateRecord } from "../app/record-validation.ts";
 import { parseStudentRosterText } from "../app/student-roster-parser.ts";
+import { parseAssessmentPlanText } from "../app/assessment-plan-parser.ts";
 
 test("parses pasted student numbers and names separated by tabs or spaces", () => {
   assert.deepEqual(parseStudentRosterText("1\t강예린\n2 김민성\n3   김민준\n4\t김선").students, [
@@ -14,6 +15,17 @@ test("parses pasted student numbers and names separated by tabs or spaces", () =
     { number: 4, name: "김선" },
   ]);
   assert.match(parseStudentRosterText("1 강예린\n1 김민성").error, /중복 번호/);
+});
+
+test("parses ten-column assessment plans pasted from a table", () => {
+  const first = ["국어", "1. 생생하게 표현해요", "상황에 알맞게 표현할 수 있다.", "듣기·말하기", "구술 평가", "알맞게 표현하는가?", "정확하게 표현할 수 있다.", "알맞게 표현할 수 있다.", "도움을 받아 표현하기 위해 노력한다.", "다양한 표현을 고려한다."].join("\t");
+  const second = ["국어", "2. 분명하고 유창하게", "문장을 바르게 표현할 수 있다.", "문법", "서술형 평가", "문장의 짜임을 아는가?", "정확하게 나눌 수 있다.", "일부 나눌 수 있다.", "도움을 받아 나눌 수 있다.", ""].join("\t");
+  const result = parseAssessmentPlanText(`${first}\n${second}`);
+  assert.equal(result.error, "");
+  assert.equal(result.plans.length, 2);
+  assert.equal(result.plans[0].subject, "국어");
+  assert.equal(result.plans[1].caution, "");
+  assert.match(parseAssessmentPlanText("국어\t1단원").error, /10개 열/);
 });
 import { confirmationIssue } from "../app/record-confirmation.ts";
 
