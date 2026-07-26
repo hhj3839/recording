@@ -24,6 +24,19 @@ function normalizeCandidateLength(candidate: string) {
     const contextualized = `수업에서 ${candidate}`;
     if (validateGeneratedComment(contextualized, 1).valid) return contextualized;
   }
+  if (length > 60 && length <= 75) {
+    const optionalModifiers = [
+      "자기 주도적으로 ", "적극적으로 ", "구체적으로 ", "논리적으로 ",
+      "자연스럽게 ", "효과적으로 ", "능동적으로 ", "정확하게 ",
+      "성실하게 ", "꾸준하게 ", "꾸준히 ", "알맞게 ",
+    ];
+    let compacted = candidate;
+    for (const modifier of optionalModifiers) {
+      if (!compacted.includes(modifier)) continue;
+      compacted = compacted.replace(modifier, "");
+      if (validateGeneratedComment(compacted, 1).valid) return compacted;
+    }
+  }
   return "";
 }
 
