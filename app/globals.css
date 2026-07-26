@@ -151,7 +151,7 @@ button.secondary { color: #526171; border: 1px solid #dce1e6; background: #fff; 
 .subject-comments-table{min-width:900px}.subject-comments-table th:first-child,.subject-comments-table td:first-child{width:48px;padding-left:6px;padding-right:6px}.subject-comments-table th:nth-child(2),.subject-comments-table td:nth-child(2){width:82px}.subject-comments-table th:nth-child(4),.subject-comments-table td:nth-child(4){width:230px}.subject-comments-table td:nth-child(2) strong{display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .delete-student { border: 1px solid #e6caca; background: #fff; color: #ad5959; border-radius: 6px; padding: 6px 8px; font-size: 9px; font-weight: 700; }
 .single-observation textarea { min-height: 280px !important; }
-.behavior-table-content { width: 100%; }
+.behavior-table-content { width:100%; padding:0; border:0; border-radius:0; background:transparent; overflow:visible; }
 .behavior-table-toolbar { color: #6f7b89; font-size: 10px; font-weight: 700; }
 .behavior-table{min-width:940px}.behavior-table th:first-child,.behavior-table td:first-child{width:48px}.behavior-table th:nth-child(2),.behavior-table td:nth-child(2){width:82px}.behavior-table th:nth-child(3),.behavior-table td:nth-child(3){width:29%}.behavior-table th:nth-child(4),.behavior-table td:nth-child(4){width:auto}.behavior-table th:nth-child(5),.behavior-table td:nth-child(5){width:180px}
 .behavior-table textarea { min-height: 132px; }
