@@ -1228,7 +1228,9 @@ function Comments({ assessmentDataBySubject, plan, roster }: { assessmentDataByS
 
 function Behavior({ roster }: { roster: AssessmentStudent[] }) {
   type BehaviorJob = { id: string; status: string; totalItems: number; completedItems: number; failedItems: number; completedAt?: string | null };
-  const [records, setRecords] = useState<Record<number, { characteristic: string; behavior: string; confirmed: boolean }>>({});
+  type BehaviorRecord = { characteristic: string; behavior: string; confirmed: boolean; evidenceStatus: "unchecked" | "pass" | "review"; evidenceIssues: string[] };
+  const emptyBehaviorRecord = (): BehaviorRecord => ({ characteristic: "", behavior: "", confirmed: false, evidenceStatus: "unchecked", evidenceIssues: [] });
+  const [records, setRecords] = useState<Record<number, BehaviorRecord>>({});
   const [loading, setLoading] = useState(false);
   const [generationProgress, setGenerationProgress] = useState("");
   const [activeJob, setActiveJob] = useState<BehaviorJob | null>(null);
@@ -1243,9 +1245,9 @@ function Behavior({ roster }: { roster: AssessmentStudent[] }) {
   const loadBehaviors = async () => {
     try {
       const response = await fetch("/api/student-behaviors");
-      const result = await response.json() as { behaviors?: Array<{ studentId: number; characteristic: string; behavior: string; confirmed: boolean; updatedAt: string }> };
+      const result = await response.json() as { behaviors?: Array<{ studentId: number; characteristic: string; behavior: string; confirmed: boolean; updatedAt: string; evidenceStatus: "unchecked" | "pass" | "review"; evidenceIssues: string[] }> };
       if (!response.ok || !result.behaviors) return;
-      setRecords(Object.fromEntries(result.behaviors.map((item) => [item.studentId, { characteristic: item.characteristic, behavior: item.behavior, confirmed: item.confirmed }])));
+      setRecords(Object.fromEntries(result.behaviors.map((item) => [item.studentId, { characteristic: item.characteristic, behavior: item.behavior, confirmed: item.confirmed, evidenceStatus: item.evidenceStatus ?? "unchecked", evidenceIssues: item.evidenceIssues ?? [] }])));
       setLastGeneratedAt(result.behaviors.map((item) => item.updatedAt).sort().at(-1) ?? "");
     } catch {
       setError("저장된 행동특성을 불러오지 못했습니다.");
@@ -1287,14 +1289,14 @@ function Behavior({ roster }: { roster: AssessmentStudent[] }) {
     return () => window.clearInterval(timer);
   }, [activeJob?.id, activeJob?.status]);
 
-  const updateRecord = (studentId: number, patch: Partial<{ characteristic: string; behavior: string; confirmed: boolean }>) => {
-    setRecords((current) => ({ ...current, [studentId]: { ...(current[studentId] ?? { characteristic: "", behavior: "", confirmed: false }), ...patch } }));
+  const updateRecord = (studentId: number, patch: Partial<BehaviorRecord>) => {
+    setRecords((current) => ({ ...current, [studentId]: { ...(current[studentId] ?? emptyBehaviorRecord()), ...patch } }));
     setCopied(false);
   };
   const addReferencePhrase = (phrase: string) => {
     if (activeStudentId === null) return setError("먼저 학생의 특성 입력칸을 선택해 주세요.");
     const current = records[activeStudentId]?.characteristic?.trim() ?? "";
-    updateRecord(activeStudentId, { characteristic: current ? `${current} · ${phrase}` : phrase });
+    updateRecord(activeStudentId, { characteristic: current ? `${current} · ${phrase}` : phrase, confirmed: false, evidenceStatus: "unchecked", evidenceIssues: [] });
     setError("");
   };
   const generateAll = async () => {
@@ -1328,7 +1330,7 @@ function Behavior({ roster }: { roster: AssessmentStudent[] }) {
       setError("클립보드 복사 권한을 확인해 주세요.");
     }
   };
-  const saveRecord = async (studentId: number, record: { characteristic: string; behavior: string; confirmed: boolean }, confirmed = false) => {
+  const saveRecord = async (studentId: number, record: BehaviorRecord, confirmed = false) => {
     try {
       const response = await fetch("/api/student-behaviors", {
         method: "PUT",
@@ -1340,6 +1342,22 @@ function Behavior({ roster }: { roster: AssessmentStudent[] }) {
       updateRecord(studentId, { confirmed });
     } catch {
       setError(confirmed ? "검수 항목을 모두 통과한 행동특성만 확정할 수 있습니다." : "수정한 행동특성 내용을 저장하지 못했습니다. 잠시 후 다시 시도해 주세요.");
+    }
+  };
+  const validateBehaviorEvidence = async (studentId: number, record: BehaviorRecord) => {
+    if (!record.characteristic.trim() || !record.behavior.trim()) return setError("관찰 사실과 행동특성을 모두 입력해 주세요.");
+    setError("");
+    try {
+      await saveRecord(studentId, record, false);
+      const response = await fetch("/api/validate-behavior-evidence", {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ studentId, characteristic: record.characteristic, behavior: record.behavior }),
+      });
+      const result = await response.json() as { status?: "pass" | "review"; issues?: string[]; error?: string };
+      if (!response.ok || !result.status) throw new Error(result.error || "행동특성 사실 검수를 완료하지 못했습니다.");
+      updateRecord(studentId, { evidenceStatus: result.status, evidenceIssues: result.issues ?? [], confirmed: false });
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : "행동특성 사실 검수를 완료하지 못했습니다.");
     }
   };
   const formattedLastGeneratedAt = lastGeneratedAt
@@ -1357,7 +1375,7 @@ function Behavior({ roster }: { roster: AssessmentStudent[] }) {
   };
   const restoreBehavior = async (revision: RevisionItem) => {
     if (!history) return;
-    const restored = { characteristic: revision.characteristic, behavior: revision.content, confirmed: false };
+    const restored: BehaviorRecord = { characteristic: revision.characteristic, behavior: revision.content, confirmed: false, evidenceStatus: "unchecked", evidenceIssues: [] };
     updateRecord(history.studentId, restored);
     await saveRecord(history.studentId, restored, false);
     setHistory(null);
@@ -1379,7 +1397,7 @@ function Behavior({ roster }: { roster: AssessmentStudent[] }) {
             <table className="comments-table behavior-table">
               <thead><tr><th>번호</th><th>이름</th><th>특성</th><th>행동특성</th><th>검수·확정</th></tr></thead>
               <tbody>{roster.map((student) => {
-                const record = records[student.id] ?? { characteristic: "", behavior: "", confirmed: false };
+                const record = records[student.id] ?? emptyBehaviorRecord();
                 const validation = validateRecord(record.behavior, true);
                 const comparisons = roster.filter((other) => other.id !== student.id).map((other) => ({
                   student: other,
@@ -1387,7 +1405,7 @@ function Behavior({ roster }: { roster: AssessmentStudent[] }) {
                 })).sort((left, right) => right.score - left.score);
                 const similarStudents = comparisons.filter((item) => item.score >= 0.82);
                 const closest = comparisons[0];
-                return <tr className={activeStudentId === student.id ? "active-reference-row" : ""} key={student.id}><td>{student.number ?? student.id}</td><td><strong>{student.name}</strong></td><td><textarea value={record.characteristic} onFocus={() => setActiveStudentId(student.id)} onChange={(event) => updateRecord(student.id, { characteristic: event.target.value, confirmed: false })} onBlur={() => void saveRecord(student.id, records[student.id] ?? record)} placeholder="관찰한 행동과 변화 모습을 입력하세요." /></td><td><textarea value={record.behavior} onChange={(event) => updateRecord(student.id, { behavior: event.target.value, confirmed: false })} onBlur={() => void saveRecord(student.id, records[student.id] ?? record)} placeholder={record.characteristic ? "AI 행특 생성 버튼을 누르면 결과가 표시됩니다." : "특성을 먼저 입력해 주세요."} /><small>{record.behavior ? `${validation.bytes} bytes` : ""}</small></td><td className="validation-cell behavior-validation"><div><span className={validation.lengthOk ? "pass" : "fail"}>500~550B</span><span className={validation.endingsOk ? "pass" : "fail"}>종결</span><span className={validation.growthIncluded ? "pass" : "fail"}>성장</span><span className={!validation.forbidden.length ? "pass" : "fail"}>금지어</span><span className={validation.spellingOk ? "pass" : "fail"} title={validation.spellingIssues.join("\n")}>맞춤법 {validation.spellingOk ? "정상" : `${validation.spellingIssues.length}건`}</span><span className={!validation.repeated.length ? "pass" : "fail"}>반복</span><span className={!similarStudents.length ? "pass" : "fail"}>최대 중복 {closest?.score ? `${Math.round(closest.score * 100)}%` : "0%"}</span></div>{closest?.score > 0 && <div className="similarity-detail"><strong>{closest.student.name} 학생과 {Math.round(closest.score * 100)}%</strong>{closest.overlaps.length > 0 && <span>겹치는 표현: {closest.overlaps.join(" · ")}</span>}</div>}{!validation.spellingOk && <ul className="spelling-issues">{validation.spellingIssues.map((issue, issueIndex) => <li key={issueIndex}>{issue}</li>)}</ul>}<button className="history-button" disabled={!record.behavior} onClick={() => void loadHistory(student.id, student.name)}>이전 기록</button><button className={record.confirmed ? "confirmed" : ""} disabled={!validation.valid || !!similarStudents.length} onMouseDown={(event) => event.preventDefault()} onClick={() => void saveRecord(student.id, record, !record.confirmed)}>{record.confirmed ? "확정됨 ✓" : "최종 확정"}</button></td></tr>;
+                return <tr className={activeStudentId === student.id ? "active-reference-row" : ""} key={student.id}><td>{student.number ?? student.id}</td><td><strong>{student.name}</strong></td><td><textarea value={record.characteristic} onFocus={() => setActiveStudentId(student.id)} onChange={(event) => updateRecord(student.id, { characteristic: event.target.value, confirmed: false, evidenceStatus: "unchecked", evidenceIssues: [] })} onBlur={() => void saveRecord(student.id, records[student.id] ?? record)} placeholder="관찰한 행동과 변화 모습을 입력하세요." /></td><td><textarea value={record.behavior} onChange={(event) => updateRecord(student.id, { behavior: event.target.value, confirmed: false, evidenceStatus: "unchecked", evidenceIssues: [] })} onBlur={() => void saveRecord(student.id, records[student.id] ?? record)} placeholder={record.characteristic ? "AI 행특 생성 버튼을 누르면 결과가 표시됩니다." : "특성을 먼저 입력해 주세요."} /><small>{record.behavior ? `${validation.bytes} bytes` : ""}</small></td><td className="validation-cell behavior-validation"><div><span className={validation.lengthOk ? "pass" : "fail"}>500~550B</span><span className={validation.endingsOk ? "pass" : "fail"}>종결</span><span className={validation.growthIncluded ? "pass" : "fail"}>성장</span><span className={!validation.forbidden.length ? "pass" : "fail"}>금지어</span><span className={validation.spellingOk ? "pass" : "fail"} title={validation.spellingIssues.join("\n")}>맞춤법 {validation.spellingOk ? "정상" : `${validation.spellingIssues.length}건`}</span><span className={!validation.repeated.length ? "pass" : "fail"}>반복</span><span className={!similarStudents.length ? "pass" : "fail"}>최대 중복 {closest?.score ? `${Math.round(closest.score * 100)}%` : "0%"}</span><span className={record.evidenceStatus === "pass" ? "pass" : "fail"} title={record.evidenceIssues.join("\n")}>근거 {record.evidenceStatus === "pass" ? "일치" : record.evidenceStatus === "review" ? "확인 필요" : "미검수"}</span></div>{closest?.score > 0 && <div className="similarity-detail"><strong>{closest.student.name} 학생과 {Math.round(closest.score * 100)}%</strong>{closest.overlaps.length > 0 && <span>겹치는 표현: {closest.overlaps.join(" · ")}</span>}</div>}{!validation.spellingOk && <ul className="spelling-issues">{validation.spellingIssues.map((issue, issueIndex) => <li key={issueIndex}>{issue}</li>)}</ul>}<button className="evidence-validation-button" disabled={!record.characteristic || !record.behavior} onClick={() => void validateBehaviorEvidence(student.id, record)}>AI 사실 검수</button>{record.evidenceStatus === "review" && record.evidenceIssues.length > 0 && <ul className="evidence-issues">{record.evidenceIssues.map((issue, issueIndex) => <li key={issueIndex}>{issue}</li>)}</ul>}<button className="history-button" disabled={!record.behavior} onClick={() => void loadHistory(student.id, student.name)}>이전 기록</button><button className={record.confirmed ? "confirmed" : ""} disabled={!validation.valid || !!similarStudents.length || record.evidenceStatus !== "pass"} onMouseDown={(event) => event.preventDefault()} onClick={() => void saveRecord(student.id, record, !record.confirmed)}>{record.confirmed ? "확정됨 ✓" : "최종 확정"}</button></td></tr>;
               })}</tbody>
             </table>
           </div>
