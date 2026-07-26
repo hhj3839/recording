@@ -17,8 +17,9 @@ const present = (row: SharedPlan) => ({
 export async function GET(request: Request) {
   try {
     const { user } = await getDataScope();
-    const id = Number(new URL(request.url).searchParams.get("id"));
-    if (Number.isInteger(id)) {
+    const idParam = new URL(request.url).searchParams.get("id");
+    const id = idParam === null ? null : Number(idParam);
+    if (id !== null && Number.isInteger(id) && id > 0) {
       const shared = (await selectRows<SharedPlan>("shared_assessment_plans", { id: eq(id), limit: 1 }))[0];
       if (!shared) return Response.json({ error: "공동 평가계획을 찾을 수 없습니다." }, { status: 404 });
       return Response.json({

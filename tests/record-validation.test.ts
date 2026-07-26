@@ -4,6 +4,17 @@ import { createBehaviorVariations } from "../app/behavior-variation.ts";
 import { selectMostDiverseComments } from "../app/comment-diversity.ts";
 import { createCommentVariations } from "../app/comment-variation.ts";
 import { countBehaviorCharacteristics, recordSimilarity, recordSimilarityDetails, validateBehaviorSource, validateRecord } from "../app/record-validation.ts";
+import { parseStudentRosterText } from "../app/student-roster-parser.ts";
+
+test("parses pasted student numbers and names separated by tabs or spaces", () => {
+  assert.deepEqual(parseStudentRosterText("1\t강예린\n2 김민성\n3   김민준\n4\t김선").students, [
+    { number: 1, name: "강예린" },
+    { number: 2, name: "김민성" },
+    { number: 3, name: "김민준" },
+    { number: 4, name: "김선" },
+  ]);
+  assert.match(parseStudentRosterText("1 강예린\n1 김민성").error, /중복 번호/);
+});
 import { confirmationIssue } from "../app/record-confirmation.ts";
 
 test("distributes randomized comment styles across a class batch", () => {

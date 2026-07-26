@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { countBehaviorCharacteristics, recordSimilarityDetails, validateBehaviorSource, validateRecord } from "./record-validation";
+import { parseStudentRosterText } from "./student-roster-parser";
 
 type View = "dashboard" | "classes" | "students" | "plans" | "assessments" | "comments" | "behavior" | "export" | "settings";
 const SHOW_EXPORT_RESULTS = false;
@@ -261,8 +262,7 @@ function StudentManager({ roster, currentClassId, onAdded, onChanged, onDeleted,
   onDeleted: (id: number) => void;
   onImported: (students: Array<{ id: number; number: number; name: string }>) => void;
 }) {
-  const [number, setNumber] = useState("");
-  const [name, setName] = useState("");
+  const [rosterText, setRosterText] = useState("");
   const [message, setMessage] = useState("");
   const [busy, setBusy] = useState(false);
   const [drafts, setDrafts] = useState<Record<number, { number: number; name: string }>>({});
@@ -297,20 +297,31 @@ function StudentManager({ roster, currentClassId, onAdded, onChanged, onDeleted,
     }).catch(() => undefined);
   }, [currentClassId]);
 
-  async function addStudent(event: React.FormEvent) {
+  async function addStudentsFromText(event: React.FormEvent) {
     event.preventDefault();
     setMessage("");
-    const response = await fetch("/api/students", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ number: Number(number), name }),
-    });
-    const result = await response.json() as { student?: { id: number; number: number; name: string }; error?: string };
-    if (!response.ok || !result.student) return setMessage(result.error ?? "학생을 추가하지 못했습니다.");
-    onAdded(result.student);
-    setNumber("");
-    setName("");
-    setMessage(`${result.student.name} 학생을 추가했습니다.`);
+    const parsedRoster = parseStudentRosterText(rosterText);
+    if (parsedRoster.error) return setMessage(parsedRoster.error);
+    const parsed = parsedRoster.students;
+    setBusy(true);
+    try {
+      const response = await fetch("/api/students", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ students: parsed }),
+      });
+      const result = await response.json() as { students?: Array<{ id: number; number: number; name: string }>; error?: string };
+      if (!response.ok || !result.students) throw new Error(result.error ?? "학생 명단을 저장하지 못했습니다.");
+      const merged = new Map(roster.map((student) => [student.number ?? student.id, student]));
+      result.students.forEach((student) => merged.set(student.number, student));
+      onImported([...merged.values()].sort((a, b) => (a.number ?? a.id) - (b.number ?? b.id)));
+      setRosterText("");
+      setMessage(`${result.students.length}명의 번호와 이름을 인식해 명단에 추가했습니다.`);
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : "학생 명단을 저장하지 못했습니다.");
+    } finally {
+      setBusy(false);
+    }
   }
 
   async function saveStudent(id: number) {
@@ -467,10 +478,9 @@ function StudentManager({ roster, currentClassId, onAdded, onChanged, onDeleted,
   return <section>
     <div className="page-heading"><div><p className="eyebrow">CLASS ROSTER</p><h1>학생 관리</h1><p>번호와 이름만 등록하며, 업로드한 파일은 브라우저에서 읽은 뒤 현재 학급에 저장됩니다.</p></div></div>
     <div className="student-tools">
-      <form onSubmit={addStudent}>
-        <input aria-label="추가할 학생 번호" type="number" min="1" value={number} onChange={(event) => setNumber(event.target.value)} placeholder="번호" required />
-        <input aria-label="추가할 학생 이름" value={name} onChange={(event) => setName(event.target.value)} placeholder="이름" required />
-        <button type="submit">학생 추가</button>
+      <form className="roster-text-form" onSubmit={addStudentsFromText}>
+        <label><span>번호와 이름 붙여넣기</span><textarea aria-label="번호와 이름 명단" value={rosterText} onChange={(event) => setRosterText(event.target.value)} placeholder={"1\t강예린\n2\t김민성\n3\t김민준\n4\t김선"} required /></label>
+        <button type="submit" disabled={busy}>{busy ? "추가 중…" : "명단 인식·추가"}</button>
       </form>
       <div>
         <button type="button" onClick={downloadTemplate}>CSV 양식 받기</button>
@@ -494,7 +504,7 @@ function StudentManager({ roster, currentClassId, onAdded, onChanged, onDeleted,
           <td><input aria-label={`${student.name} 이름`} value={draft.name} onChange={(event) => setDrafts((current) => ({ ...current, [student.id]: { ...draft, name: event.target.value } }))} /></td>
           <td><div className="student-row-actions"><span className="order-buttons"><button disabled={busy || index === 0} title="한 칸 위로" onClick={() => moveStudent(student.id, -1)}>↑</button><button disabled={busy || index === orderedRoster.length - 1} title="한 칸 아래로" onClick={() => moveStudent(student.id, 1)}>↓</button></span><button onClick={() => void saveStudent(student.id)}>저장</button><button className="danger-text" onClick={() => onDeleted(student.id)}>비활성화</button></div></td>
         </tr>;
-      }) : <tr><td colSpan={3} className="empty-cell">등록된 학생이 없습니다. 직접 추가하거나 명단을 업로드해 주세요.</td></tr>}</tbody>
+      }) : <tr><td colSpan={3} className="empty-cell">등록된 학생이 없습니다. 번호·이름 명단을 붙여넣거나 파일을 업로드해 주세요.</td></tr>}</tbody>
     </table></div>
     ) : (
       <div className="table-wrap student-table-wrap"><table className="students-table inactive-students-table">
@@ -520,8 +530,6 @@ function PlanManager({ plan, onChanged, current }: { plan: AssessmentPlan[]; onC
   const [warnings, setWarnings] = useState<string[]>([]);
   const [message, setMessage] = useState("");
   const [busy, setBusy] = useState(false);
-  const [classrooms, setClassrooms] = useState<ManagedClassroom[]>([]);
-  const [targetClassId, setTargetClassId] = useState("");
   const [versions, setVersions] = useState<Array<{ id: number; source: string; label: string; itemCount: number; createdAt: string }>>([]);
   const [versionsOpen, setVersionsOpen] = useState(false);
   const [sharedPlans, setSharedPlans] = useState<Array<{ id: number; name: string; schoolYear: number; semester: number; grade: number; subjects: string[]; itemCount: number; createdByEmail: string; updatedAt: string; canDelete: boolean }>>([]);
@@ -537,15 +545,6 @@ function PlanManager({ plan, onChanged, current }: { plan: AssessmentPlan[]; onC
     ["type", "평가 유형"], ["perspective", "평가 관점"], ["high", "상"], ["middle", "중"],
     ["low", "하"], ["caution", "평가상의 유의점"],
   ];
-  useEffect(() => {
-    fetch("/api/classrooms").then(async (response) => {
-      const result = await response.json() as { classrooms?: ManagedClassroom[] };
-      if (!response.ok) return;
-      const targets = (result.classrooms ?? []).filter((item) => item.id !== current?.id);
-      setClassrooms(targets);
-      setTargetClassId((selected) => selected || String(targets[0]?.id ?? ""));
-    }).catch(() => undefined);
-  }, [current?.id]);
   const validatePlans = (rows: AssessmentPlan[]) => {
     const found: string[] = [];
     const keys = new Set<string>();
@@ -720,26 +719,6 @@ function PlanManager({ plan, onChanged, current }: { plan: AssessmentPlan[]; onC
       setBusy(false);
     }
   };
-  const copyToClassroom = async () => {
-    const target = classrooms.find((item) => item.id === Number(targetClassId));
-    if (!target) return setErrors(["복사할 대상 학급을 선택해 주세요."]);
-    const label = `${target.schoolName} ${target.schoolYear}학년도 ${target.semester}학기 ${target.grade}학년 ${target.classNumber}반`;
-    if (!window.confirm(`현재 평가계획 ${plan.length}개를 ${label}에 복사할까요?\n\n대상 학급의 같은 평가 항목은 현재 내용으로 갱신됩니다.`)) return;
-    setBusy(true);
-    setErrors([]);
-    try {
-      const response = await fetch("/api/assessment-plan/copy", {
-        method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ targetClassId: target.id }),
-      });
-      const result = await response.json() as { copied?: number; error?: string };
-      if (!response.ok) throw new Error(result.error || "평가계획을 복사하지 못했습니다.");
-      setMessage(`${label}에 평가계획 ${result.copied ?? plan.length}개를 복사했습니다.`);
-    } catch (error) {
-      setErrors([error instanceof Error ? error.message : "평가계획을 복사하지 못했습니다."]);
-    } finally {
-      setBusy(false);
-    }
-  };
   const loadSharedPlans = async () => {
     setErrors([]);
     try {
@@ -837,14 +816,6 @@ function PlanManager({ plan, onChanged, current }: { plan: AssessmentPlan[]; onC
       <div className="shared-plan-list">{filteredSharedPlans.length ? filteredSharedPlans.map((shared) => <article key={shared.id}><div><strong>{shared.name}</strong><span>{shared.schoolYear}학년도 {shared.semester}학기 · {shared.grade}학년 · {shared.itemCount}개</span><small>{shared.subjects.join(" · ") || "과목 정보 없음"} · {new Date(shared.updatedAt).toLocaleString("ko-KR")}</small></div><button className="secondary" disabled={busy} onClick={() => void previewSharedPlan(shared)}>미리보기</button><button disabled={busy} onClick={() => void importSharedPlan(shared)}>현재 학급에 적용</button>{shared.canDelete && <button className="danger-text" disabled={busy} onClick={() => void deleteSharedPlan(shared)}>삭제</button>}</article>) : <p className="empty-cell">{sharedPlans.length ? "검색 조건에 맞는 공동 평가계획이 없습니다." : "아직 공유된 평가계획이 없습니다."}</p>}</div>
     </section>}
     <div className="plan-help"><strong>필수 열</strong> 과목 · 단원 · 평가목표 · 영역 · 평가 관점 · 상 · 중 · 하 <span>평가 유형과 유의점은 선택 항목입니다.</span></div>
-    <section className="plan-copy">
-      <div><strong>다른 학급에 적용</strong><span>현재 평가계획 {plan.length}개를 내가 관리하는 다른 학급으로 복사합니다.</span></div>
-      <select value={targetClassId} onChange={(event) => setTargetClassId(event.target.value)} disabled={busy || !classrooms.length}>
-        {classrooms.map((item) => <option value={item.id} key={item.id}>{item.schoolName} · {item.schoolYear}학년도 {item.semester}학기 · {item.grade}학년 {item.classNumber}반</option>)}
-        {!classrooms.length && <option value="">복사할 다른 학급이 없습니다</option>}
-      </select>
-      <button disabled={busy || !plan.length || !targetClassId} onClick={() => void copyToClassroom()}>평가계획 복사</button>
-    </section>
     {message && <p className="student-message">{message}</p>}
     {!!errors.length && <div className="plan-errors"><strong>확인이 필요합니다.</strong>{errors.slice(0, 8).map((error) => <p key={error}>• {error}</p>)}</div>}
     {!!warnings.length && <div className="plan-warnings"><strong>저장할 수 있지만 확인이 필요합니다.</strong>{warnings.slice(0, 8).map((warning) => <p key={warning}>• {warning}</p>)}</div>}
@@ -883,13 +854,12 @@ type AssessmentStudent = {
   note: string;
 };
 
-function Assessments({ data, setData, plan, activeSubject, setActiveSubject, onAddStudent, onDeleteStudent, onSave }: {
+function Assessments({ data, setData, plan, activeSubject, setActiveSubject, onDeleteStudent, onSave }: {
   data: AssessmentStudent[];
   setData: React.Dispatch<React.SetStateAction<AssessmentStudent[]>>;
   plan: AssessmentPlan[];
   activeSubject: string;
   setActiveSubject: (subject: string) => void;
-  onAddStudent: () => void;
   onDeleteStudent: (id: number) => void;
   onSave: () => Promise<void>;
 }) {
@@ -985,7 +955,7 @@ function Assessments({ data, setData, plan, activeSubject, setActiveSubject, onA
     <section>
       <div className="page-heading">
         <div><p className="eyebrow">{activeSubject} · 1학기</p><h1>평가 수준 입력</h1><p>셀을 눌러 학생별 성취 수준을 빠르게 입력하세요.</p></div>
-        <div className="heading-actions"><span className={`autosave-state ${saving ? "saving" : dirty ? "dirty" : "saved"}`}>{saving ? "자동 저장 중…" : dirty ? "저장 대기 중" : saved ? "자동 저장됨" : "변경 시 자동 저장"}</span><button className="secondary" onClick={onAddStudent}>＋ 학생 추가</button><button onClick={() => void save()} disabled={saving || !dirty}>{saving ? "저장 중…" : "지금 저장"}</button></div>
+        <div className="heading-actions"><span className={`autosave-state ${saving ? "saving" : dirty ? "dirty" : "saved"}`}>{saving ? "자동 저장 중…" : dirty ? "저장 대기 중" : saved ? "자동 저장됨" : "변경 시 자동 저장"}</span><button onClick={() => void save()} disabled={saving || !dirty}>{saving ? "저장 중…" : "지금 저장"}</button></div>
       </div>
       <div className="table-tools">
         <div className="subject-tabs">{subjects.map((subject) => <button className={subject === activeSubject ? "active" : ""} onClick={() => changeSubject(subject)} key={subject}>{subject}</button>)}</div>
@@ -1930,24 +1900,6 @@ export default function Home() {
     const timer = window.setInterval(() => void loadUsage(), 30_000);
     return () => window.clearInterval(timer);
   }, []);
-  const addStudent = async () => {
-    const name = window.prompt("추가할 학생 이름을 입력해 주세요.");
-    if (!name?.trim()) return;
-    const number = roster.length ? Math.max(...roster.map((student) => student.number ?? student.id)) + 1 : 1;
-    const response = await fetch("/api/students", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ name: name.trim(), number }),
-    });
-    const result = await response.json() as { student?: { id: number; number: number; name: string }; error?: string };
-    if (!response.ok || !result.student) return window.alert(result.error || "학생을 추가하지 못했습니다.");
-    const newStudent: AssessmentStudent = { id: result.student.id, number: result.student.number, name: result.student.name, assessments: [], status: "미생성", note: "" };
-    setRoster((current) => [...current, newStudent]);
-    setAssessmentDataBySubject((current) => Object.fromEntries(Object.entries(current).map(([subject, data]) => [
-      subject,
-      [...data, { ...newStudent, assessments: Array(plan.filter((item) => item.subject === subject).length).fill("-") as Level[] }],
-    ])));
-  };
   const deleteStudent = async (id: number) => {
     const student = roster.find((item) => item.id === id);
     if (!student || !window.confirm(`${student.name} 학생을 전출·비활성 처리할까요?\n\n기존 평가와 생성 기록은 보존됩니다.`)) return;
@@ -2025,7 +1977,7 @@ export default function Home() {
           {view === "classes" && <ClassroomManager current={classroom} />}
           {view === "students" && <StudentManager roster={roster} currentClassId={classroom?.id} onAdded={mergeStudentIntoState} onChanged={mergeStudentIntoState} onDeleted={(id) => void deleteStudent(id)} onImported={mergeImportedStudents} />}
           {view === "plans" && <PlanManager plan={plan} onChanged={applyPlanChange} current={classroom} />}
-          {view === "assessments" && <Assessments data={assessmentDataBySubject[activeSubject] ?? []} setData={(updater) => setAssessmentDataBySubject((current) => ({ ...current, [activeSubject]: typeof updater === "function" ? updater(current[activeSubject] ?? []) : updater }))} plan={plan} activeSubject={activeSubject} setActiveSubject={setActiveSubject} onAddStudent={() => void addStudent()} onDeleteStudent={(id) => void deleteStudent(id)} onSave={saveAssessmentLevels} />}
+          {view === "assessments" && <Assessments data={assessmentDataBySubject[activeSubject] ?? []} setData={(updater) => setAssessmentDataBySubject((current) => ({ ...current, [activeSubject]: typeof updater === "function" ? updater(current[activeSubject] ?? []) : updater }))} plan={plan} activeSubject={activeSubject} setActiveSubject={setActiveSubject} onDeleteStudent={(id) => void deleteStudent(id)} onSave={saveAssessmentLevels} />}
           {view === "comments" && <Comments assessmentDataBySubject={assessmentDataBySubject} plan={plan} roster={roster} />}
           {view === "behavior" && <Behavior roster={roster} />}
           {SHOW_EXPORT_RESULTS && view === "export" && <ExportResults roster={roster} plan={plan} classroom={classroom} />}
