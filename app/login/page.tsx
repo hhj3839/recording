@@ -8,6 +8,7 @@ export default function LoginPage() {
   const [mode, setMode] = useState<"login" | "signup" | "forgot">("login");
   const [message, setMessage] = useState("");
   const [busy, setBusy] = useState(false);
+  const [accepted, setAccepted] = useState(false);
 
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -18,7 +19,7 @@ export default function LoginPage() {
     const response = await fetch(`/api/auth/${endpoint}`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ ...values, returnTo: params.get("returnTo") ?? "/" }),
+      body: JSON.stringify({ ...values, termsAccepted: mode === "signup" ? accepted : undefined, returnTo: params.get("returnTo") ?? "/" }),
     });
     const result = await response.json();
     setBusy(false);
@@ -52,11 +53,13 @@ export default function LoginPage() {
           </>}
           <label>이메일<input name="email" type="email" required autoComplete="email" /></label>
           {mode !== "forgot" && <label>비밀번호<input name="password" type="password" minLength={8} required autoComplete={mode === "login" ? "current-password" : "new-password"} /></label>}
+          {mode === "signup" && <label className="auth-consent"><input type="checkbox" checked={accepted} onChange={(event) => setAccepted(event.target.checked)} required /><span><a href="/terms" target="_blank">서비스 이용약관</a>과 <a href="/privacy" target="_blank">개인정보 처리방침</a>을 확인했으며 필수 개인정보 처리에 동의합니다.</span></label>}
           {message && <p className="auth-message" role="status">{message}</p>}
-          <button className="auth-submit" disabled={busy}>{busy ? "처리 중..." : mode === "login" ? "로그인" : mode === "signup" ? "인증 메일 받기" : "재설정 메일 받기"}</button>
+          <button className="auth-submit" disabled={busy || (mode === "signup" && !accepted)}>{busy ? "처리 중..." : mode === "login" ? "로그인" : mode === "signup" ? "인증 메일 받기" : "재설정 메일 받기"}</button>
           {mode === "login" && <button type="button" className="auth-link" onClick={() => setMode("forgot")}>비밀번호를 잊으셨나요?</button>}
           {mode === "forgot" && <button type="button" className="auth-link" onClick={() => setMode("login")}>로그인으로 돌아가기</button>}
         </form>
+        <footer className="auth-legal"><a href="/privacy">개인정보 처리방침</a><a href="/terms">서비스 이용약관</a></footer>
       </section>
     </main>
   );

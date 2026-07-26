@@ -27,3 +27,11 @@ test("redirects unauthenticated users to the app login", async () => {
   assert.equal(response.status, 307);
   assert.match(response.headers.get("location") ?? "", /\/login\?returnTo=%2F/);
 });
+
+test("publishes privacy policy and service terms without login", async () => {
+  const [privacy, terms] = await Promise.all([request("/privacy"), request("/terms")]);
+  assert.equal(privacy.status, 200);
+  assert.match(await privacy.text(), /개인정보 처리방침/);
+  assert.equal(terms.status, 200);
+  assert.match(await terms.text(), /서비스 이용약관/);
+});

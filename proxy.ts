@@ -5,6 +5,8 @@ export function proxy(request: NextRequest) {
   const { pathname, search } = request.nextUrl;
   const publicPath =
     pathname === "/login" ||
+    pathname === "/privacy" ||
+    pathname === "/terms" ||
     pathname === "/auth/callback" ||
     pathname.startsWith("/api/auth/") ||
     pathname === "/api/comment-jobs/pump" ||
