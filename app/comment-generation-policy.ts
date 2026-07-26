@@ -8,3 +8,36 @@ export function hasCompleteEvidenceCoverage(expectedIds: string[], coveredIds: u
     && covered.size === expectedIds.length
     && expectedIds.every((id) => covered.has(id));
 }
+
+export const commentForbiddenExpressions = [
+  "부족함",
+  "미흡함",
+  "못함",
+  "어려워함",
+  "이해하지 못함",
+  "소극적임",
+  "불성실함",
+];
+
+export function validateGeneratedComment(comment: string, expectedSentenceCount: number) {
+  const normalized = comment.trim();
+  const sentences = normalized
+    .split(/(?<=\.)\s+/)
+    .map((sentence) => sentence.trim())
+    .filter(Boolean);
+  const lengths = sentences.map((sentence) => Array.from(sentence).length);
+  const forbidden = commentForbiddenExpressions.filter((expression) => normalized.includes(expression));
+  return {
+    sentences,
+    lengths,
+    sentenceCountOk: expectedSentenceCount > 0 && sentences.length === expectedSentenceCount,
+    lengthsOk: lengths.length > 0 && lengths.every((length) => length >= 50 && length <= 60),
+    endingsOk: sentences.length > 0 && sentences.every((sentence) => sentence.endsWith("함.")),
+    forbidden,
+    valid: expectedSentenceCount > 0
+      && sentences.length === expectedSentenceCount
+      && lengths.every((length) => length >= 50 && length <= 60)
+      && sentences.every((sentence) => sentence.endsWith("함."))
+      && forbidden.length === 0,
+  };
+}

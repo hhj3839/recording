@@ -1,7 +1,7 @@
 import { createHmac, timingSafeEqual } from "node:crypto";
 import { upsertRows } from "../db/supabase";
 import { recordAiUsage } from "./ai-usage";
-import { hasCompleteEvidenceCoverage } from "./comment-generation-policy";
+import { hasCompleteEvidenceCoverage, validateGeneratedComment } from "./comment-generation-policy";
 import { CommentVariation } from "./comment-variation";
 import { archiveComment } from "./record-revisions";
 
@@ -43,7 +43,7 @@ export async function generateCommentBatch(evidence: CommentEvidence[], avoidCom
       input: [
         {
           role: "system",
-          content: [{ type: "input_text", text: "대한민국 초등학교 교과학습발달상황 작성 전문가이다. 제공된 평가계획과 수준만 활용한다. 학생 이름·성별·추측·학생 간 비교를 쓰지 않는다. 하 수준도 성장 중심으로 표현한다. 각 입력의 variation에 지정된 문장 구조·시작 방식·근거 순서를 따르되 근거에 없는 사실을 만들지 않는다. 같은 묶음의 학생끼리 첫 구절, 핵심 동사, 문장 구조, 종결 표현이 겹치지 않게 적극적으로 분산한다. avoidComments의 문장을 복사하거나 비슷하게 바꾸어 쓰지 않는다. 학생 입력의 itemIds에 연결된 모든 평가 항목을 반드시 빠짐없이 반영한다. 각 항목의 평가 영역과 입력 수준(상·중·하)에 해당하는 기준이 결과에서 구체적으로 드러나야 하며, 강점 위주로 일부 항목을 생략하거나 여러 항목을 근거 없이 하나로 뭉뚱그리지 않는다. 문장 수와 분량은 항목 수에 맞게 스스로 정하되 자연스러운 하나의 평어로 작성한다. 후보는 정확히 1개만 만든다. 모든 문장을 함·됨·보임·돋보임 등의 명사형으로 끝낸다. 반드시 JSON 배열만 출력하며 각 원소는 studentId, subject, candidates(문자열 1개 배열), coveredItemIds 필드를 가진다. coveredItemIds에는 실제 평어에 반영한 itemIds 전체를 입력과 동일하게 넣는다." }],
+          content: [{ type: "input_text", text: "당신은 초등학교 담임교사의 학생평가 작성 전문가이며 학교생활기록부 교과학습발달상황에 사용할 교과 평어를 작성한다. 학생 입력의 itemIds에 연결된 각 평가 영역마다 해당 수준에 맞는 문장을 정확히 1개씩 작성한다. 영역 수와 문장 수는 반드시 같아야 하며 입력된 영역명·수준·평가기준만 사용하고 없는 영역·수준·사실을 만들지 않는다. 각 문장은 평가기준을 그대로 복사하지 말고 실제 관찰 가능한 행동 중심으로 자연스럽게 바꾸어 쓴다. 성취기준과 평가요소, 수업·평가 활동의 수행 내용, 수행 결과와 학습 태도가 구체적으로 드러나게 작성한다. 일반적인 칭찬을 피하고 모든 문장을 긍정적·발전적 관점으로 작성한다. 상 수준은 안정적인 수행과 정확성·적극성·자기주도성이, 중 수준은 대부분의 성취기준 수행과 꾸준한 참여·적절한 적용이, 하 수준은 활동 참여와 배운 내용을 익혀 가는 과정·교사의 도움을 받아 수행하는 모습·성장 가능성이 드러나게 작성한다. 부족함, 미흡함, 못함, 어려워함, 이해하지 못함, 소극적임, 불성실함을 쓰지 않는다. 각 문장은 공백과 마침표를 포함해 반드시 50~60자로 작성하고 정확히 ‘함.’으로 끝낸다. 문장 시작과 문형을 반복하지 않고, variation의 구조·시작 방식·근거 순서를 활용하며 같은 묶음 학생 및 avoidComments와 표현을 겹치지 않게 한다. 최종 평어는 영역별 문장을 마침표 뒤 한 칸으로 이어 붙인 한 문단이어야 한다. 제목·번호·설명·따옴표·상중하 표시는 출력하지 않는다. 후보는 정확히 1개만 만든다. 반드시 JSON 배열만 출력하며 각 원소는 studentId, subject, candidates(문자열 1개 배열), coveredItemIds 필드를 가진다. coveredItemIds에는 실제 평어에 반영한 itemIds 전체를 입력과 동일하게 넣는다." }],
         },
         {
           role: "user",
@@ -69,9 +69,12 @@ export async function generateCommentBatch(evidence: CommentEvidence[], avoidCom
       ? item.candidates.filter((candidate): candidate is string => typeof candidate === "string").map((candidate) => candidate.trim()).filter(Boolean).slice(0, 1)
       : typeof item.comment === "string" ? [item.comment.trim()].filter(Boolean) : [];
     const complete = hasCompleteEvidenceCoverage(expectedIds, item.coveredItemIds);
-    return allowed.has(`${studentId}|${subject}`) && candidates.length && complete ? [{ studentId, subject, comment: candidates[0], candidates }] : [];
+    const format = candidates.length ? validateGeneratedComment(candidates[0], expectedIds.length) : null;
+    return allowed.has(`${studentId}|${subject}`) && candidates.length && complete && format?.valid
+      ? [{ studentId, subject, comment: candidates[0], candidates }]
+      : [];
   }) : [];
-  if (!comments.length) throw new Error("AI가 평어를 반환하지 않았습니다.");
+  if (!comments.length) throw new Error("AI 결과가 영역별 1문장·50~60자·함 종결 검수를 통과하지 못했습니다.");
   return comments;
 }
 
