@@ -36,9 +36,9 @@ export async function generateCommentBatch(evidence: CommentEvidence[], avoidCom
     headers: { Authorization: `Bearer ${apiKey}`, "Content-Type": "application/json" },
     body: JSON.stringify({
       model: process.env.OPENAI_MODEL || "gpt-5.6-terra",
-      reasoning: { effort: "low" },
+      reasoning: { effort: "none" },
       store: false,
-      max_output_tokens: Math.min(10000, Math.max(1600, requestEvidence.reduce((sum, item) => sum + 220 + item.itemIds.length * 110, 0))),
+      max_output_tokens: 10000,
       input: [
         {
           role: "system",

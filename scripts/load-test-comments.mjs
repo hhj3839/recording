@@ -54,22 +54,24 @@ const request = async (route, options = {}) => {
   return data;
 };
 
-if (mode === "start") {
+if (mode === "start" || mode === "sample") {
   const [classData, planData] = await Promise.all([request("/api/class-data"), request("/api/assessment-plan")]);
   if (classData.students.length !== 25) throw new Error(`Expected 25 active students, found ${classData.students.length}`);
   const subjects = [...new Set(planData.plan.map((item) => item.subject))];
-  const planCounts = Object.fromEntries(subjects.map((subject) => [subject, planData.plan.filter((item) => item.subject === subject).length]));
+  const selectedSubjects = mode === "sample" ? subjects.slice(0, 1) : subjects;
+  const selectedStudents = mode === "sample" ? classData.students.slice(0, 5) : classData.students;
+  const planCounts = Object.fromEntries(selectedSubjects.map((subject) => [subject, planData.plan.filter((item) => item.subject === subject).length]));
   const levelLookup = new Map(classData.levels.map((item) => [`${item.studentId}|${item.subject}|${item.assessmentIndex}`, item.level]));
-  const scores = Object.fromEntries(subjects.map((subject) => [
+  const scores = Object.fromEntries(selectedSubjects.map((subject) => [
     subject,
-    classData.students.map((student) => ({
+    selectedStudents.map((student) => ({
       studentId: student.id,
       levels: Array.from({ length: planCounts[subject] }, (_, index) => levelLookup.get(`${student.id}|${subject}|${index}`) ?? "-"),
     })),
   ]));
   const expectedItems = Object.values(scores).flat().filter((student) => student.levels.some((level) => ["상", "중", "하"].includes(level))).length;
-  if (expectedItems !== 25 * subjects.length) {
-    throw new Error(`Expected ${25 * subjects.length} student-subject inputs, found ${expectedItems}`);
+  if (expectedItems !== selectedStudents.length * selectedSubjects.length) {
+    throw new Error(`Expected ${selectedStudents.length * selectedSubjects.length} student-subject inputs, found ${expectedItems}`);
   }
   const startedAt = new Date().toISOString();
   const result = await request("/api/comment-jobs", {
@@ -77,12 +79,12 @@ if (mode === "start") {
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({
       scores,
-      selectedStudentIds: classData.students.map((student) => student.id),
+      selectedStudentIds: selectedStudents.map((student) => student.id),
     }),
   });
   process.stdout.write(`${JSON.stringify({
     mode, startedAt, jobId: result.job.id, status: result.job.status,
-    students: 25, subjects: subjects.length, subjectNames: subjects,
+    students: selectedStudents.length, subjects: selectedSubjects.length, subjectNames: selectedSubjects,
     expectedItems, totalBatches: result.job.totalBatches, alreadyRunning: Boolean(result.alreadyRunning),
   })}\n`);
 } else {
