@@ -72,6 +72,14 @@ export function validateBehaviorSource(text: string) {
   return { valid: Boolean(normalized) && !forbidden.length && !sensitive.length, forbidden, sensitive };
 }
 
+export function countBehaviorCharacteristics(text: string) {
+  const normalized = text.trim();
+  if (!normalized) return 0;
+  const labeled = normalized.split(/\r?\n|·/).filter((item) => /^[^:\n]{2,20}:\s*\S/.test(item.trim()));
+  if (labeled.length) return labeled.length;
+  return normalized.split(/\r?\n|·/).map((item) => item.trim()).filter(Boolean).length;
+}
+
 const similarityWords = (value: string) =>
   value.replace(/[.,!?()[\]{}]/g, " ").split(/\s+/).map((word) => word.trim()).filter((word) => word.length > 1);
 

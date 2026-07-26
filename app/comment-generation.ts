@@ -1,6 +1,5 @@
 import { createHmac, timingSafeEqual } from "node:crypto";
 import { upsertRows } from "../db/supabase";
-import { recordAiUsage } from "./ai-usage";
 import { hasCompleteEvidenceCoverage, validateGeneratedComment } from "./comment-generation-policy";
 import { CommentVariation } from "./comment-variation";
 import { archiveComment } from "./record-revisions";
@@ -106,12 +105,6 @@ export async function saveGeneratedComments(input: {
     owner_id: input.ownerId,
     class_id: input.classId,
   })), "class_id,student_id,subject");
-  await recordAiUsage({
-    ownerId: input.ownerId,
-    ownerEmail: input.ownerEmail,
-    classId: input.classId,
-    feature: "all-comments-background",
-  });
 }
 
 const signingKey = () => {

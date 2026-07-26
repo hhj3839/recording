@@ -1,9 +1,11 @@
 import { waitUntil } from "@vercel/functions";
 import { eq, selectRows, updateRows } from "../../../../db/supabase";
+import { getAiUsage, MONTHLY_AI_LIMIT, recordAiUsage } from "../../../ai-usage";
 import { BehaviorInput, GeneratedBehavior, generateBehaviorBatch, saveGeneratedBehaviors } from "../../../behavior-generation";
 import { signCommentJob, verifyCommentJob } from "../../../comment-generation";
 
 export const maxDuration = 60;
+const MAX_GENERATION_ATTEMPTS = 3;
 type JobRow = {
   id: string; owner_id: string; owner_email: string; class_id: number; status: string; batches: BehaviorInput[][];
   current_batch: number; total_batches: number; completed_items: number; failed_items: number; error_message: string; started_at: string | null;
@@ -44,7 +46,12 @@ export async function POST(request: Request) {
     .filter((item) => !batchStudentIds.has(Number(item.student_id)))
     .map((item) => item.behavior)
     .filter(Boolean);
-  for (let attempt = 0; attempt < 2 && pending.length; attempt += 1) {
+  for (let attempt = 0; attempt < MAX_GENERATION_ATTEMPTS && pending.length; attempt += 1) {
+    const usage = await getAiUsage(job.owner_id);
+    if (usage.monthly >= MONTHLY_AI_LIMIT) {
+      errorMessage = `월 AI 요청 한도 ${MONTHLY_AI_LIMIT}회를 사용하여 남은 학생의 자동 재시도를 중단했습니다.`;
+      break;
+    }
     try {
       const generated = await generateBehaviorBatch(pending, avoidBehaviors);
       behaviors = [...behaviors, ...generated];
@@ -52,12 +59,22 @@ export async function POST(request: Request) {
       pending = pending.filter((item) => !generatedIds.has(item.studentId));
     }
     catch (error) { errorMessage = error instanceof Error ? error.message : "AI 생성 오류"; }
+    finally {
+      await recordAiUsage({
+        ownerId: job.owner_id, ownerEmail: job.owner_email, classId: Number(job.class_id),
+        feature: `all-behaviors-attempt-${attempt + 1}`,
+      });
+    }
   }
   if (behaviors.length) {
     await saveGeneratedBehaviors({ ownerId: job.owner_id, ownerEmail: job.owner_email, classId: Number(job.class_id), behaviors });
   }
   const returned = new Set(behaviors.map((item) => item.studentId));
   const failedInBatch = batch.filter((item) => !returned.has(item.studentId)).length;
+  if (failedInBatch) {
+    const detail = `행동특성 배치 ${batchIndex + 1}: ${failedInBatch}명이 ${MAX_GENERATION_ATTEMPTS}회 생성 후에도 500~550바이트·음/임 종결 검수를 통과하지 못했습니다.`;
+    errorMessage = [job.error_message, errorMessage, detail].filter(Boolean).join(" ").slice(-1800);
+  }
   const nextBatch = batchIndex + 1;
   const failedItems = Number(job.failed_items) + failedInBatch;
   const completedItems = Number(job.completed_items) + behaviors.length;

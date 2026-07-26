@@ -1,5 +1,4 @@
 import { upsertRows } from "../db/supabase";
-import { recordAiUsage } from "./ai-usage";
 import { BehaviorVariation } from "./behavior-variation";
 import { archiveBehavior } from "./record-revisions";
 import { validateBehaviorSource, validateRecord } from "./record-validation";
@@ -85,5 +84,4 @@ export async function saveGeneratedBehaviors(input: {
     owner_id: input.ownerId,
     class_id: input.classId,
   })), "class_id,student_id");
-  await recordAiUsage({ ownerId: input.ownerId, ownerEmail: input.ownerEmail, classId: input.classId, feature: "all-behaviors-background" });
 }

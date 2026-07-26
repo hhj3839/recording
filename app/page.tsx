@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-import { recordSimilarityDetails, validateBehaviorSource, validateRecord } from "./record-validation";
+import { countBehaviorCharacteristics, recordSimilarityDetails, validateBehaviorSource, validateRecord } from "./record-validation";
 
 type View = "dashboard" | "classes" | "students" | "plans" | "assessments" | "comments" | "behavior" | "export" | "settings";
 type Level = "상" | "중" | "하" | "미응시" | "평가 예정" | "-";
@@ -1155,7 +1155,7 @@ function Comments({ assessmentDataBySubject, plan, roster }: { assessmentDataByS
           setLoading(false);
           setGenerationProgress("");
           await loadGeneratedComments();
-          if (result.job.failedItems) setError(`${result.job.failedItems}건이 생성되지 않았습니다. AI 평어 생성을 다시 누르면 전체 작업을 재시도합니다.`);
+          if (result.job.failedItems) setError(result.job.error || `${result.job.failedItems}건이 생성되지 않았습니다. AI 평어 생성을 다시 누르면 전체 작업을 재시도합니다.`);
           else setError("");
           const generatedAt = result.job.completedAt || new Date().toISOString();
           setLastGeneratedAt(generatedAt);
@@ -1409,6 +1409,11 @@ function Behavior({ roster }: { roster: AssessmentStudent[] }) {
   const generateAll = async () => {
     const inputs = roster.filter((student) => !excludedStudentIds.includes(student.id)).map((student) => ({ studentId: student.id, characteristic: records[student.id]?.characteristic ?? "" })).filter((item) => item.characteristic.trim());
     if (!inputs.length) return setError("한 명 이상의 특성을 입력해 주세요.");
+    const insufficient = inputs.filter((item) => countBehaviorCharacteristics(item.characteristic) < 4);
+    if (insufficient.length) {
+      const numbers = insufficient.map((item) => roster.find((student) => student.id === item.studentId)?.number ?? item.studentId);
+      return setError(`${numbers.join(", ")}번 학생은 특성이 4개 미만입니다. 학생별로 4~5가지를 입력해 주세요.`);
+    }
     const blocked = inputs.filter((item) => !validateBehaviorSource(item.characteristic).valid);
     if (blocked.length) {
       const numbers = blocked.map((item) => roster.find((student) => student.id === item.studentId)?.number ?? item.studentId);

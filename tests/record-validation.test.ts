@@ -3,7 +3,7 @@ import test from "node:test";
 import { createBehaviorVariations } from "../app/behavior-variation.ts";
 import { selectMostDiverseComments } from "../app/comment-diversity.ts";
 import { createCommentVariations } from "../app/comment-variation.ts";
-import { recordSimilarity, recordSimilarityDetails, validateBehaviorSource, validateRecord } from "../app/record-validation.ts";
+import { countBehaviorCharacteristics, recordSimilarity, recordSimilarityDetails, validateBehaviorSource, validateRecord } from "../app/record-validation.ts";
 import { confirmationIssue } from "../app/record-confirmation.ts";
 
 test("distributes randomized comment styles across a class batch", () => {
@@ -106,6 +106,11 @@ test("blocks prohibited and sensitive observation data before AI generation", ()
   const sensitive = validateBehaviorSource("보호자 연락처는 010-1234-5678임.");
   assert.equal(sensitive.valid, false);
   assert.deepEqual(sensitive.sensitive, ["휴대전화 번호"]);
+});
+
+test("counts labeled behavior characteristics and detects fewer than four", () => {
+  assert.equal(countBehaviorCharacteristics("학습 태도: 성실함\n교우관계: 원만함\n책임감: 강함\n성장 모습: 발표함"), 4);
+  assert.equal(countBehaviorCharacteristics("성실하게 참여함 · 친구를 배려함 · 역할을 수행함"), 3);
 });
 
 test("confirms a valid record without a separate AI fact-validation step", () => {

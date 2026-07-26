@@ -3,6 +3,20 @@ import path from "node:path";
 
 const baseUrl = (process.env.LOAD_TEST_BASE_URL || "https://giroksam-recording.vercel.app").replace(/\/$/, "");
 const mode = process.argv[2] || "status";
+const commentForbiddenExpressions = ["부족함", "미흡함", "못함", "어려워함", "이해하지 못함", "소극적임", "불성실함"];
+
+function validateComment(comment, expectedSentenceCount) {
+  const sentences = comment.trim().split(/(?<=\.)\s+/).map((item) => item.trim()).filter(Boolean);
+  const lengths = sentences.map((sentence) => Array.from(sentence).length);
+  return {
+    valid: sentences.length === expectedSentenceCount
+      && lengths.every((length) => length >= 50 && length <= 60)
+      && sentences.every((sentence) => sentence.endsWith("함."))
+      && !commentForbiddenExpressions.some((expression) => comment.includes(expression)),
+    sentenceCount: sentences.length,
+    lengths,
+  };
+}
 
 async function credentials() {
   if (process.env.LOAD_TEST_EMAIL && process.env.LOAD_TEST_PASSWORD) {
@@ -64,7 +78,6 @@ if (mode === "start") {
     body: JSON.stringify({
       scores,
       selectedStudentIds: classData.students.map((student) => student.id),
-      options: { candidateCount: 1, sentenceCount: 2, maxBytes: 500, emphasis: "balanced" },
     }),
   });
   process.stdout.write(`${JSON.stringify({
@@ -73,15 +86,28 @@ if (mode === "start") {
     expectedItems, totalBatches: result.job.totalBatches, alreadyRunning: Boolean(result.alreadyRunning),
   })}\n`);
 } else {
-  const [jobData, generatedData] = await Promise.all([request("/api/comment-jobs"), request("/api/generated-comments")]);
+  const [jobData, generatedData, usageData, planData] = await Promise.all([
+    request("/api/comment-jobs"), request("/api/generated-comments"), request("/api/usage"), request("/api/assessment-plan"),
+  ]);
   const job = jobData.job;
   if (!job) throw new Error("No comment generation job found");
   const elapsedSeconds = Math.round((Date.parse(job.completedAt || new Date().toISOString()) - Date.parse(job.createdAt)) / 1000);
+  const expectedBySubject = Object.fromEntries([...new Set(planData.plan.map((item) => item.subject))]
+    .map((subject) => [subject, planData.plan.filter((item) => item.subject === subject).length]));
+  const validations = generatedData.comments.map((item) => ({
+    ...validateComment(item.comment, expectedBySubject[item.subject] ?? 0),
+    studentId: item.studentId,
+    subject: item.subject,
+  }));
+  const validComments = validations.filter((item) => item.valid).length;
   process.stdout.write(`${JSON.stringify({
     mode, jobId: job.id, status: job.status, totalItems: job.totalItems,
     completedItems: job.completedItems, failedItems: job.failedItems,
     totalBatches: job.totalBatches, currentBatch: job.currentBatch,
-    savedComments: generatedData.comments.length, elapsedSeconds,
+    savedComments: generatedData.comments.length, elapsedSeconds, validComments,
+    strictSuccessRate: generatedData.comments.length ? Math.round(validComments / generatedData.comments.length * 10000) / 100 : 0,
+    monthlyUsage: usageData.monthly, monthlyLimit: usageData.limit,
+    invalidSamples: validations.filter((item) => !item.valid).slice(0, 10),
     error: job.error || "",
   })}\n`);
 }

@@ -1,9 +1,11 @@
 import { waitUntil } from "@vercel/functions";
 import { eq, selectRows, updateRows } from "../../../../db/supabase";
+import { getAiUsage, MONTHLY_AI_LIMIT, recordAiUsage } from "../../../ai-usage";
 import { selectMostDiverseComments } from "../../../comment-diversity";
 import { CommentEvidence, GeneratedComment, generateCommentBatch, saveGeneratedComments, signCommentJob, verifyCommentJob } from "../../../comment-generation";
 
 export const maxDuration = 60;
+const MAX_GENERATION_ATTEMPTS = 3;
 
 type JobRow = {
   id: string;
@@ -72,7 +74,12 @@ export async function POST(request: Request) {
     .filter((item) => !batchStudentIds.has(Number(item.student_id)))
     .map((item) => item.comment)
     .filter(Boolean);
-  for (let attempt = 0; attempt < 2 && pending.length; attempt += 1) {
+  for (let attempt = 0; attempt < MAX_GENERATION_ATTEMPTS && pending.length; attempt += 1) {
+    const usage = await getAiUsage(job.owner_id);
+    if (usage.monthly >= MONTHLY_AI_LIMIT) {
+      errorMessage = `월 AI 요청 한도 ${MONTHLY_AI_LIMIT}회를 사용하여 남은 항목의 자동 재시도를 중단했습니다.`;
+      break;
+    }
     try {
       const generated = await generateCommentBatch(pending, avoidComments);
       comments = [...comments, ...generated];
@@ -80,6 +87,11 @@ export async function POST(request: Request) {
       pending = pending.filter((item) => !generatedKeys.has(`${item.studentId}|${item.subject}`));
     } catch (error) {
       errorMessage = error instanceof Error ? error.message : "AI 생성 오류";
+    } finally {
+      await recordAiUsage({
+        ownerId: job.owner_id, ownerEmail: job.owner_email, classId: Number(job.class_id),
+        feature: `all-comments-attempt-${attempt + 1}`,
+      });
     }
   }
   comments = selectMostDiverseComments(comments, avoidComments)
@@ -95,6 +107,10 @@ export async function POST(request: Request) {
 
   const returned = new Set(comments.map((item) => `${item.studentId}|${item.subject}`));
   const failedInBatch = batch.filter((item) => !returned.has(`${item.studentId}|${item.subject}`)).length;
+  if (failedInBatch) {
+    const detail = `${subject} 배치 ${batchIndex + 1}: ${failedInBatch}건이 ${MAX_GENERATION_ATTEMPTS}회 생성 후에도 영역별 1문장·50~60자·함 종결 검수를 통과하지 못했습니다.`;
+    errorMessage = [job.error_message, errorMessage, detail].filter(Boolean).join(" ").slice(-1800);
+  }
   const nextBatch = batchIndex + 1;
   const failedItems = Number(job.failed_items) + failedInBatch;
   const completedItems = Number(job.completed_items) + comments.length;
