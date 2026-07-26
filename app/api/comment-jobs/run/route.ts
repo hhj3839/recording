@@ -96,6 +96,10 @@ export async function POST(request: Request) {
   }
   comments = selectMostDiverseComments(comments, avoidComments)
     .map((item) => ({ ...item, candidates: item.candidates.slice(0, 1) }));
+  const cancelledBeforeSave = (await selectRows<{ status: string }>("generation_jobs", { id: eq(jobId), limit: 1 }))[0]?.status === "cancelled";
+  if (cancelledBeforeSave) {
+    return Response.json({ ok: true, terminal: true, cancelled: true });
+  }
   if (comments.length) {
     await saveGeneratedComments({
       ownerId: job.owner_id,

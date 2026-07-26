@@ -66,6 +66,10 @@ export async function POST(request: Request) {
       });
     }
   }
+  const cancelledBeforeSave = (await selectRows<{ status: string }>("generation_jobs", { id: eq(jobId), limit: 1 }))[0]?.status === "cancelled";
+  if (cancelledBeforeSave) {
+    return Response.json({ ok: true, terminal: true, cancelled: true });
+  }
   if (behaviors.length) {
     await saveGeneratedBehaviors({ ownerId: job.owner_id, ownerEmail: job.owner_email, classId: Number(job.class_id), behaviors });
   }

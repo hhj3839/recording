@@ -1,6 +1,6 @@
 import { eq, gte, insertRows, selectRows } from "../db/supabase";
 
-export const MONTHLY_AI_LIMIT = 300;
+export const MONTHLY_AI_LIMIT = 150;
 export const MINUTE_AI_LIMIT = 10;
 
 type UsageRow = { created_at: string };

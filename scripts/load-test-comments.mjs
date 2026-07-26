@@ -88,15 +88,16 @@ if (mode === "start" || mode === "sample") {
     expectedItems, totalBatches: result.job.totalBatches, alreadyRunning: Boolean(result.alreadyRunning),
   })}\n`);
 } else {
-  const [jobData, generatedData, usageData, planData] = await Promise.all([
-    request("/api/comment-jobs"), request("/api/generated-comments"), request("/api/usage"), request("/api/assessment-plan"),
+  const [jobData, generatedData, usageData, planData, classData] = await Promise.all([
+    request("/api/comment-jobs"), request("/api/generated-comments"), request("/api/usage"), request("/api/assessment-plan"), request("/api/class-data"),
   ]);
   const job = jobData.job;
   if (!job) throw new Error("No comment generation job found");
   const elapsedSeconds = Math.round((Date.parse(job.completedAt || new Date().toISOString()) - Date.parse(job.createdAt)) / 1000);
   const expectedBySubject = Object.fromEntries([...new Set(planData.plan.map((item) => item.subject))]
     .map((subject) => [subject, planData.plan.filter((item) => item.subject === subject).length]));
-  const validations = generatedData.comments.map((item) => ({
+  const currentComments = generatedData.comments.filter((item) => Date.parse(item.updatedAt) >= Date.parse(job.createdAt));
+  const validations = currentComments.map((item) => ({
     ...validateComment(item.comment, expectedBySubject[item.subject] ?? 0),
     studentId: item.studentId,
     subject: item.subject,
@@ -106,10 +107,23 @@ if (mode === "start" || mode === "sample") {
     mode, jobId: job.id, status: job.status, totalItems: job.totalItems,
     completedItems: job.completedItems, failedItems: job.failedItems,
     totalBatches: job.totalBatches, currentBatch: job.currentBatch,
-    savedComments: generatedData.comments.length, elapsedSeconds, validComments,
-    strictSuccessRate: generatedData.comments.length ? Math.round(validComments / generatedData.comments.length * 10000) / 100 : 0,
+    savedComments: currentComments.length, elapsedSeconds, validComments,
+    strictSuccessRate: currentComments.length ? Math.round(validComments / currentComments.length * 10000) / 100 : 0,
     monthlyUsage: usageData.monthly, monthlyLimit: usageData.limit,
     invalidSamples: validations.filter((item) => !item.valid).slice(0, 10),
     error: job.error || "",
+    ...(mode === "quality" ? {
+      qualitySamples: currentComments.slice(0, 10).flatMap((item) => {
+        const subjectPlan = planData.plan.filter((plan) => plan.subject === item.subject);
+        const sentences = item.comment.trim().split(/(?<=\.)\s+/);
+        const levels = classData.levels.filter((level) => level.studentId === item.studentId && level.subject === item.subject);
+        return sentences.map((sentence, index) => {
+          const level = levels.find((row) => Number(row.assessmentIndex) === index)?.level ?? "-";
+          const plan = subjectPlan[index];
+          const criterion = level === "상" ? plan?.high : level === "중" ? plan?.middle : level === "하" ? plan?.low : "";
+          return { subject: item.subject, domain: plan?.domain ?? "", level, criterion, sentence };
+        });
+      }).slice(0, 30),
+    } : {}),
   })}\n`);
 }
