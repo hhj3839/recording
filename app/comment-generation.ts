@@ -47,7 +47,7 @@ export async function generateCommentBatch(evidence: CommentEvidence[], avoidCom
         },
         {
           role: "user",
-          content: [{ type: "input_text", text: `${repair ? "이전 응답이 주로 길이 초과로 실패했다. 이번에는 stem을 공백 포함 40~44자로 더 짧고 완결성 있게 작성해 줘.\n" : ""}근거 사전과 학생별 근거 ID를 연결하여 각각 교과 평어를 작성해 줘.\n근거 사전: ${JSON.stringify(evidenceDictionary)}\n학생 입력: ${JSON.stringify(requestEvidence)}\n피해야 할 기존 시작 표현: ${JSON.stringify(avoidanceHints)}` }],
+          content: [{ type: "input_text", text: `${repair ? "이전 응답이 글자 수 검사를 통과하지 못했다. 이번에는 stem을 공백 포함 45~50자로 간결하고 완결성 있게 작성해 줘.\n" : ""}근거 사전과 학생별 근거 ID를 연결하여 각각 교과 평어를 작성해 줘.\n근거 사전: ${JSON.stringify(evidenceDictionary)}\n학생 입력: ${JSON.stringify(requestEvidence)}\n피해야 할 기존 시작 표현: ${JSON.stringify(avoidanceHints)}` }],
         },
       ],
       text: {
