@@ -54,7 +54,7 @@ const request = async (route, options = {}) => {
   return data;
 };
 
-if (mode === "start" || mode === "sample") {
+if (mode === "start" || mode === "sample" || mode === "preflight") {
   const [classData, planData] = await Promise.all([request("/api/class-data"), request("/api/assessment-plan")]);
   if (classData.students.length !== 25) throw new Error(`Expected 25 active students, found ${classData.students.length}`);
   const subjects = [...new Set(planData.plan.map((item) => item.subject))];
@@ -73,6 +73,30 @@ if (mode === "start" || mode === "sample") {
   if (expectedItems !== selectedStudents.length * selectedSubjects.length) {
     throw new Error(`Expected ${selectedStudents.length * selectedSubjects.length} student-subject inputs, found ${expectedItems}`);
   }
+  const estimatedBatches = selectedSubjects.reduce(
+    (total, subject) => total + Math.ceil(scores[subject].filter((student) =>
+      student.levels.some((level) => ["상", "중", "하"].includes(level))).length / 3),
+    0,
+  );
+  if (mode === "preflight") {
+    const usage = await request("/api/usage");
+    process.stdout.write(`${JSON.stringify({
+      mode,
+      ready: true,
+      students: selectedStudents.length,
+      subjects: selectedSubjects.length,
+      subjectNames: selectedSubjects,
+      assessmentPlanItems: planData.plan.length,
+      assessmentLevels: classData.levels.length,
+      expectedItems,
+      estimatedBatches,
+      monthlyUsage: usage.monthly,
+      monthlyLimit: usage.limit,
+      remainingCalls: Math.max(0, usage.limit - usage.monthly),
+      canStartWithinLimit: usage.monthly + estimatedBatches <= usage.limit,
+    })}\n`);
+    process.exit(0);
+  }
   const startedAt = new Date().toISOString();
   const result = await request("/api/comment-jobs", {
     method: "POST",
@@ -85,7 +109,7 @@ if (mode === "start" || mode === "sample") {
   process.stdout.write(`${JSON.stringify({
     mode, startedAt, jobId: result.job.id, status: result.job.status,
     students: selectedStudents.length, subjects: selectedSubjects.length, subjectNames: selectedSubjects,
-    expectedItems, totalBatches: result.job.totalBatches, alreadyRunning: Boolean(result.alreadyRunning),
+    expectedItems, estimatedBatches, totalBatches: result.job.totalBatches, alreadyRunning: Boolean(result.alreadyRunning),
   })}\n`);
 } else {
   const [jobData, generatedData, usageData, planData, classData] = await Promise.all([
