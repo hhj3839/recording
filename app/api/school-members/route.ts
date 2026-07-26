@@ -1,38 +1,10 @@
-import { eq, insertRows, selectRows, supabaseRequest, updateRows, upsertRows } from "../../../db/supabase";
-import { dataError, getDataScope } from "../../data-scope";
-
-type Organization = { id: string; name: string; owner_id: string };
-type Member = { id: number; organization_id: string; user_id: string | null; email: string; role: "admin" | "teacher"; status: "invited" | "active"; created_at: string };
-
-async function membershipFor(user: { id: string; email: string }, schoolName: string) {
-  let memberships = await selectRows<Member>("school_members", { user_id: eq(user.id), order: "created_at.desc" });
-  if (!memberships.length) {
-    const invitations = await selectRows<Member>("school_members", { email: eq(user.email.toLowerCase()), order: "created_at.desc" });
-    if (invitations[0]) {
-      await updateRows("school_members", { id: eq(invitations[0].id) }, { user_id: user.id, status: "active" });
-      memberships = [{ ...invitations[0], user_id: user.id, status: "active" }];
-    }
-  }
-  if (memberships[0]) return memberships[0];
-  const organizations = await insertRows<Organization>("school_organizations", [{ name: schoolName, owner_id: user.id }]);
-  const members = await insertRows<Member>("school_members", [{
-    organization_id: organizations[0].id, user_id: user.id, email: user.email.toLowerCase(),
-    role: "admin", status: "active", invited_by: user.id,
-  }]);
-  return members[0];
-}
-
-async function context() {
-  const { user, classroom } = await getDataScope();
-  const membership = await membershipFor(user, classroom.school_name);
-  const organization = (await selectRows<Organization>("school_organizations", { id: eq(membership.organization_id), limit: 1 }))[0];
-  if (!organization) throw new Error("학교 작업공간을 찾을 수 없습니다.");
-  return { user, membership, organization };
-}
+import { eq, selectRows, supabaseRequest, upsertRows } from "../../../db/supabase";
+import { dataError } from "../../data-scope";
+import { SchoolMember as Member, schoolWorkspaceContext } from "../../school-workspace";
 
 export async function GET() {
   try {
-    const { membership, organization } = await context();
+    const { membership, organization } = await schoolWorkspaceContext();
     const members = await selectRows<Member>("school_members", { organization_id: eq(organization.id), order: "created_at.asc" });
     return Response.json({
       organization: { id: organization.id, name: organization.name },
@@ -46,7 +18,7 @@ export async function GET() {
 
 export async function POST(request: Request) {
   try {
-    const { user, membership, organization } = await context();
+    const { user, membership, organization } = await schoolWorkspaceContext();
     if (membership.role !== "admin") return Response.json({ error: "학교 관리자만 구성원을 초대할 수 있습니다." }, { status: 403 });
     const body = await request.json().catch(() => ({}));
     const email = String(body.email ?? "").trim().toLowerCase().slice(0, 320);
@@ -65,7 +37,7 @@ export async function POST(request: Request) {
 
 export async function DELETE(request: Request) {
   try {
-    const { membership, organization } = await context();
+    const { membership, organization } = await schoolWorkspaceContext();
     if (membership.role !== "admin") return Response.json({ error: "학교 관리자만 구성원을 삭제할 수 있습니다." }, { status: 403 });
     const body = await request.json().catch(() => ({}));
     const id = Number(body.id);

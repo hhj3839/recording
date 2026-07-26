@@ -566,6 +566,8 @@ function PlanManager({ plan, onChanged, current }: { plan: AssessmentPlan[]; onC
   const [targetClassId, setTargetClassId] = useState("");
   const [versions, setVersions] = useState<Array<{ id: number; source: string; label: string; itemCount: number; createdAt: string }>>([]);
   const [versionsOpen, setVersionsOpen] = useState(false);
+  const [sharedPlans, setSharedPlans] = useState<Array<{ id: number; name: string; schoolYear: number; semester: number; grade: number; itemCount: number; createdByEmail: string; updatedAt: string; canDelete: boolean }>>([]);
+  const [sharedOpen, setSharedOpen] = useState(false);
   const columns: Array<[keyof AssessmentPlan, string]> = [
     ["subject", "과목"], ["unit", "단원"], ["goal", "평가목표"], ["domain", "영역"],
     ["type", "평가 유형"], ["perspective", "평가 관점"], ["high", "상"], ["middle", "중"],
@@ -774,13 +776,64 @@ function PlanManager({ plan, onChanged, current }: { plan: AssessmentPlan[]; onC
       setBusy(false);
     }
   };
+  const loadSharedPlans = async () => {
+    setErrors([]);
+    try {
+      const response = await fetch("/api/shared-assessment-plans");
+      const result = await response.json() as { plans?: typeof sharedPlans; error?: string };
+      if (!response.ok) throw new Error(result.error || "공동 평가계획을 불러오지 못했습니다.");
+      setSharedPlans(result.plans ?? []);
+      setSharedOpen(true);
+    } catch (error) { setErrors([error instanceof Error ? error.message : "공동 평가계획을 불러오지 못했습니다."]); }
+  };
+  const publishSharedPlan = async () => {
+    const name = window.prompt("학교 구성원이 알아볼 공동 평가계획 이름을 입력해 주세요.", `${current?.schoolYear ?? ""}학년도 ${current?.grade ?? ""}학년 ${current?.semester ?? ""}학기`);
+    if (!name?.trim()) return;
+    setBusy(true);
+    try {
+      const response = await fetch("/api/shared-assessment-plans", {
+        method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ name: name.trim() }),
+      });
+      const result = await response.json() as { error?: string };
+      if (!response.ok) throw new Error(result.error || "평가계획을 공유하지 못했습니다.");
+      setMessage("현재 평가계획을 학교 작업공간에 공유했습니다.");
+      await loadSharedPlans();
+    } catch (error) { setErrors([error instanceof Error ? error.message : "평가계획을 공유하지 못했습니다."]); }
+    finally { setBusy(false); }
+  };
+  const importSharedPlan = async (shared: (typeof sharedPlans)[number]) => {
+    if (!window.confirm(`‘${shared.name}’ ${shared.itemCount}개 항목으로 현재 평가계획을 교체할까요?\n기존 계획은 버전 기록에 보관됩니다.`)) return;
+    setBusy(true);
+    try {
+      const response = await fetch("/api/shared-assessment-plans", {
+        method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ id: shared.id }),
+      });
+      const result = await response.json() as { imported?: number; error?: string };
+      if (!response.ok) throw new Error(result.error || "공동 평가계획을 가져오지 못했습니다.");
+      const planResponse = await fetch("/api/assessment-plan");
+      const planResult = await planResponse.json() as { plan?: AssessmentPlan[] };
+      if (planResponse.ok && planResult.plan) onChanged(planResult.plan);
+      setMessage(`공동 평가계획 ${result.imported ?? shared.itemCount}개를 현재 학급에 적용했습니다.`);
+      setSharedOpen(false);
+    } catch (error) { setErrors([error instanceof Error ? error.message : "공동 평가계획을 가져오지 못했습니다."]); }
+    finally { setBusy(false); }
+  };
+  const deleteSharedPlan = async (shared: (typeof sharedPlans)[number]) => {
+    if (!window.confirm(`공동 평가계획 ‘${shared.name}’을 삭제할까요?`)) return;
+    const response = await fetch("/api/shared-assessment-plans", {
+      method: "DELETE", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ id: shared.id }),
+    });
+    const result = await response.json() as { error?: string };
+    if (!response.ok) return setErrors([result.error || "공동 평가계획을 삭제하지 못했습니다."]);
+    await loadSharedPlans();
+  };
   const changePlan = (id: number | undefined, key: keyof AssessmentPlan, value: string) => {
     onChanged(plan.map((item) => item.id === id ? { ...item, [key]: value } : item));
   };
   return <section>
     <div className="page-heading">
       <div><p className="eyebrow">학급별 평가 기준</p><h1>평가계획 관리</h1><p>직접 입력하거나 Excel·CSV를 검증한 뒤 저장하세요.</p></div>
-      <div className="heading-actions"><button className="secondary" onClick={() => void loadVersions()}>버전 기록</button><button className="secondary" onClick={downloadTemplate}>업로드 양식 받기</button><label className="file-upload-button">Excel/CSV 불러오기<input type="file" accept=".xlsx,.xls,.csv" onChange={(event) => { const file = event.target.files?.[0]; if (file) void upload(file); event.target.value = ""; }} /></label></div>
+      <div className="heading-actions"><button className="secondary" onClick={() => void loadSharedPlans()}>학교 공동 계획</button><button className="secondary" onClick={() => void loadVersions()}>버전 기록</button><button className="secondary" onClick={downloadTemplate}>업로드 양식 받기</button><label className="file-upload-button">Excel/CSV 불러오기<input type="file" accept=".xlsx,.xls,.csv" onChange={(event) => { const file = event.target.files?.[0]; if (file) void upload(file); event.target.value = ""; }} /></label></div>
     </div>
     {versionsOpen && <section className="plan-version-panel">
       <div className="section-heading"><div><p className="eyebrow">VERSION HISTORY</p><h2>평가계획 버전 기록</h2></div><button className="secondary" onClick={() => setVersionsOpen(false)}>닫기</button></div>
@@ -789,6 +842,11 @@ function PlanManager({ plan, onChanged, current }: { plan: AssessmentPlan[]; onC
         <span><b>{version.label}</b><small>{new Intl.DateTimeFormat("ko-KR", { dateStyle: "short", timeStyle: "short" }).format(new Date(version.createdAt))} · {version.itemCount}개</small></span>
         <button disabled={busy} onClick={() => void restoreVersion(version)}>이 버전 복원</button>
       </article>) : <p className="empty-cell">저장된 평가계획 버전이 없습니다.</p>}</div>
+    </section>}
+    {sharedOpen && <section className="shared-plan-panel">
+      <div className="section-heading"><div><p className="eyebrow">SCHOOL SHARED PLAN</p><h2>학년 공동 평가계획</h2></div><div><button disabled={busy || !plan.length} onClick={() => void publishSharedPlan()}>현재 계획 공유</button><button className="secondary" onClick={() => setSharedOpen(false)}>닫기</button></div></div>
+      <p>학교 구성원이 게시한 계획을 현재 학급에 가져올 수 있습니다. 평가수준이 입력된 학급은 계획을 교체할 수 없습니다.</p>
+      <div className="shared-plan-list">{sharedPlans.length ? sharedPlans.map((shared) => <article key={shared.id}><div><strong>{shared.name}</strong><span>{shared.schoolYear}학년도 {shared.semester}학기 · {shared.grade}학년 · {shared.itemCount}개</span><small>{shared.createdByEmail} · {new Date(shared.updatedAt).toLocaleString("ko-KR")}</small></div><button disabled={busy} onClick={() => void importSharedPlan(shared)}>현재 학급에 적용</button>{shared.canDelete && <button className="danger-text" disabled={busy} onClick={() => void deleteSharedPlan(shared)}>삭제</button>}</article>) : <p className="empty-cell">학교에 공유된 평가계획이 없습니다.</p>}</div>
     </section>}
     <div className="plan-help"><strong>필수 열</strong> 과목 · 단원 · 평가목표 · 영역 · 평가 관점 · 상 · 중 · 하 <span>평가 유형과 유의점은 선택 항목입니다.</span></div>
     <section className="plan-copy">
