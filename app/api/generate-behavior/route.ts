@@ -65,7 +65,19 @@ export async function POST(request: Request) {
       }),
     });
     const payload = await response.json() as unknown;
-    if (!response.ok) return Response.json({ error: "AI 생성 요청을 처리하지 못했습니다." }, { status: 502 });
+    if (!response.ok) {
+      const apiError = payload as { error?: { code?: string; type?: string } };
+      const quotaExhausted = apiError.error?.code === "insufficient_quota" || apiError.error?.type === "insufficient_quota";
+      return Response.json({
+        error: quotaExhausted
+          ? "OpenAI API 크레딧 또는 사용 한도가 소진되었습니다. 결제와 프로젝트 한도를 확인해 주세요."
+          : response.status === 429
+            ? "OpenAI API 요청이 일시적으로 많습니다. 잠시 후 다시 시도해 주세요."
+            : response.status === 401
+              ? "OpenAI API 인증 설정을 확인해 주세요."
+              : "AI 생성 요청을 처리하지 못했습니다.",
+      }, { status: quotaExhausted ? 429 : 502 });
+    }
     const behavior = extractOutputText(payload);
     if (!behavior) return Response.json({ error: "AI가 문장을 반환하지 않았습니다." }, { status: 502 });
     await recordAiUsage({ ownerId: user.id, ownerEmail: user.email, classId, feature: "single-behavior" });

@@ -1430,7 +1430,7 @@ function Behavior({ roster }: { roster: AssessmentStudent[] }) {
   const [error, setError] = useState("");
   const [copied, setCopied] = useState(false);
   const [lastGeneratedAt, setLastGeneratedAt] = useState("");
-  const [referenceOpen, setReferenceOpen] = useState(false);
+  const [referenceOpen, setReferenceOpen] = useState(true);
   const [activeCategory, setActiveCategory] = useState(behaviorReferences[0].category);
   const [activeStudentId, setActiveStudentId] = useState<number | null>(roster[0]?.id ?? null);
   const [history, setHistory] = useState<{ studentId: number; studentName: string; revisions: RevisionItem[] } | null>(null);

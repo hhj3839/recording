@@ -39,7 +39,15 @@ export async function generateBehaviorBatch(inputs: BehaviorInput[], avoidBehavi
     }),
   });
   const payload = await response.json() as unknown;
-  if (!response.ok) throw new Error("AI 생성 요청을 처리하지 못했습니다.");
+  if (!response.ok) {
+    const apiError = payload as { error?: { code?: string; type?: string } };
+    if (apiError.error?.code === "insufficient_quota" || apiError.error?.type === "insufficient_quota") {
+      throw new Error("OpenAI API 크레딧 또는 사용 한도가 소진되었습니다. 결제와 프로젝트 한도를 확인해 주세요.");
+    }
+    if (response.status === 429) throw new Error("OpenAI API 요청이 일시적으로 많습니다. 잠시 후 다시 시도해 주세요.");
+    if (response.status === 401) throw new Error("OpenAI API 인증 설정을 확인해 주세요.");
+    throw new Error("AI 생성 요청을 처리하지 못했습니다.");
+  }
   const raw = outputText(payload).replace(/^```json\s*/i, "").replace(/\s*```$/, "");
   const parsed = JSON.parse(raw) as Array<{ studentId?: unknown; behavior?: unknown }>;
   const inputMap = new Map(inputs.map((item) => [item.studentId, item.characteristic]));
