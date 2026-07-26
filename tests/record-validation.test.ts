@@ -93,6 +93,14 @@ test("detects conservative Korean spelling and spacing mistakes", () => {
   assert.equal(result.spellingIssues.some((issue) => issue.includes("문장부호")), true);
 });
 
+test("detects additional common Korean spelling mistakes", () => {
+  const result = validateRecord("맡은 역활을 깨끗히 마무리 할려고 노력함.");
+  assert.equal(result.spellingOk, false);
+  assert.equal(result.spellingIssues.some((issue) => issue.includes("역할")), true);
+  assert.equal(result.spellingIssues.some((issue) => issue.includes("깨끗이")), true);
+  assert.equal(result.spellingIssues.some((issue) => issue.includes("하려고")), true);
+});
+
 test("detects unbalanced parentheses", () => {
   const result = validateRecord("친구의 의견을 경청하고 자신의 생각을 표현함(꾸준함.");
   assert.equal(result.spellingOk, false);

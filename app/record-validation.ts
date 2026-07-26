@@ -30,6 +30,16 @@ const spellingRules: Array<{ pattern: RegExp; message: string }> = [
   { pattern: /(할|될|볼|알|쓸|갈|올)수(?=[가-힣\s,.!?]|$)/, message: "의존 명사 '수'는 앞말과 띄어 써야 함" },
   { pattern: /몇일/, message: "'몇일'을 '며칠'로 고쳐야 함" },
   { pattern: /역활/, message: "'역활'을 '역할'로 고쳐야 함" },
+  { pattern: /어떻해/, message: "'어떻해'를 문맥에 따라 '어떻게' 또는 '어떡해'로 고쳐야 함" },
+  { pattern: /금새/, message: "'금새'를 시간의 뜻으로 썼다면 '금세'로 고쳐야 함" },
+  { pattern: /웬지/, message: "'웬지'를 '왠지'로 고쳐야 함" },
+  { pattern: /깨끗히/, message: "'깨끗히'를 '깨끗이'로 고쳐야 함" },
+  { pattern: /곰곰히/, message: "'곰곰히'를 '곰곰이'로 고쳐야 함" },
+  { pattern: /일일히/, message: "'일일히'를 '일일이'로 고쳐야 함" },
+  { pattern: /틈틈히/, message: "'틈틈히'를 '틈틈이'로 고쳐야 함" },
+  { pattern: /할려고/, message: "'할려고'를 '하려고'로 고쳐야 함" },
+  { pattern: /바램/, message: "소망의 뜻이라면 '바램'을 '바람'으로 고쳐야 함" },
+  { pattern: /[가-힣]데로/, message: "의존 명사 표현의 '데로'를 문맥에 따라 '대로'로 확인해야 함" },
 ];
 
 export function validateRecord(text: string, behavior = false): ValidationResult {

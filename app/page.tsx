@@ -1617,6 +1617,24 @@ export default function Home() {
   const [generatedBehaviorCount, setGeneratedBehaviorCount] = useState(0);
   const [aiUsage, setAiUsage] = useState({ monthly: 0, limit: 150 });
   useEffect(() => {
+    const idleLimitMs = 30 * 60 * 1000;
+    let lastActivity = Date.now();
+    const markActivity = () => { lastActivity = Date.now(); };
+    const events: Array<keyof WindowEventMap> = ["pointerdown", "keydown", "scroll", "touchstart"];
+    events.forEach((event) => window.addEventListener(event, markActivity, { passive: true }));
+    const timer = window.setInterval(() => {
+      if (Date.now() - lastActivity < idleLimitMs) return;
+      window.clearInterval(timer);
+      void fetch("/api/auth/logout", { method: "POST" }).finally(() => {
+        window.location.assign("/login?reason=idle");
+      });
+    }, 60_000);
+    return () => {
+      window.clearInterval(timer);
+      events.forEach((event) => window.removeEventListener(event, markActivity));
+    };
+  }, []);
+  useEffect(() => {
     const loadClassData = async () => {
       try {
         const [planResponse, classResponse, commentResponse, behaviorResponse] = await Promise.all([
