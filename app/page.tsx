@@ -725,6 +725,23 @@ type AssessmentStudent = {
   note: string;
 };
 
+function SubjectNavigator({ subjects, activeSubject, onChange, progress }: {
+  subjects: string[];
+  activeSubject: string;
+  onChange: (subject: string) => void;
+  progress?: (subject: string) => string;
+}) {
+  return <div className="subject-navigator">
+    <span>과목 선택</span>
+    <div className="subject-tabs unified-subject-tabs">
+      {subjects.map((subject) => <button className={subject === activeSubject ? "active" : ""} onClick={() => onChange(subject)} key={subject}>
+        <b>{subject}</b>
+        {progress && <small>{progress(subject)}</small>}
+      </button>)}
+    </div>
+  </div>;
+}
+
 function Assessments({ data, setData, plan, activeSubject, setActiveSubject, onDeleteStudent, onSave }: {
   data: AssessmentStudent[];
   setData: React.Dispatch<React.SetStateAction<AssessmentStudent[]>>;
@@ -828,14 +845,17 @@ function Assessments({ data, setData, plan, activeSubject, setActiveSubject, onD
         <div><p className="eyebrow">{activeSubject} · 1학기</p><h1>평가 수준 입력</h1><p>셀을 눌러 학생별 성취 수준을 빠르게 입력하세요.</p></div>
         <div className="heading-actions"><span className={`autosave-state ${saving ? "saving" : dirty ? "dirty" : "saved"}`}>{saving ? "자동 저장 중…" : dirty ? "저장 대기 중" : saved ? "자동 저장됨" : "변경 시 자동 저장"}</span><button onClick={() => void save()} disabled={saving || !dirty}>{saving ? "저장 중…" : "저장"}</button></div>
       </div>
-      <div className="table-tools">
-        <div className="subject-tabs">{subjects.map((subject) => <button className={subject === activeSubject ? "active" : ""} onClick={() => changeSubject(subject)} key={subject}>{subject}</button>)}</div>
+      <div className="workspace-toolbar assessment-workspace-toolbar">
+        <SubjectNavigator subjects={subjects} activeSubject={activeSubject} onChange={changeSubject} progress={(subject) => subject === activeSubject ? `${completedCount}/${expectedCount}` : `${plan.filter((item) => item.subject === subject).length}개 영역`} />
         <span><i className="level high" /> 상 <i className="level middle" /> 중 <i className="level low" /> 하 <i className="level absent" /> 미응시 <i className="level planned" /> 평가 예정</span>
       </div>
-      <div className="assessment-bulk-tools">
-        <div><strong>일괄 입력</strong><select value={bulkLevel} onChange={(event) => setBulkLevel(event.target.value as Level)}><option>상</option><option>중</option><option>하</option><option>미응시</option><option>평가 예정</option></select><button onClick={applyToMissing}>미입력 전체 적용</button><button className="secondary" onClick={() => void pasteLevels()}>엑셀 표 붙여넣기</button><button className="danger-text" onClick={clearAll}>전체 초기화</button></div>
-        <span>엑셀에서 학생별 상·중·하·미응시·평가 예정 영역만 복사하거나, 번호·이름을 포함한 표를 복사해도 됩니다.</span>
-      </div>
+      <details className="secondary-tools">
+        <summary>일괄 입력 도구</summary>
+        <div className="assessment-bulk-tools">
+          <div><select aria-label="일괄 적용 수준" value={bulkLevel} onChange={(event) => setBulkLevel(event.target.value as Level)}><option>상</option><option>중</option><option>하</option><option>미응시</option><option>평가 예정</option></select><button onClick={applyToMissing}>미입력 전체 적용</button><button className="secondary" onClick={() => void pasteLevels()}>엑셀 표 붙여넣기</button><button className="danger-text" onClick={clearAll}>전체 초기화</button></div>
+          <span>평가 수준 영역만 복사하거나 번호·이름을 포함한 표를 붙여넣을 수 있습니다.</span>
+        </div>
+      </details>
       {message && <p className="student-message">{message}</p>}
       <div className="assessment-wrap">
         <table className="assessment-table">
@@ -1031,7 +1051,7 @@ function Comments({ assessmentDataBySubject, plan, roster }: { assessmentDataByS
       <div className="review-layout comments-review-layout">
         <div className="review-content">
           <div className="comments-toolbar">
-            <div className="subject-navigator"><span>과목 선택</span><div className="subject-tabs review-subject-tabs">{subjects.map((subject) => <button className={subject === selectedSubject ? "active" : ""} onClick={() => { setSelectedSubject(subject); setCopied(false); }} key={subject}><b>{subject}</b><small>{roster.filter((student) => comments[`${student.id}|${subject}`]).length}/{roster.length}명</small></button>)}</div></div>
+            <SubjectNavigator subjects={subjects} activeSubject={selectedSubject} onChange={(subject) => { setSelectedSubject(subject); setCopied(false); }} progress={(subject) => `${roster.filter((student) => comments[`${student.id}|${subject}`]).length}/${roster.length}명`} />
             <button className="copy-comments" onClick={() => void copySubjectComments()} disabled={!roster.some((student) => comments[`${student.id}|${selectedSubject}`])}>{copied ? "복사됨 ✓" : "평어만 복사하기"}</button>
           </div>
           {error && <p className="generation-error">! {error}</p>}
@@ -1088,11 +1108,6 @@ function Behavior({ roster }: { roster: AssessmentStudent[] }) {
   const [activeStudentId, setActiveStudentId] = useState<number | null>(roster[0]?.id ?? null);
   const [history, setHistory] = useState<{ studentId: number; studentName: string; revisions: RevisionItem[] } | null>(null);
   const [rewriteBusyKey, setRewriteBusyKey] = useState("");
-  const [excludedStudentIds, setExcludedStudentIds] = useState<number[]>([]);
-  useEffect(() => {
-    queueMicrotask(() => setExcludedStudentIds((current) => current.filter((id) => roster.some((student) => student.id === id))));
-  }, [roster]);
-
   const loadBehaviors = async () => {
     try {
       const response = await fetch("/api/student-behaviors");
@@ -1155,7 +1170,7 @@ function Behavior({ roster }: { roster: AssessmentStudent[] }) {
     setError("");
   };
   const generateAll = async () => {
-    const inputs = roster.filter((student) => !excludedStudentIds.includes(student.id)).map((student) => ({ studentId: student.id, characteristic: records[student.id]?.characteristic ?? "" })).filter((item) => item.characteristic.trim());
+    const inputs = roster.map((student) => ({ studentId: student.id, characteristic: records[student.id]?.characteristic ?? "" })).filter((item) => item.characteristic.trim());
     if (!inputs.length) return setError("한 명 이상의 특성을 입력해 주세요.");
     const insufficient = inputs.filter((item) => countBehaviorCharacteristics(item.characteristic) < 4);
     if (insufficient.length) {
@@ -1257,7 +1272,6 @@ function Behavior({ roster }: { roster: AssessmentStudent[] }) {
     return characteristic && !validateBehaviorSource(characteristic).valid;
   }).length;
   const eligibleStudentIds = roster.filter((student) => records[student.id]?.characteristic.trim()).map((student) => student.id);
-  const selectedBehaviorStudentIds = eligibleStudentIds.filter((id) => !excludedStudentIds.includes(id));
 
   return (
     <section>
@@ -1266,14 +1280,14 @@ function Behavior({ roster }: { roster: AssessmentStudent[] }) {
         <div className="ai-generate-actions">{formattedLastGeneratedAt && <span>마지막 사용 {formattedLastGeneratedAt}</span>}<button onClick={() => void generateAll()} disabled={loading || blockedSourceCount > 0}>{loading ? generationProgress || "전체 생성 중…" : blockedSourceCount ? `입력 확인 ${blockedSourceCount}명` : "✦ AI 행특 생성"}</button></div>
       </div>
       <div className="review-content behavior-table-content">
-        <div className="behavior-table-toolbar"><span><strong>생성 대상 {selectedBehaviorStudentIds.length}/{roster.length}명</strong> · 학생별 특성 4~5가지 입력 · 500~550B 자동 작성</span><div><button className="reference-open-button" onClick={() => setReferenceOpen((current) => !current)}>{referenceOpen ? "참고자료 닫기" : "참고자료 열기"}</button><button className="copy-comments" onClick={() => void copyBehaviors()} disabled={!roster.some((student) => records[student.id]?.behavior)}>{copied ? "복사됨 ✓" : "행동특성만 복사하기"}</button></div></div>
+        <div className="workspace-toolbar behavior-table-toolbar"><span><strong>생성 대상 {eligibleStudentIds.length}/{roster.length}명</strong> · 특성을 입력한 학생은 자동 포함 · 500~550B 자동 작성</span><div><button className="reference-open-button" onClick={() => setReferenceOpen((current) => !current)}>{referenceOpen ? "참고자료 닫기" : "참고자료 열기"}</button><button className="copy-comments" onClick={() => void copyBehaviors()} disabled={!roster.some((student) => records[student.id]?.behavior)}>{copied ? "복사됨 ✓" : "행동특성만 복사하기"}</button></div></div>
         {error && <p className="generation-error">! {error}</p>}
         {history && <RevisionPanel title={history.studentName} revisions={history.revisions} onRestore={(revision) => void restoreBehavior(revision)} onClose={() => setHistory(null)} />}
         {loading && <div className="comment-loading class-loading"><span>✦</span><p>입력된 모든 학생의 행동특성을 생성하고 있어요.</p></div>}
         <div className={`behavior-work-area ${referenceOpen ? "with-reference" : ""}`}>
           <div className="comments-table-wrap">
             <table className="comments-table behavior-table">
-              <thead><tr><th><input aria-label="관찰 사실 입력 학생 전체 선택" type="checkbox" checked={eligibleStudentIds.length > 0 && selectedBehaviorStudentIds.length === eligibleStudentIds.length} onChange={(event) => setExcludedStudentIds(event.target.checked ? [] : eligibleStudentIds)} /></th><th>번호</th><th>이름</th><th>특성</th><th>행동특성</th><th>검수·확정</th></tr></thead>
+              <thead><tr><th>번호</th><th>이름</th><th>특성</th><th>행동특성</th><th>검수·확정</th></tr></thead>
               <tbody>{roster.map((student) => {
                 const record = records[student.id] ?? emptyBehaviorRecord();
                 const validation = validateRecord(record.behavior, true);
@@ -1285,9 +1299,8 @@ function Behavior({ roster }: { roster: AssessmentStudent[] }) {
                 })).sort((left, right) => right.score - left.score);
                 const similarStudents = comparisons.filter((item) => item.score >= 0.82);
                 const closest = comparisons[0];
-                const eligible = Boolean(record.characteristic.trim());
-                const selected = eligible && !excludedStudentIds.includes(student.id);
-                return <tr className={activeStudentId === student.id ? "active-reference-row" : ""} key={student.id}><td><input aria-label={`${student.name} 행동특성 생성 대상`} type="checkbox" disabled={!eligible} checked={selected} onChange={(event) => setExcludedStudentIds((current) => event.target.checked ? current.filter((id) => id !== student.id) : [...new Set([...current, student.id])])} /></td><td>{student.number ?? student.id}</td><td><strong>{student.name}</strong></td><td><textarea className={sourceIssues.length ? "input-blocked" : ""} value={record.characteristic} onFocus={() => setActiveStudentId(student.id)} onChange={(event) => updateRecord(student.id, { characteristic: event.target.value, confirmed: false })} onBlur={() => void saveRecord(student.id, records[student.id] ?? record)} placeholder={"학습 태도: …\n교우관계: …\n책임감: …\n생활 습관: …\n성장 모습: …"} />{sourceIssues.length > 0 && <small className="source-warning">AI 전송 불가: {sourceIssues.join(" · ")}</small>}</td><td><textarea value={record.behavior} onChange={(event) => updateRecord(student.id, { behavior: event.target.value, confirmed: false })} onBlur={() => void saveRecord(student.id, records[student.id] ?? record)} placeholder={record.characteristic ? "AI 행특 생성 버튼을 누르면 결과가 표시됩니다." : "특성을 먼저 입력해 주세요."} /><small>{record.behavior ? `${validation.bytes} bytes` : ""}</small><div className="comment-row-actions"><button disabled={!record.characteristic || !sourceValidation.valid || !!rewriteBusyKey} onMouseDown={(event) => event.preventDefault()} onClick={() => void rewriteBehavior(student.id, record, "regenerate")}>{rewriteBusyKey === `${student.id}|regenerate` ? "생성 중…" : "다시 생성"}</button><button disabled={!record.characteristic || !record.behavior || !sourceValidation.valid || !!rewriteBusyKey} onMouseDown={(event) => event.preventDefault()} onClick={() => void rewriteBehavior(student.id, record, "length")}>{rewriteBusyKey === `${student.id}|length` ? "조정 중…" : "500~550B 맞춤"}</button></div></td><td className="validation-cell behavior-validation"><div><span className={validation.lengthOk ? "pass" : "fail"}>500~550B</span><span className={validation.endingsOk ? "pass" : "fail"}>음·임 종결</span><span className={validation.growthIncluded ? "pass" : "fail"}>성장</span><span className={!validation.forbidden.length ? "pass" : "fail"}>금지어</span><span className={validation.spellingOk ? "pass" : "fail"} title={validation.spellingIssues.join("\n")}>맞춤법 {validation.spellingOk ? "정상" : `${validation.spellingIssues.length}건`}</span><span className={!validation.repeated.length ? "pass" : "fail"}>반복</span><span className={!similarStudents.length ? "pass" : "fail"}>최대 중복 {closest?.score ? `${Math.round(closest.score * 100)}%` : "0%"}</span></div>{closest?.score > 0 && <div className="similarity-detail"><strong>{closest.student.name} 학생과 {Math.round(closest.score * 100)}%</strong>{closest.overlaps.length > 0 && <span>겹치는 표현: {closest.overlaps.join(" · ")}</span>}</div>}{!validation.spellingOk && <ul className="spelling-issues">{validation.spellingIssues.map((issue, issueIndex) => <li key={issueIndex}>{issue}</li>)}</ul>}<button className="history-button" disabled={!record.behavior} onClick={() => void loadHistory(student.id, student.name)}>이전 기록</button><button className={record.confirmed ? "confirmed" : ""} disabled={!validation.valid || !!similarStudents.length || !!rewriteBusyKey} onMouseDown={(event) => event.preventDefault()} onClick={() => void saveRecord(student.id, record, !record.confirmed)}>{record.confirmed ? "확정됨 ✓" : "최종 확정"}</button></td></tr>;
+                const characteristicCount = countBehaviorCharacteristics(record.characteristic);
+                return <tr className={activeStudentId === student.id ? "active-reference-row" : ""} key={student.id}><td>{student.number ?? student.id}</td><td><strong>{student.name}</strong></td><td><textarea className={sourceIssues.length ? "input-blocked" : ""} value={record.characteristic} onFocus={() => setActiveStudentId(student.id)} onChange={(event) => updateRecord(student.id, { characteristic: event.target.value, confirmed: false })} onBlur={() => void saveRecord(student.id, records[student.id] ?? record)} placeholder={"학습 태도: …\n교우관계: …\n책임감: …\n생활 습관: …\n성장 모습: …"} />{sourceIssues.length > 0 && <small className="source-warning">AI 전송 불가: {sourceIssues.join(" · ")}</small>}{record.characteristic.trim() && characteristicCount < 4 && <small className="source-warning characteristic-warning">특성을 {4 - characteristicCount}개 더 입력해 주세요.</small>}</td><td><textarea value={record.behavior} onChange={(event) => updateRecord(student.id, { behavior: event.target.value, confirmed: false })} onBlur={() => void saveRecord(student.id, records[student.id] ?? record)} placeholder={record.characteristic ? "AI 행특 생성 버튼을 누르면 결과가 표시됩니다." : "특성을 먼저 입력해 주세요."} /><small>{record.behavior ? `${validation.bytes} bytes` : ""}</small><div className="comment-row-actions"><button disabled={!record.characteristic || !sourceValidation.valid || !!rewriteBusyKey} onMouseDown={(event) => event.preventDefault()} onClick={() => void rewriteBehavior(student.id, record, "regenerate")}>{rewriteBusyKey === `${student.id}|regenerate` ? "생성 중…" : "다시 생성"}</button><button disabled={!record.characteristic || !record.behavior || !sourceValidation.valid || !!rewriteBusyKey} onMouseDown={(event) => event.preventDefault()} onClick={() => void rewriteBehavior(student.id, record, "length")}>{rewriteBusyKey === `${student.id}|length` ? "조정 중…" : "500~550B 맞춤"}</button></div></td><td className="validation-cell behavior-validation"><div><span className={validation.lengthOk ? "pass" : "fail"}>500~550B</span><span className={validation.endingsOk ? "pass" : "fail"}>음·임 종결</span><span className={validation.growthIncluded ? "pass" : "fail"}>성장</span><span className={!validation.forbidden.length ? "pass" : "fail"}>금지어</span><span className={validation.spellingOk ? "pass" : "fail"} title={validation.spellingIssues.join("\n")}>맞춤법 {validation.spellingOk ? "정상" : `${validation.spellingIssues.length}건`}</span><span className={!validation.repeated.length ? "pass" : "fail"}>반복</span><span className={!similarStudents.length ? "pass" : "fail"}>최대 중복 {closest?.score ? `${Math.round(closest.score * 100)}%` : "0%"}</span></div>{closest?.score > 0 && <div className="similarity-detail"><strong>{closest.student.name} 학생과 {Math.round(closest.score * 100)}%</strong>{closest.overlaps.length > 0 && <span>겹치는 표현: {closest.overlaps.join(" · ")}</span>}</div>}{!validation.spellingOk && <ul className="spelling-issues">{validation.spellingIssues.map((issue, issueIndex) => <li key={issueIndex}>{issue}</li>)}</ul>}<button className="history-button" disabled={!record.behavior} onClick={() => void loadHistory(student.id, student.name)}>이전 기록</button><button className={record.confirmed ? "confirmed" : ""} disabled={!validation.valid || !!similarStudents.length || !!rewriteBusyKey} onMouseDown={(event) => event.preventDefault()} onClick={() => void saveRecord(student.id, record, !record.confirmed)}>{record.confirmed ? "확정됨 ✓" : "최종 확정"}</button></td></tr>;
               })}</tbody>
             </table>
           </div>
