@@ -591,7 +591,7 @@ function StudentManager({ roster, currentClassId, onAdded, onChanged, onDeleted,
         return <tr key={student.id}>
           <td><input aria-label={`${student.name} 번호`} type="number" min="1" value={draft.number} onChange={(event) => setDrafts((current) => ({ ...current, [student.id]: { ...draft, number: Number(event.target.value) } }))} /></td>
           <td><input aria-label={`${student.name} 이름`} value={draft.name} onChange={(event) => setDrafts((current) => ({ ...current, [student.id]: { ...draft, name: event.target.value } }))} /></td>
-          <td><span className="order-buttons"><button disabled={busy || index === 0} title="한 칸 위로" onClick={() => moveStudent(student.id, -1)}>↑</button><button disabled={busy || index === orderedRoster.length - 1} title="한 칸 아래로" onClick={() => moveStudent(student.id, 1)}>↓</button></span><button onClick={() => void saveStudent(student.id)}>저장</button><button className="danger-text" onClick={() => onDeleted(student.id)}>비활성화</button></td>
+          <td><div className="student-row-actions"><span className="order-buttons"><button disabled={busy || index === 0} title="한 칸 위로" onClick={() => moveStudent(student.id, -1)}>↑</button><button disabled={busy || index === orderedRoster.length - 1} title="한 칸 아래로" onClick={() => moveStudent(student.id, 1)}>↓</button></span><button onClick={() => void saveStudent(student.id)}>저장</button><button className="danger-text" onClick={() => onDeleted(student.id)}>비활성화</button></div></td>
         </tr>;
       }) : <tr><td colSpan={3} className="empty-cell">등록된 학생이 없습니다. 직접 추가하거나 명단을 업로드해 주세요.</td></tr>}</tbody>
     </table></div>
