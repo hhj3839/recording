@@ -153,7 +153,7 @@ export async function POST(request: Request) {
     current_batch: nextBatch,
     completed_items: completedItems,
     failed_items: failedItems,
-    error_message: failedItems ? (errorMessage || job.error_message) : null,
+    error_message: failedItems ? (errorMessage || job.error_message) : "",
     completed_at: terminal ? new Date().toISOString() : null,
     updated_at: new Date().toISOString(),
   });
