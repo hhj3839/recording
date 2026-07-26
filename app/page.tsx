@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { recordSimilarityDetails, validateBehaviorSource, validateRecord } from "./record-validation";
 
 type View = "dashboard" | "classes" | "students" | "plans" | "assessments" | "comments" | "behavior" | "export" | "settings";
@@ -146,13 +146,13 @@ function ClassroomManager({ current }: { current: ClassroomInfo | null }) {
   });
   const [message, setMessage] = useState("");
   const [busy, setBusy] = useState(false);
-  const load = async () => {
+  const load = useCallback(async () => {
     const response = await fetch("/api/classrooms");
     const result = await response.json() as { classrooms?: ManagedClassroom[]; error?: string };
     if (!response.ok) return setMessage(result.error || "학급 목록을 불러오지 못했습니다.");
     setClassrooms(result.classrooms ?? []);
-  };
-  useEffect(() => { queueMicrotask(() => void load()); }, []);
+  }, []);
+  useEffect(() => { queueMicrotask(() => void load()); }, [load]);
   useEffect(() => {
     if (!current) return;
     queueMicrotask(() => setForm({
@@ -264,7 +264,7 @@ function ClassroomCollaboration() {
   const [canManageStudents, setCanManageStudents] = useState(false);
   const [message, setMessage] = useState("");
   const [busy, setBusy] = useState(false);
-  const load = async () => {
+  const load = useCallback(async () => {
     try {
       const response = await fetch("/api/classroom-collaborators");
       const result = await response.json() as { collaborators?: Collaborator[]; availableMembers?: Array<{ id: number; email: string }>; subjects?: string[]; error?: string };
@@ -272,8 +272,8 @@ function ClassroomCollaboration() {
       setCollaborators(result.collaborators ?? []); setMembers(result.availableMembers ?? []); setSubjects(result.subjects ?? []);
       setMemberId((current) => current || String(result.availableMembers?.[0]?.id ?? ""));
     } catch (error) { setMessage(error instanceof Error ? error.message : "학급 협업 권한을 불러오지 못했습니다."); }
-  };
-  useEffect(() => { queueMicrotask(() => void load()); }, []);
+  }, []);
+  useEffect(() => { queueMicrotask(() => void load()); }, [load]);
   const save = async (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault(); setBusy(true); setMessage("");
     try {
@@ -973,7 +973,7 @@ function Assessments({ data, setData, plan, activeSubject, setActiveSubject, onA
     setSaved(false);
     setDirty(true);
   };
-  const save = async () => {
+  const save = useCallback(async () => {
     setSaving(true);
     try {
       await onSave();
@@ -983,12 +983,12 @@ function Assessments({ data, setData, plan, activeSubject, setActiveSubject, onA
     } finally {
       setSaving(false);
     }
-  };
+  }, [onSave]);
   useEffect(() => {
     if (!dirty || saving) return;
     const timer = window.setTimeout(() => void save(), 1500);
     return () => window.clearTimeout(timer);
-  }, [dirty]);
+  }, [dirty, save, saving]);
   const applyToMissing = () => {
     let changed = 0;
     setData((current) => current.map((student) => ({
@@ -1155,9 +1155,13 @@ function Comments({ assessmentDataBySubject, plan, roster }: { assessmentDataByS
       }
     }).catch(() => undefined);
   }, []);
+  const activeCommentJobId = activeJob?.id;
+  const activeCommentJobStatus = activeJob?.status;
+  const activeCommentJobCompleted = activeJob?.completedItems ?? 0;
+  const activeCommentJobTotal = activeJob?.totalItems ?? 0;
   useEffect(() => {
-    if (!activeJob || !["queued", "running"].includes(activeJob.status)) return;
-    queueMicrotask(() => setGenerationProgress(`${activeJob.completedItems}/${activeJob.totalItems}`));
+    if (!activeCommentJobId || !activeCommentJobStatus || !["queued", "running"].includes(activeCommentJobStatus)) return;
+    queueMicrotask(() => setGenerationProgress(`${activeCommentJobCompleted}/${activeCommentJobTotal}`));
     const timer = window.setInterval(async () => {
       try {
         const response = await fetch("/api/comment-jobs");
@@ -1181,7 +1185,7 @@ function Comments({ assessmentDataBySubject, plan, roster }: { assessmentDataByS
       }
     }, 3000);
     return () => window.clearInterval(timer);
-  }, [activeJob?.id, activeJob?.status]);
+  }, [activeCommentJobCompleted, activeCommentJobId, activeCommentJobStatus, activeCommentJobTotal]);
   const formattedLastGeneratedAt = lastGeneratedAt
     ? new Intl.DateTimeFormat("ko-KR", { month: "numeric", day: "numeric", hour: "numeric", minute: "2-digit" }).format(new Date(lastGeneratedAt))
     : "";
@@ -1392,9 +1396,13 @@ function Behavior({ roster }: { roster: AssessmentStudent[] }) {
       }
     }).catch(() => undefined);
   }, []);
+  const activeBehaviorJobId = activeJob?.id;
+  const activeBehaviorJobStatus = activeJob?.status;
+  const activeBehaviorJobCompleted = activeJob?.completedItems ?? 0;
+  const activeBehaviorJobTotal = activeJob?.totalItems ?? 0;
   useEffect(() => {
-    if (!activeJob || !["queued", "running"].includes(activeJob.status)) return;
-    queueMicrotask(() => setGenerationProgress(`${activeJob.completedItems}/${activeJob.totalItems}`));
+    if (!activeBehaviorJobId || !activeBehaviorJobStatus || !["queued", "running"].includes(activeBehaviorJobStatus)) return;
+    queueMicrotask(() => setGenerationProgress(`${activeBehaviorJobCompleted}/${activeBehaviorJobTotal}`));
     const timer = window.setInterval(async () => {
       try {
         const response = await fetch("/api/behavior-jobs");
@@ -1416,7 +1424,7 @@ function Behavior({ roster }: { roster: AssessmentStudent[] }) {
       }
     }, 3000);
     return () => window.clearInterval(timer);
-  }, [activeJob?.id, activeJob?.status]);
+  }, [activeBehaviorJobCompleted, activeBehaviorJobId, activeBehaviorJobStatus, activeBehaviorJobTotal]);
 
   const updateRecord = (studentId: number, patch: Partial<BehaviorRecord>) => {
     setRecords((current) => ({ ...current, [studentId]: { ...(current[studentId] ?? emptyBehaviorRecord()), ...patch } }));
@@ -1723,7 +1731,7 @@ function SchoolTeam() {
   const [role, setRole] = useState<"admin" | "teacher">("teacher");
   const [message, setMessage] = useState("");
   const [busy, setBusy] = useState(false);
-  const load = async () => {
+  const load = useCallback(async () => {
     try {
       const response = await fetch("/api/school-members");
       const result = await response.json() as { organization?: { name: string }; currentRole?: "admin" | "teacher"; members?: Member[]; error?: string };
@@ -1734,8 +1742,8 @@ function SchoolTeam() {
     } catch (error) {
       setMessage(error instanceof Error ? error.message : "학교 구성원을 불러오지 못했습니다.");
     }
-  };
-  useEffect(() => { queueMicrotask(() => void load()); }, []);
+  }, []);
+  useEffect(() => { queueMicrotask(() => void load()); }, [load]);
   const invite = async (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     setBusy(true); setMessage("");

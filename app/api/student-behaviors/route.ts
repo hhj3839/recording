@@ -1,6 +1,7 @@
 import { eq, selectRows, upsertRows } from "../../../db/supabase";
+import { confirmationIssue } from "../../record-confirmation";
 import { dataError, getDataScope, requireOwnedStudentIds } from "../../data-scope";
-import { recordSimilarity, validateRecord } from "../../record-validation";
+import { validateRecord } from "../../record-validation";
 import { archiveBehavior } from "../../record-revisions";
 
 export async function GET() {
@@ -26,15 +27,14 @@ export async function PUT(request: Request) {
     if (!Number.isInteger(studentId)) return Response.json({ error: "학생 정보를 확인해 주세요." }, { status: 400 });
     const confirmed = body.confirmed === true;
     const validation = validateRecord(behavior, true);
-    if (confirmed && !validation.valid) return Response.json({ error: "검수 항목을 모두 통과한 행동특성만 확정할 수 있습니다.", validation }, { status: 400 });
     const { user, classId } = await getDataScope();
     await requireOwnedStudentIds([studentId], user.id, classId);
     if (confirmed) {
       const peers = await selectRows<{ student_id: number; behavior: string }>("student_behaviors", {
         owner_id: eq(user.id), class_id: eq(classId),
       });
-      const duplicate = peers.find((item) => Number(item.student_id) !== studentId && recordSimilarity(behavior, item.behavior) >= 0.82);
-      if (duplicate) return Response.json({ error: "다른 학생의 행동특성과 지나치게 유사하여 확정할 수 없습니다.", duplicateStudentId: duplicate.student_id }, { status: 409 });
+      const issue = confirmationIssue(behavior, studentId, peers.map((item) => ({ studentId: Number(item.student_id), content: item.behavior })), true);
+      if (issue) return Response.json(issue, { status: issue.status });
     }
     await archiveBehavior({ ownerId: user.id, ownerEmail: user.email, classId, studentId, nextContent: behavior, nextCharacteristic: characteristic, source: confirmed ? "confirmation" : "manual-edit" });
     const updatedAt = new Date().toISOString();

@@ -4,6 +4,7 @@ import { createBehaviorVariations } from "../app/behavior-variation.ts";
 import { selectMostDiverseComments } from "../app/comment-diversity.ts";
 import { createCommentVariations } from "../app/comment-variation.ts";
 import { recordSimilarity, recordSimilarityDetails, validateBehaviorSource, validateRecord } from "../app/record-validation.ts";
+import { confirmationIssue } from "../app/record-confirmation.ts";
 
 test("distributes randomized comment styles across a class batch", () => {
   const variations = createCommentVariations(10);
@@ -103,4 +104,15 @@ test("blocks prohibited and sensitive observation data before AI generation", ()
   const sensitive = validateBehaviorSource("보호자 연락처는 010-1234-5678임.");
   assert.equal(sensitive.valid, false);
   assert.deepEqual(sensitive.sensitive, ["휴대전화 번호"]);
+});
+
+test("confirms a valid record without a separate AI fact-validation step", () => {
+  const content = "학습 활동에 성실하게 참여하며 자신의 생각을 구체적으로 표현함.";
+  assert.equal(confirmationIssue(content, 1, []), null);
+});
+
+test("blocks invalid or duplicate records during final confirmation", () => {
+  const content = "학습 활동에 성실하게 참여하며 자신의 생각을 구체적으로 표현함.";
+  assert.equal(confirmationIssue("학원에서 배운 내용을 발표했습니다.", 1, [])?.status, 400);
+  assert.equal(confirmationIssue(content, 1, [{ studentId: 2, content }])?.status, 409);
 });
