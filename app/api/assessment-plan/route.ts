@@ -113,11 +113,16 @@ export async function PATCH(request: Request) {
       id: eq(id), owner_id: eq(user.id), class_id: eq(classId), limit: 1,
     }))[0];
     if (!target) return Response.json({ error: "수정 권한이 없거나 평가계획이 없습니다." }, { status: 404 });
-    if (item.confirmAffected !== true) {
-      const levels = await selectRows<{ id: number }>("assessment_levels", {
-        owner_id: eq(user.id), class_id: eq(classId), subject: eq(target.subject), limit: 1,
-      });
-      if (levels.length) {
+    const levels = await selectRows<{ id: number }>("assessment_levels", {
+      owner_id: eq(user.id), class_id: eq(classId), subject: eq(target.subject), limit: 1,
+    });
+    if (levels.length) {
+      if (text(item.subject) !== target.subject) {
+        return Response.json({
+          error: "학생 평가수준이 입력된 과목명은 변경할 수 없습니다. 새 과목 평가계획으로 다시 등록해 주세요.",
+        }, { status: 409 });
+      }
+      if (item.confirmAffected !== true) {
         return Response.json({
           error: `${target.subject}에 학생 평가수준이 입력되어 있습니다. 평가 기준을 수정하면 이후 생성되는 평어의 근거가 달라질 수 있습니다.`,
           requiresConfirmation: true,
