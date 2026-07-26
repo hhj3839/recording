@@ -161,8 +161,10 @@ button.secondary { color: #526171; border: 1px solid #dce1e6; background: #fff; 
 .reference-open-button { border: 1px solid #cddae6; background: #f6f9fc; color: #3c5874; border-radius: 8px; padding: 10px 13px; font-size: 10px; font-weight: 800; }
 .behavior-work-area { display: grid; grid-template-columns: minmax(0, 1fr); gap: 14px; align-items: start; }
 .behavior-work-area.with-reference { grid-template-columns:minmax(0,1fr); }
-.behavior-work-area.with-reference .behavior-reference-drawer{grid-row:1;position:relative;top:auto;max-height:none}
-.behavior-work-area.with-reference .comments-table-wrap{grid-row:2}
+.behavior-work-area.with-reference{grid-template-rows:auto minmax(300px,calc(100vh - 350px))}
+.behavior-work-area.with-reference .behavior-reference-drawer{grid-row:1;position:sticky;top:8px;z-index:4;max-height:none;padding:11px 13px;box-shadow:0 4px 14px rgba(34,54,74,.07)}
+.behavior-work-area.with-reference .comments-table-wrap{grid-row:2;max-height:calc(100vh - 350px);overflow:auto}
+.behavior-work-area.with-reference .comments-table-wrap thead{position:sticky;top:0;z-index:2}
 .behavior-reference-drawer { position: sticky; top: 18px; max-height: calc(100vh - 36px); overflow-y: auto; border: 1px solid #dfe6ed; border-radius: 10px; padding: 16px; background: #fff; box-shadow: 0 10px 30px rgba(34, 54, 74, .1); }
 .drawer-close { position: absolute; top: 8px; right: 9px; border: 0; background: transparent; color: #8290a0; font-size: 20px; }
 .reference-guide { display: grid; gap: 9px; margin-bottom: 14px; }
@@ -170,6 +172,7 @@ button.secondary { color: #526171; border: 1px solid #dce1e6; background: #fff; 
 .reference-guide p { margin: 4px 0 0; color: #7b8795; font-size: 9px; }
 .reference-guide ol{display:grid;gap:5px;margin:0;padding:10px 10px 10px 27px;border-radius:8px;background:#f6f8fb;color:#5d6d7e;font-size:9px;line-height:1.5}
 .reference-guide > span { border-radius: 7px; background: #edf5ff; color: #326da9; padding: 7px 10px; font-size: 9px; font-weight: 800; }
+.compact-reference-guide{display:flex;align-items:center;justify-content:space-between;gap:12px;margin:0 28px 8px 0}.compact-reference-guide>div{display:flex;align-items:center;gap:10px;min-width:0}.compact-reference-guide>div>span{overflow:hidden;color:#326da9;font-size:9px;font-weight:800;text-overflow:ellipsis;white-space:nowrap}.compact-reference-guide details{position:relative}.compact-reference-guide summary{cursor:pointer;color:#5c6f83;font-size:9px;font-weight:800;white-space:nowrap}.compact-reference-guide details[open] ol{position:absolute;top:18px;right:0;z-index:8;width:280px;margin:0;box-shadow:0 8px 24px rgba(34,54,74,.14);background:#fff}.behavior-reference-drawer .reference-tabs{flex-wrap:nowrap;overflow-x:auto;margin-bottom:7px;padding-bottom:2px}.behavior-reference-drawer .reference-tabs button{flex:0 0 auto;padding:5px 8px}.behavior-reference-drawer .reference-groups{gap:5px}.behavior-reference-drawer .reference-groups section{display:flex;align-items:center;gap:8px;padding:5px 8px}.behavior-reference-drawer .reference-groups h3{flex:0 0 auto;margin:0;font-size:9px}.behavior-reference-drawer .reference-groups section>div{flex-wrap:nowrap;overflow-x:auto;padding-bottom:1px}.behavior-reference-drawer .reference-groups section button{flex:0 0 auto;padding:4px 7px}
 .reference-tabs { display: flex; flex-wrap: wrap; gap: 5px; margin-bottom: 15px; }
 .reference-tabs button { border: 1px solid #dce3ea; background: #fff; color: #687586; border-radius: 7px; padding: 7px 9px; font-size: 9px; font-weight: 700; }
 .reference-tabs button.active { border-color: #4383c4; background: #eaf4ff; color: #2f6da9; }
