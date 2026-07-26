@@ -79,6 +79,10 @@ export async function POST(request: Request) {
   const failedItems = Number(job.failed_items) + failedInBatch;
   const completedItems = Number(job.completed_items) + behaviors.length;
   const terminal = nextBatch >= Number(job.total_batches);
+  const latestStatus = (await selectRows<{ status: string }>("generation_jobs", { id: eq(jobId), limit: 1 }))[0]?.status;
+  if (latestStatus === "cancelled") {
+    return Response.json({ ok: true, terminal: true, cancelled: true, completedItems, failedItems });
+  }
   await updateRows("generation_jobs", { id: eq(jobId) }, {
     status: terminal ? (failedItems ? "completed_with_errors" : "completed") : "running",
     current_batch: nextBatch, completed_items: completedItems, failed_items: failedItems,
