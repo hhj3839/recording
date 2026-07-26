@@ -40,15 +40,15 @@ export default function LoginPage() {
         </div>
         <form className="auth-form" onSubmit={submit}>
           {mode === "signup" && <>
-            <label>교사 이름<input name="displayName" required autoComplete="name" /></label>
-            <label>학교<input name="schoolName" required placeholder="예: 서울하늘초등학교" /></label>
+            <label>교사 이름<input name="displayName" minLength={2} maxLength={40} required autoComplete="name" /></label>
+            <label>학교<input name="schoolName" minLength={2} maxLength={100} required placeholder="예: 서울하늘초등학교" /></label>
             <div className="auth-row">
-              <label>학년도<input name="schoolYear" type="number" defaultValue={new Date().getFullYear()} required /></label>
+              <label>학년도<input name="schoolYear" type="number" min="2000" max="2100" defaultValue={new Date().getFullYear()} required /></label>
               <label>학기<select name="semester" defaultValue="1"><option value="1">1학기</option><option value="2">2학기</option></select></label>
             </div>
             <div className="auth-row">
               <label>학년<input name="grade" type="number" min="1" max="6" required /></label>
-              <label>반<input name="classNumber" type="number" min="1" required /></label>
+              <label>반<input name="classNumber" type="number" min="1" max="99" required /></label>
             </div>
           </>}
           <label>이메일<input name="email" type="email" required autoComplete="email" /></label>

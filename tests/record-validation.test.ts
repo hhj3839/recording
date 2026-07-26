@@ -7,6 +7,7 @@ import { countBehaviorCharacteristics, recordSimilarity, recordSimilarityDetails
 import { parseStudentRosterText } from "../app/student-roster-parser.ts";
 import { parseAssessmentPlanText } from "../app/assessment-plan-parser.ts";
 import { isStrongPassword } from "../app/password-policy.ts";
+import { validateSignupProfile } from "../app/signup-policy.ts";
 
 test("requires the same strong password policy for signup and password changes", () => {
   assert.equal(isStrongPassword("shortA1"), false);
@@ -14,6 +15,17 @@ test("requires the same strong password policy for signup and password changes",
   assert.equal(isStrongPassword("NOLOWERCASE123"), false);
   assert.equal(isStrongPassword("NoNumbersHere"), false);
   assert.equal(isStrongPassword("StrongPass123"), true);
+});
+
+test("requires complete and valid teacher classroom metadata at signup", () => {
+  const valid = { displayName: "홍교사", schoolName: "라온초등학교", schoolYear: 2026, semester: 1, grade: 3, classNumber: 1 };
+  assert.equal(validateSignupProfile(valid), "");
+  assert.match(validateSignupProfile({ ...valid, displayName: "" }), /교사 이름/);
+  assert.match(validateSignupProfile({ ...valid, schoolName: "" }), /학교명/);
+  assert.match(validateSignupProfile({ ...valid, schoolYear: 1999 }), /학년도/);
+  assert.match(validateSignupProfile({ ...valid, semester: 3 }), /학기/);
+  assert.match(validateSignupProfile({ ...valid, grade: 7 }), /학년/);
+  assert.match(validateSignupProfile({ ...valid, classNumber: 0 }), /반/);
 });
 
 test("parses pasted student numbers and names separated by tabs or spaces", () => {

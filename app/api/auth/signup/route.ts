@@ -1,6 +1,7 @@
 import { NextRequest } from "next/server";
 import { createAuthClient } from "../../../supabase-auth";
 import { isStrongPassword, PASSWORD_POLICY_MESSAGE } from "../../../password-policy";
+import { validateSignupProfile } from "../../../signup-policy";
 
 export async function POST(request: NextRequest) {
   const body = await request.json().catch(() => ({}));
@@ -15,6 +16,16 @@ export async function POST(request: NextRequest) {
   if (!isStrongPassword(password)) {
     return Response.json({ error: PASSWORD_POLICY_MESSAGE }, { status: 400 });
   }
+  const profile = {
+    displayName: String(body.displayName ?? "").trim(),
+    schoolName: String(body.schoolName ?? "").trim(),
+    schoolYear: Number(body.schoolYear),
+    semester: Number(body.semester),
+    grade: Number(body.grade),
+    classNumber: Number(body.classNumber),
+  };
+  const profileError = validateSignupProfile(profile);
+  if (profileError) return Response.json({ error: profileError }, { status: 400 });
   const origin = request.nextUrl.origin;
   const { data, error } = await createAuthClient().auth.signUp({
     email,
@@ -22,12 +33,12 @@ export async function POST(request: NextRequest) {
     options: {
       emailRedirectTo: `${origin}/auth/callback`,
       data: {
-        display_name: String(body.displayName ?? "").trim() || email,
-        school_name: String(body.schoolName ?? "").trim(),
-        school_year: Number(body.schoolYear),
-        semester: Number(body.semester),
-        grade: Number(body.grade),
-        class_number: Number(body.classNumber),
+        display_name: profile.displayName,
+        school_name: profile.schoolName,
+        school_year: profile.schoolYear,
+        semester: profile.semester,
+        grade: profile.grade,
+        class_number: profile.classNumber,
       },
     },
   });
