@@ -50,6 +50,24 @@ const protectedReads = [
   "/api/shared-assessment-plans",
 ];
 
+test("signup rejects weak passwords before creating an account", async () => {
+  const weakPasswords = ["shortA1", "alllowercase123", "NOLOWERCASE123", "NoNumbersHere"];
+  for (const password of weakPasswords) {
+    const response = await fetch(`${baseUrl}/api/auth/signup`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        email: "password-policy-check@example.invalid",
+        password,
+        termsAccepted: true,
+      }),
+    });
+    assert.equal(response.status, 400);
+    const result = await response.json();
+    assert.match(result.error ?? "", /12자 이상.*대문자.*소문자.*숫자/);
+  }
+});
+
 test("all sensitive read APIs reject unauthenticated access", async () => {
   for (const route of protectedReads) {
     const response = await fetch(`${baseUrl}${route}`, { redirect: "manual" });
