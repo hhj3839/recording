@@ -65,7 +65,6 @@ test("로그인부터 명단·평가계획·평가수준·교과 평어 화면�
       response.url().endsWith("/api/classrooms") && response.request().method() === "POST");
     await form.getByRole("button", { name: "새 학급 추가 후 전환" }).click();
     expect((await createdResponse).ok()).toBeTruthy();
-    await expect(page.getByText("기록샘E2E검증초", { exact: true }).first()).toBeVisible();
 
     const refreshedClassrooms = await (await page.request.get("/api/classrooms")).json() as {
       classrooms: Array<{ id: number; schoolYear: number; semester: number; grade: number; classNumber: number }>;
@@ -76,6 +75,10 @@ test("로그인부터 명단·평가계획·평가수준·교과 평어 화면�
       && item.grade === candidate!.grade
       && item.classNumber === candidate!.classNumber)?.id;
     expect(classroomId).toBeTruthy();
+    const selectedClassroom = await page.request.put("/api/classrooms", { data: { id: classroomId } });
+    expect(selectedClassroom.ok()).toBeTruthy();
+    await page.reload();
+    await expect(page.getByText("기록샘E2E검증초", { exact: true }).first()).toBeVisible();
 
     await page.getByRole("button", { name: "학생 관리" }).click();
     await page.getByLabel("번호와 이름 명단").fill("1\t테스트가람\n2\t테스트나래");
@@ -111,10 +114,32 @@ test("로그인부터 명단·평가계획·평가수준·교과 평어 화면�
     expect((await levelResponse).ok()).toBeTruthy();
     await expect(page.getByText("변경사항을 저장했습니다.")).toBeVisible();
 
+    const classData = await (await page.request.get("/api/class-data")).json() as {
+      students: Array<{ id: number; number: number; name: string }>;
+    };
+    const orderedStudents = [...classData.students].sort((left, right) => left.number - right.number);
+    const seededComments = [
+      "인물의 상황을 세심하게 살피고 알맞은 표정과 목소리를 활용하여 대화를 자연스럽고 실감 나게 표현함.",
+      "문장의 짜임을 정확하게 파악하고 자료의 내용을 알맞은 문장으로 구성하여 자신의 생각을 분명하게 표현함.",
+    ];
+    for (const [index, student] of orderedStudents.entries()) {
+      const saved = await page.request.put("/api/generated-comments", {
+        data: { studentId: student.id, subject: "국어", comment: seededComments[index], confirmed: false },
+      });
+      expect(saved.ok(), `${student.name} 학생의 E2E 평어 저장에 실패했습니다.`).toBeTruthy();
+    }
+
     await page.getByRole("button", { name: "교과 평어" }).click();
     await expect(page.getByRole("heading", { name: "전 과목 교과 평어" })).toBeVisible();
     await expect(page.getByRole("button", { name: "✦ AI 평어 생성" })).toBeVisible();
     await expect(page.locator(".subject-navigator").getByRole("button", { name: /국어/ })).toBeVisible();
+    await expect(page.locator(".subject-comments-table textarea")).toHaveCount(2);
+    await expect(page.locator(".subject-comments-table textarea").nth(0)).toHaveValue(seededComments[0]);
+    await expect(page.locator(".subject-comments-table textarea").nth(1)).toHaveValue(seededComments[1]);
+    await page.getByRole("button", { name: "평어만 복사하기" }).click();
+    await expect(page.getByRole("button", { name: "복사됨 ✓" })).toBeVisible();
+    const clipboardText = await page.evaluate(() => navigator.clipboard.readText());
+    expect(clipboardText.replaceAll("\r\n", "\n")).toBe(seededComments.join("\n"));
 
     if (process.env.E2E_RUN_AI === "1") {
       await page.getByRole("button", { name: "✦ AI 평어 생성" }).click();
