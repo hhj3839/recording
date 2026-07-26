@@ -15,7 +15,7 @@ function validSecret(request: Request) {
 export async function POST(request: Request) {
   if (!validSecret(request)) return Response.json({ error: "허용되지 않은 작업 실행 요청입니다." }, { status: 403 });
   const jobs = await selectRows<ActiveJob>("generation_jobs", {
-    status: "in.(queued,running,processing)",
+    status: "in.(queued,running)",
     order: "created_at.asc",
     limit: 1,
   });

@@ -48,10 +48,10 @@ export async function POST(request: Request) {
   const job = (await selectRows<JobRow>("generation_jobs", { id: eq(jobId), limit: 1 }))[0];
   if (!job) return Response.json({ ok: true, terminal: true });
   const lockAge = Date.now() - Date.parse(job.updated_at);
-  if (job.status === "processing" && lockAge < 360_000) {
+  if (job.status === "running" && lockAge < 360_000) {
     return Response.json({ ok: true, terminal: false, busy: true });
   }
-  if (!["queued", "running", "processing"].includes(job.status)) return Response.json({ ok: true, terminal: true });
+  if (!["queued", "running"].includes(job.status)) return Response.json({ ok: true, terminal: true });
   const batchIndex = Number(job.current_batch);
   const batch = job.batches[batchIndex];
   if (!batch?.length) {
@@ -66,7 +66,7 @@ export async function POST(request: Request) {
   const claimed = await updateRows<JobRow>("generation_jobs", {
     id: eq(jobId), status: eq(job.status), updated_at: eq(job.updated_at),
   }, {
-    status: "processing",
+    status: "running",
     started_at: job.started_at ?? new Date().toISOString(),
     updated_at: new Date().toISOString(),
   });
@@ -149,7 +149,7 @@ export async function POST(request: Request) {
     return Response.json({ ok: true, terminal: true, cancelled: true, completedItems, failedItems });
   }
   await updateRows("generation_jobs", { id: eq(jobId) }, {
-    status: terminal ? (failedItems ? "completed_with_errors" : "completed") : "running",
+    status: terminal ? (failedItems ? "completed_with_errors" : "completed") : "queued",
     current_batch: nextBatch,
     completed_items: completedItems,
     failed_items: failedItems,
