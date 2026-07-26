@@ -22,6 +22,10 @@ function extractOutputText(payload: unknown): string {
 export async function generateCommentBatch(evidence: CommentEvidence[], avoidComments: string[] = []) {
   const apiKey = process.env.OPENAI_API_KEY;
   if (!apiKey) throw new Error("AI 생성 설정이 아직 완료되지 않았습니다.");
+  const requestEvidence = evidence.map((item) => ({
+    ...item,
+    options: { ...optionsOf(item), candidateCount: Math.max(2, optionsOf(item).candidateCount) },
+  }));
   const response = await fetch("https://api.openai.com/v1/responses", {
     method: "POST",
     headers: { Authorization: `Bearer ${apiKey}`, "Content-Type": "application/json" },
@@ -29,7 +33,7 @@ export async function generateCommentBatch(evidence: CommentEvidence[], avoidCom
       model: process.env.OPENAI_MODEL || "gpt-5.6-terra",
       reasoning: { effort: "low" },
       store: false,
-      max_output_tokens: Math.min(10000, Math.max(1200, evidence.reduce((sum, item) => sum + optionsOf(item).candidateCount * 320, 0))),
+      max_output_tokens: Math.min(10000, Math.max(1200, requestEvidence.reduce((sum, item) => sum + item.options.candidateCount * 320, 0))),
       input: [
         {
           role: "system",
@@ -37,7 +41,7 @@ export async function generateCommentBatch(evidence: CommentEvidence[], avoidCom
         },
         {
           role: "user",
-          content: [{ type: "input_text", text: `다음 학생 식별번호별·과목별 근거로 각각 교과 평어를 작성해 줘.\n입력: ${JSON.stringify(evidence)}\n피해야 할 기존 평어: ${JSON.stringify(avoidComments.slice(0, 30).map((item) => item.slice(0, 500)))}` }],
+          content: [{ type: "input_text", text: `다음 학생 식별번호별·과목별 근거로 각각 교과 평어를 작성해 줘.\n입력: ${JSON.stringify(requestEvidence)}\n피해야 할 기존 평어: ${JSON.stringify(avoidComments.slice(0, 30).map((item) => item.slice(0, 500)))}` }],
         },
       ],
       text: { verbosity: "low" },
@@ -52,7 +56,7 @@ export async function generateCommentBatch(evidence: CommentEvidence[], avoidCom
     const studentId = Number(item.studentId);
     const subject = typeof item.subject === "string" ? item.subject : "";
     const source = evidence.find((entry) => entry.studentId === studentId && entry.subject === subject);
-    const requested = source ? optionsOf(source).candidateCount : 1;
+    const requested = source ? Math.max(2, optionsOf(source).candidateCount) : 2;
     const candidates = Array.isArray(item.candidates)
       ? item.candidates.filter((candidate): candidate is string => typeof candidate === "string").map((candidate) => candidate.trim()).filter(Boolean).slice(0, requested)
       : typeof item.comment === "string" ? [item.comment.trim()].filter(Boolean) : [];

@@ -1,5 +1,6 @@
 import { waitUntil } from "@vercel/functions";
 import { eq, selectRows, updateRows } from "../../../../db/supabase";
+import { selectMostDiverseComments } from "../../../comment-diversity";
 import { CommentEvidence, GeneratedComment, generateCommentBatch, saveGeneratedComments, signCommentJob, verifyCommentJob } from "../../../comment-generation";
 
 export const maxDuration = 60;
@@ -77,6 +78,11 @@ export async function POST(request: Request) {
       errorMessage = error instanceof Error ? error.message : "AI 생성 오류";
     }
   }
+  comments = selectMostDiverseComments(comments, avoidComments).map((item) => {
+    const source = batch.find((entry) => entry.studentId === item.studentId && entry.subject === item.subject);
+    const visibleCandidateCount = source?.options?.candidateCount ?? 1;
+    return { ...item, candidates: item.candidates.slice(0, visibleCandidateCount) };
+  });
   if (comments.length) {
     await saveGeneratedComments({
       ownerId: job.owner_id,

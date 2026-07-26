@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
+import { selectMostDiverseComments } from "../app/comment-diversity.ts";
 import { createCommentVariations } from "../app/comment-variation.ts";
 import { recordSimilarity, recordSimilarityDetails, validateBehaviorSource, validateRecord } from "../app/record-validation.ts";
 
@@ -9,6 +10,16 @@ test("distributes randomized comment styles across a class batch", () => {
   assert.equal(new Set(variations.slice(0, 6).map((item) => item.structure)).size, 6);
   assert.equal(new Set(variations.slice(0, 4).map((item) => item.opening)).size, 4);
   assert.equal(variations.every((item) => item.structure && item.opening && item.focusOrder), true);
+});
+
+test("selects the least repetitive AI comment candidate", () => {
+  const repeated = "수업에 성실하게 참여하며 자신의 생각을 구체적으로 표현함.";
+  const distinct = "자료의 특징을 세밀하게 비교하여 새로운 상황에 알맞게 적용하는 능력이 돋보임.";
+  const [selected] = selectMostDiverseComments([{
+    studentId: 1, subject: "국어", comment: repeated, candidates: [repeated, distinct],
+  }], [repeated]);
+  assert.equal(selected.comment, distinct);
+  assert.equal(selected.candidates[0], distinct);
 });
 
 test("accepts a valid school-record comment", () => {
