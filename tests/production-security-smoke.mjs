@@ -146,6 +146,29 @@ test("foreign identifiers cannot mutate or reveal classroom data", async () => {
   }
 });
 
+test("assessed subject names cannot be changed through the API", async () => {
+  const cookie = await sessionCookie();
+  const [planResponse, classDataResponse] = await Promise.all([
+    fetch(`${baseUrl}/api/assessment-plan`, { headers: { Cookie: cookie } }),
+    fetch(`${baseUrl}/api/class-data`, { headers: { Cookie: cookie } }),
+  ]);
+  assert.equal(planResponse.status, 200);
+  assert.equal(classDataResponse.status, 200);
+  const { plan } = await planResponse.json();
+  const classData = await classDataResponse.json();
+  const assessedSubjects = new Set((classData.levels ?? []).map((item) => item.subject));
+  const target = (plan ?? []).find((item) => assessedSubjects.has(item.subject));
+  assert.ok(target, "평가수준이 연결된 평가계획이 필요합니다.");
+  const response = await fetch(`${baseUrl}/api/assessment-plan`, {
+    method: "PATCH",
+    headers: { Cookie: cookie, "Content-Type": "application/json" },
+    body: JSON.stringify({ ...target, subject: `${target.subject}-변경시도`, confirmAffected: true }),
+  });
+  assert.equal(response.status, 409);
+  const result = await response.json();
+  assert.match(result.error ?? "", /과목명은 변경할 수 없습니다/);
+});
+
 test("worker and destructive APIs reject forged authorization", async () => {
   const cookie = await sessionCookie();
   const attempts = [
