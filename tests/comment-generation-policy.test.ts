@@ -3,6 +3,7 @@ import test from "node:test";
 import { hasCompleteEvidenceCoverage, validateGeneratedComment } from "../app/comment-generation-policy.ts";
 import { generationModel } from "../app/ai-model-policy.ts";
 import { batchCommentsBySubject, COMMENT_BATCH_SIZE } from "../app/comment-batching.ts";
+import { batchBehaviors, BEHAVIOR_BATCH_SIZE } from "../app/behavior-batching.ts";
 
 test("uses GPT-5.4 mini first and Terra only for the final retry", () => {
   assert.equal(generationModel(0, 3), "gpt-5.4-mini");
@@ -19,6 +20,12 @@ test("batches at most five students without mixing subjects", () => {
   assert.equal(COMMENT_BATCH_SIZE, 5);
   assert.deepEqual(batches.map((batch) => batch.length), [5, 5, 2, 5, 1]);
   assert.equal(batches.every((batch) => new Set(batch.map((item) => item.subject)).size === 1), true);
+});
+
+test("batches at most five behavior records", () => {
+  const batches = batchBehaviors(Array.from({ length: 12 }, (_, index) => ({ studentId: index + 1 })));
+  assert.equal(BEHAVIOR_BATCH_SIZE, 5);
+  assert.deepEqual(batches.map((batch) => batch.length), [5, 5, 2]);
 });
 
 test("accepts coverage only when every expected assessment item is present", () => {

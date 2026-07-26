@@ -1,6 +1,7 @@
 import { waitUntil } from "@vercel/functions";
 import { eq, insertRows, selectRows } from "../../../db/supabase";
 import { getAiUsage, MONTHLY_AI_LIMIT } from "../../ai-usage";
+import { batchBehaviors } from "../../behavior-batching";
 import { BehaviorInput, BehaviorOptions } from "../../behavior-generation";
 import { createBehaviorVariations } from "../../behavior-variation";
 import { signCommentJob } from "../../comment-generation";
@@ -76,7 +77,7 @@ export async function POST(request: Request) {
       startRunner(request, active[0].id);
       return Response.json({ job: present(active[0]), alreadyRunning: true }, { status: 202 });
     }
-    const batches = Array.from({ length: Math.ceil(inputs.length / 10) }, (_, index) => inputs.slice(index * 10, index * 10 + 10));
+    const batches = batchBehaviors(inputs);
     const usage = await getAiUsage(user.id);
     if (usage.monthly + batches.length > MONTHLY_AI_LIMIT) {
       return Response.json({ error: `이번 작업에는 AI 요청 ${batches.length}회가 필요하지만 이번 달 잔여 한도는 ${Math.max(0, MONTHLY_AI_LIMIT - usage.monthly)}회입니다.` }, { status: 429 });
