@@ -1,6 +1,7 @@
 import { waitUntil } from "@vercel/functions";
 import { eq, insertRows, selectRows } from "../../../db/supabase";
 import { getAiUsage, MONTHLY_AI_LIMIT } from "../../ai-usage";
+import { batchCommentsBySubject } from "../../comment-batching";
 import { CommentEvidence, signCommentJob } from "../../comment-generation";
 import { createCommentVariations } from "../../comment-variation";
 import { dataError, getDataScope, requireOwnedStudentIds } from "../../data-scope";
@@ -113,10 +114,7 @@ export async function POST(request: Request) {
     evidence.forEach((item, index) => { item.variation = variations[index]; });
     await requireOwnedStudentIds(evidence.map((item) => item.studentId), user.id, classId);
 
-    const batches = [...new Set(evidence.map((item) => item.subject))].flatMap((subject) => {
-      const items = evidence.filter((item) => item.subject === subject);
-      return Array.from({ length: Math.ceil(items.length / 3) }, (_, index) => items.slice(index * 3, index * 3 + 3));
-    });
+    const batches = batchCommentsBySubject(evidence);
     const usage = await getAiUsage(user.id);
     if (usage.monthly + batches.length > MONTHLY_AI_LIMIT) {
       return Response.json({ error: `이번 작업에는 AI 요청 ${batches.length}회가 필요하지만 이번 달 잔여 한도는 ${Math.max(0, MONTHLY_AI_LIMIT - usage.monthly)}회입니다.` }, { status: 429 });

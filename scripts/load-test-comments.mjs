@@ -3,6 +3,7 @@ import path from "node:path";
 
 const baseUrl = (process.env.LOAD_TEST_BASE_URL || "https://giroksam-recording.vercel.app").replace(/\/$/, "");
 const mode = process.argv[2] || "status";
+const commentBatchSize = 5;
 const commentForbiddenExpressions = ["부족함", "미흡함", "못함", "어려워함", "이해하지 못함", "소극적임", "불성실함"];
 
 function validateComment(comment, expectedSentenceCount) {
@@ -75,7 +76,7 @@ if (mode === "start" || mode === "sample" || mode === "preflight") {
   }
   const estimatedBatches = selectedSubjects.reduce(
     (total, subject) => total + Math.ceil(scores[subject].filter((student) =>
-      student.levels.some((level) => ["상", "중", "하"].includes(level))).length / 3),
+      student.levels.some((level) => ["상", "중", "하"].includes(level))).length / commentBatchSize),
     0,
   );
   if (mode === "preflight") {
