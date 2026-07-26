@@ -81,19 +81,34 @@ export async function POST(request: Request) {
       errorMessage = `월 AI 요청 한도 ${MONTHLY_AI_LIMIT}회를 사용하여 남은 항목의 자동 재시도를 중단했습니다.`;
       break;
     }
-    try {
-      const generated = await generateCommentBatch(pending, avoidComments, attempt > 0, generationModel(attempt, MAX_GENERATION_ATTEMPTS));
-      comments = [...comments, ...generated];
-      const generatedKeys = new Set(generated.map((item) => `${item.studentId}|${item.subject}`));
-      pending = pending.filter((item) => !generatedKeys.has(`${item.studentId}|${item.subject}`));
-    } catch (error) {
-      errorMessage = error instanceof Error ? error.message : "AI 생성 오류";
-    } finally {
-      await recordAiUsage({
-        ownerId: job.owner_id, ownerEmail: job.owner_email, classId: Number(job.class_id),
-        feature: `all-comments-attempt-${attempt + 1}`,
-      });
+    const groups = attempt === 0 ? [pending] : pending.map((item) => [item]);
+    const generatedThisAttempt: GeneratedComment[] = [];
+    for (const group of groups) {
+      const groupUsage = await getAiUsage(job.owner_id);
+      if (groupUsage.monthly >= MONTHLY_AI_LIMIT) {
+        errorMessage = `월 AI 요청 한도 ${MONTHLY_AI_LIMIT}회를 사용하여 남은 항목의 자동 재시도를 중단했습니다.`;
+        break;
+      }
+      try {
+        const generated = await generateCommentBatch(
+          group,
+          [...avoidComments, ...comments.map((item) => item.comment)],
+          attempt > 0,
+          generationModel(attempt, MAX_GENERATION_ATTEMPTS),
+        );
+        generatedThisAttempt.push(...generated);
+      } catch (error) {
+        errorMessage = error instanceof Error ? error.message : "AI 생성 오류";
+      } finally {
+        await recordAiUsage({
+          ownerId: job.owner_id, ownerEmail: job.owner_email, classId: Number(job.class_id),
+          feature: `all-comments-attempt-${attempt + 1}`,
+        });
+      }
     }
+    comments = [...comments, ...generatedThisAttempt];
+    const generatedKeys = new Set(generatedThisAttempt.map((item) => `${item.studentId}|${item.subject}`));
+    pending = pending.filter((item) => !generatedKeys.has(`${item.studentId}|${item.subject}`));
   }
   comments = selectMostDiverseComments(comments, avoidComments)
     .map((item) => ({ ...item, candidates: item.candidates.slice(0, 1) }));
