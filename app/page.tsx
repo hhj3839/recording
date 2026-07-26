@@ -1671,7 +1671,7 @@ function PilotFeedback() {
   </section>;
 }
 
-function PrivacySettings() {
+function PrivacySettings({ currentName, onNameChanged }: { currentName: string; onNameChanged: (name: string) => void }) {
   const [summary, setSummary] = useState<PrivacySummary | null>(null);
   const [classConfirmation, setClassConfirmation] = useState("");
   const [accountConfirmation, setAccountConfirmation] = useState("");
@@ -1679,6 +1679,8 @@ function PrivacySettings() {
   const [busy, setBusy] = useState(false);
   const [password, setPassword] = useState("");
   const [passwordConfirmation, setPasswordConfirmation] = useState("");
+  const [displayName, setDisplayName] = useState(currentName);
+  useEffect(() => setDisplayName(currentName), [currentName]);
   useEffect(() => {
     fetch("/api/privacy-data").then(async (response) => {
       const result = await response.json() as PrivacySummary & { error?: string };
@@ -1726,6 +1728,24 @@ function PrivacySettings() {
       setMessage(error instanceof Error ? error.message : "비밀번호를 변경하지 못했습니다.");
     } finally { setBusy(false); }
   };
+  const changeProfile = async (event: React.FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    setBusy(true);
+    setMessage("");
+    try {
+      const response = await fetch("/api/auth/profile", {
+        method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ displayName }),
+      });
+      const result = await response.json() as { displayName?: string; error?: string };
+      if (!response.ok || !result.displayName) throw new Error(result.error || "교사 프로필을 변경하지 못했습니다.");
+      setDisplayName(result.displayName);
+      onNameChanged(result.displayName);
+      setSummary((current) => current ? { ...current, account: { ...current.account, displayName: result.displayName! } } : current);
+      setMessage("교사 이름을 변경했습니다.");
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : "교사 프로필을 변경하지 못했습니다.");
+    } finally { setBusy(false); }
+  };
   const countItems = summary ? [
     ["학생", summary.counts.students], ["평가계획", summary.counts.plans], ["평가수준", summary.counts.levels],
     ["교과 평어", summary.counts.comments], ["행동특성", summary.counts.behaviors],
@@ -1742,12 +1762,19 @@ function PrivacySettings() {
       <ul className="security-list"><li>로그인 세션은 보안 쿠키로 관리됩니다.</li><li>OpenAI API 키와 Supabase 관리 키는 서버에만 저장됩니다.</li><li>모든 조회·수정 요청에서 교사 ID와 학급 ID를 함께 확인합니다.</li></ul>
       <nav className="privacy-legal-links"><a href="/privacy" target="_blank">개인정보 처리방침</a><a href="/terms" target="_blank">서비스 이용약관</a></nav>
     </section>
+    <div className="account-settings-grid">
+    <form className="profile-settings-card" onSubmit={(event) => void changeProfile(event)}>
+      <div><p className="eyebrow">TEACHER PROFILE</p><h2>교사 이름</h2><p>대시보드와 앱 왼쪽 아래에 표시되는 이름입니다.</p></div>
+      <label><span>표시 이름</span><input minLength={2} maxLength={40} value={displayName} onChange={(event) => setDisplayName(event.target.value)} required /></label>
+      <button disabled={busy || displayName.trim().length < 2 || displayName.trim() === currentName}>{busy ? "저장 중…" : "이름 저장"}</button>
+    </form>
     <form className="account-security-card" onSubmit={(event) => void changePassword(event)}>
       <div><p className="eyebrow">ACCOUNT SECURITY</p><h2>비밀번호 변경</h2><p>12자 이상이며 영문 대문자·소문자·숫자를 각각 포함해 주세요.</p></div>
       <label><span>새 비밀번호</span><input type="password" minLength={12} pattern="(?=.*[a-z])(?=.*[A-Z])(?=.*\d).{12,}" value={password} onChange={(event) => setPassword(event.target.value)} autoComplete="new-password" required /></label>
       <label><span>새 비밀번호 확인</span><input type="password" minLength={12} value={passwordConfirmation} onChange={(event) => setPasswordConfirmation(event.target.value)} autoComplete="new-password" required /></label>
       <button disabled={busy || !password || password !== passwordConfirmation}>{busy ? "변경 중…" : "비밀번호 변경"}</button>
     </form>
+    </div>
     <div className="danger-grid">
       <section className="danger-card">
         <h2>현재 학급 자료 삭제</h2>
@@ -1952,7 +1979,7 @@ export default function Home() {
           {view === "behavior" && <Behavior roster={roster} />}
           {view === "export" && <ExportResults roster={roster} plan={plan} classroom={classroom} />}
           {view === "pilot" && <PilotFeedback />}
-          {view === "settings" && <PrivacySettings />}
+          {view === "settings" && <PrivacySettings currentName={currentUser} onNameChanged={setCurrentUser} />}
         </div>
       </main>
     </div>

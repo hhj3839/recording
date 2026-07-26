@@ -60,6 +60,12 @@ test("all sensitive read APIs reject unauthenticated access", async () => {
     body: JSON.stringify({ password: "Unauthorized123" }),
   });
   assert.equal(passwordChange.status, 401);
+  const profileChange = await fetch(`${baseUrl}/api/auth/profile`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ displayName: "권한없음" }),
+  });
+  assert.equal(profileChange.status, 401);
 });
 
 test("foreign identifiers cannot mutate or reveal classroom data", async () => {
