@@ -1566,6 +1566,9 @@ function ExportResults({ roster, plan, classroom }: { roster: AssessmentStudent[
   const [behaviors, setBehaviors] = useState<ExportBehavior[]>([]);
   const [selectedSubject, setSelectedSubject] = useState("");
   const [loading, setLoading] = useState(true);
+  const [googleConnected, setGoogleConnected] = useState(false);
+  const [googleEmail, setGoogleEmail] = useState("");
+  const [googleBusy, setGoogleBusy] = useState(false);
   const [message, setMessage] = useState("");
   const subjects = [...new Set([...plan.map((item) => item.subject), ...comments.map((item) => item.subject)].filter(Boolean))];
   useEffect(() => {
@@ -1585,6 +1588,57 @@ function ExportResults({ roster, plan, classroom }: { roster: AssessmentStudent[
     };
     void load();
   }, [plan]);
+  const loadGoogleStatus = useCallback(async () => {
+    try {
+      const response = await fetch("/api/google/status");
+      const result = await response.json() as { connected?: boolean; email?: string };
+      setGoogleConnected(Boolean(result.connected));
+      setGoogleEmail(result.email ?? "");
+    } catch {
+      setGoogleConnected(false);
+      setGoogleEmail("");
+    }
+  }, []);
+  useEffect(() => {
+    queueMicrotask(() => void loadGoogleStatus());
+    const receive = (event: MessageEvent<{ type?: string; ok?: boolean; message?: string }>) => {
+      if (event.origin !== window.location.origin || event.data?.type !== "giroksam-google-oauth") return;
+      setMessage(event.data.message ?? (event.data.ok ? "Google 계정이 연결되었습니다." : "Google 계정을 연결하지 못했습니다."));
+      void loadGoogleStatus();
+    };
+    window.addEventListener("message", receive);
+    return () => window.removeEventListener("message", receive);
+  }, [loadGoogleStatus]);
+  const connectGoogle = () => {
+    const popup = window.open("/api/google/connect", "giroksam-google-connect", "popup,width=560,height=720");
+    if (!popup) setMessage("팝업이 차단되었습니다. 브라우저에서 팝업을 허용해 주세요.");
+  };
+  const createGoogleSheet = async () => {
+    if (!googleConnected) {
+      connectGoogle();
+      setMessage("Google 계정을 연결한 뒤 다시 생성 버튼을 눌러 주세요.");
+      return;
+    }
+    setGoogleBusy(true);
+    setMessage("");
+    try {
+      const response = await fetch("/api/google/sheets", { method: "POST" });
+      const result = await response.json() as { spreadsheetUrl?: string; title?: string; error?: string; reconnect?: boolean };
+      if (!response.ok || !result.spreadsheetUrl) {
+        if (result.reconnect) {
+          setGoogleConnected(false);
+          setGoogleEmail("");
+        }
+        throw new Error(result.error || "Google 스프레드시트를 생성하지 못했습니다.");
+      }
+      setMessage(`Google Drive에 '${result.title ?? "기록샘 결과"}' 스프레드시트를 생성했습니다.`);
+      window.open(result.spreadsheetUrl, "_blank", "noopener,noreferrer");
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : "Google 스프레드시트를 생성하지 못했습니다.");
+    } finally {
+      setGoogleBusy(false);
+    }
+  };
   const byteLength = (value: string) => new TextEncoder().encode(value).length;
   const commentMap = new Map(comments.map((item) => [`${item.studentId}|${item.subject}`, item]));
   const behaviorMap = new Map(behaviors.map((item) => [item.studentId, item]));
@@ -1658,9 +1712,13 @@ function ExportResults({ roster, plan, classroom }: { roster: AssessmentStudent[
   const writtenBehaviors = behaviors.filter((item) => item.confirmed).length;
   return <section>
     <div className="page-heading">
-      <div><p className="eyebrow">NEIS READY</p><h1>결과 내보내기</h1><p>검수 후 최종 확정한 기록만 번호순으로 복사하거나 내려받습니다.</p></div>
-      <button onClick={() => void exportWorkbook()} disabled={loading}>전체 Excel 내려받기</button>
+      <div><p className="eyebrow">GOOGLE SHEETS · NEIS READY</p><h1>전체 결과 공유</h1><p>전체 교과 평어와 행동특성을 Google 스프레드시트로 만들거나 나이스용으로 복사합니다.</p></div>
+      <div className="heading-actions"><button onClick={() => void createGoogleSheet()} disabled={loading || googleBusy}>{googleBusy ? "Google 시트 생성 중…" : "Google 스프레드시트 생성"}</button><button className="secondary" onClick={() => void exportWorkbook()} disabled={loading}>Excel 내려받기</button></div>
     </div>
+    <section className="google-connect-card">
+      <div><span className={`google-status-dot ${googleConnected ? "connected" : ""}`} /><div><strong>{googleConnected ? "Google 계정 연결됨" : "Google 계정 연결 필요"}</strong><p>{googleConnected ? `${googleEmail || "연결한 계정"}의 Drive에 새 스프레드시트를 생성합니다.` : "앱이 생성한 파일만 관리할 수 있는 최소 권한을 요청합니다."}</p></div></div>
+      <button className={googleConnected ? "secondary" : ""} onClick={connectGoogle}>{googleConnected ? "다른 계정 연결" : "Google 계정 연결"}</button>
+    </section>
     <div className="export-stats">
       <article><span>교과 평어 확정</span><strong>{writtenComments}건</strong><small>전체 {roster.length * subjects.length}건</small></article>
       <article><span>행동특성 확정</span><strong>{writtenBehaviors}명</strong><small>전체 {roster.length}명</small></article>
@@ -2047,11 +2105,11 @@ export default function Home() {
         <button className="brand" onClick={() => setView("dashboard")}><span>기록</span>샘<i>교사의 기록을 더 가치 있게</i></button>
         <nav>{navItems.map((item) => <button className={view === item.id ? "active" : ""} key={item.id} onClick={() => setView(item.id)}><span>{item.icon}</span>{item.label}</button>)}</nav>
         <div className="nav-divider" />
-        <nav><button className={view === "export" ? "active" : ""} onClick={() => setView("export")}><span>⇧</span>결과 내보내기</button><button className={view === "settings" ? "active" : ""} onClick={() => setView("settings")}><span>⚙</span>개인정보·설정</button></nav>
+        <nav><button className={view === "export" ? "active" : ""} onClick={() => setView("export")}><span>▦</span>전체 결과 공유</button><button className={view === "settings" ? "active" : ""} onClick={() => setView("settings")}><span>⚙</span>개인정보·설정</button></nav>
         <div className="sidebar-bottom"><div className="storage"><span>이번 달 AI 생성</span><strong>{aiUsage.monthly} / {aiUsage.limit}</strong><div><i style={{ width: `${Math.min(100, aiUsage.limit ? (aiUsage.monthly / aiUsage.limit) * 100 : 0)}%` }} /></div></div><div className="profile"><span className="avatar">{currentUser.slice(0, 1)}</span><span><b>{currentUser}</b><small>{classroom?.schoolName ?? "학교 정보 확인 중"}</small></span><form action="/api/auth/logout" method="post"><button type="submit">로그아웃</button></form></div></div>
       </aside>
       <main>
-        <header className="mobile-header"><button className="brand" onClick={() => setView("dashboard")}><span>기록</span>샘</button><select value={view} onChange={(e) => setView(e.target.value as View)}>{navItems.map((item) => <option value={item.id} key={item.id}>{item.label}</option>)}<option value="export">결과 내보내기</option><option value="settings">개인정보·설정</option></select></header>
+        <header className="mobile-header"><button className="brand" onClick={() => setView("dashboard")}><span>기록</span>샘</button><select value={view} onChange={(e) => setView(e.target.value as View)}>{navItems.map((item) => <option value={item.id} key={item.id}>{item.label}</option>)}<option value="export">전체 결과 공유</option><option value="settings">개인정보·설정</option></select></header>
         <div className="content">
           {view === "dashboard" && <Dashboard move={setView} teacherName={currentUser} classroom={classroom} studentCount={roster.length} completedLevels={completedLevels} totalLevels={totalLevels} commentCount={generatedCommentCount} expectedComments={roster.length * new Set(plan.map((item) => item.subject)).size} behaviorCount={generatedBehaviorCount} />}
           {view === "classes" && <ClassroomManager current={classroom} />}
