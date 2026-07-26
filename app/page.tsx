@@ -1134,7 +1134,6 @@ function Comments({ assessmentDataBySubject, plan, roster }: { assessmentDataByS
   const [comments, setComments] = useState<Record<string, string>>({});
   const [commentCandidates, setCommentCandidates] = useState<Record<string, string[]>>({});
   const [confirmedComments, setConfirmedComments] = useState<Record<string, boolean>>({});
-  const [evidenceValidation, setEvidenceValidation] = useState<Record<string, { status: "unchecked" | "pass" | "review"; issues: string[] }>>({});
   const [loading, setLoading] = useState(false);
   const [generationProgress, setGenerationProgress] = useState("");
   const [error, setError] = useState("");
@@ -1178,7 +1177,6 @@ function Comments({ assessmentDataBySubject, plan, roster }: { assessmentDataByS
       setComments(Object.fromEntries(result.comments.map((item) => [`${item.studentId}|${item.subject}`, item.comment])));
       setCommentCandidates(Object.fromEntries(result.comments.map((item) => [`${item.studentId}|${item.subject}`, item.candidates ?? []])));
       setConfirmedComments(Object.fromEntries(result.comments.map((item) => [`${item.studentId}|${item.subject}`, item.confirmed])));
-      setEvidenceValidation(Object.fromEntries(result.comments.map((item) => [`${item.studentId}|${item.subject}`, { status: item.evidenceStatus ?? "unchecked", issues: item.evidenceIssues ?? [] }])));
       const latest = result.comments.map((item) => item.updatedAt).sort().at(-1);
       if (latest) {
         setLastGeneratedAt(latest);
@@ -1283,7 +1281,6 @@ function Comments({ assessmentDataBySubject, plan, roster }: { assessmentDataByS
     const key = `${studentId}|${subject}`;
     setComments((current) => ({ ...current, [key]: candidate }));
     setConfirmedComments((current) => ({ ...current, [key]: false }));
-    setEvidenceValidation((current) => ({ ...current, [key]: { status: "unchecked", issues: [] } }));
     await saveComment(studentId, subject, candidate, false);
   };
   const loadHistory = async (studentId: number, studentName: string) => {
@@ -1328,7 +1325,6 @@ function Comments({ assessmentDataBySubject, plan, roster }: { assessmentDataByS
       if (!response.ok || !result.comment) throw new Error(result.error || "평어를 다시 작성하지 못했습니다.");
       setComments((current) => ({ ...current, [key]: result.comment! }));
       setConfirmedComments((current) => ({ ...current, [key]: false }));
-      setEvidenceValidation((current) => ({ ...current, [key]: { status: "unchecked", issues: [] } }));
       await saveComment(studentId, subject, result.comment, false);
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : "평어를 다시 작성하지 못했습니다.");
@@ -1336,29 +1332,6 @@ function Comments({ assessmentDataBySubject, plan, roster }: { assessmentDataByS
       setRewriteBusyKey("");
     }
   };
-  const validateEvidence = async (studentId: number, subject: string) => {
-    const key = `${studentId}|${subject}`;
-    const comment = comments[key] ?? "";
-    if (!comment) return;
-    setRewriteBusyKey(`${key}|validate`);
-    setError("");
-    try {
-      await saveComment(studentId, subject, comment, false);
-      const response = await fetch("/api/validate-comment-evidence", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ studentId, subject, comment }),
-      });
-      const result = await response.json() as { status?: "pass" | "review"; issues?: string[]; error?: string };
-      if (!response.ok || !result.status) throw new Error(result.error || "입력 근거 검수를 완료하지 못했습니다.");
-      setEvidenceValidation((current) => ({ ...current, [key]: { status: result.status!, issues: result.issues ?? [] } }));
-    } catch (reason) {
-      setError(reason instanceof Error ? reason.message : "입력 근거 검수를 완료하지 못했습니다.");
-    } finally {
-      setRewriteBusyKey("");
-    }
-  };
-
   return (
     <section>
       <div className="page-heading"><div><p className="eyebrow">AI DRAFT</p><h1>전 과목 교과 평어</h1><p>과목을 선택하면 해당 과목의 학생별 평어를 한 화면에서 확인할 수 있습니다.</p></div><div className="ai-generate-actions">{formattedLastGeneratedAt && <span>마지막 사용 {formattedLastGeneratedAt}</span>}<button onClick={() => void generateAllComments()} disabled={loading}>{loading ? generationProgress || "전 과목 생성 중…" : "✦ AI 평어 생성"}</button></div></div>
@@ -1391,7 +1364,6 @@ function Comments({ assessmentDataBySubject, plan, roster }: { assessmentDataByS
                   ...item, level: assessment?.assessments[planIndex] ?? "-",
                 })).filter((item) => ["상", "중", "하"].includes(item.level));
                 const validation = validateRecord(text);
-                const factValidation = evidenceValidation[key] ?? { status: "unchecked" as const, issues: [] };
                 const confirmed = confirmedComments[key] ?? false;
                 const comparisons = roster.filter((other) => other.id !== student.id).map((other) => ({
                   student: other,
@@ -1403,12 +1375,12 @@ function Comments({ assessmentDataBySubject, plan, roster }: { assessmentDataByS
                   <td><input aria-label={`${student.name} 생성 대상`} type="checkbox" checked={selectedStudentIds.includes(student.id)} onChange={(event) => setSelectedStudentIds((current) => event.target.checked ? [...new Set([...current, student.id])] : current.filter((id) => id !== student.id))} /></td>
                   <td>{student.number ?? student.id}</td>
                   <td><strong>{student.name}</strong><small>{text ? `${new TextEncoder().encode(text).length}B` : hasLevel ? "생성 대기" : "수준 미입력"}</small></td>
-                  <td><textarea value={text} onSelect={(event) => { const target = event.currentTarget; setSelectedText((current) => ({ ...current, [key]: target.value.slice(target.selectionStart, target.selectionEnd) })); }} onChange={(event) => { setComments((current) => ({ ...current, [key]: event.target.value })); setConfirmedComments((current) => ({ ...current, [key]: false })); setEvidenceValidation((current) => ({ ...current, [key]: { status: "unchecked", issues: [] } })); setCopied(false); }} onBlur={(event) => void saveComment(student.id, selectedSubject, event.target.value)} placeholder={hasLevel ? "AI 평어 생성 버튼을 누르면 결과가 표시됩니다." : "상·중·하 평가 수준이 입력되지 않았습니다."} />
+                  <td><textarea value={text} onSelect={(event) => { const target = event.currentTarget; setSelectedText((current) => ({ ...current, [key]: target.value.slice(target.selectionStart, target.selectionEnd) })); }} onChange={(event) => { setComments((current) => ({ ...current, [key]: event.target.value })); setConfirmedComments((current) => ({ ...current, [key]: false })); setCopied(false); }} onBlur={(event) => void saveComment(student.id, selectedSubject, event.target.value)} placeholder={hasLevel ? "AI 평어 생성 버튼을 누르면 결과가 표시됩니다." : "상·중·하 평가 수준이 입력되지 않았습니다."} />
                     <div className="comment-row-actions"><button disabled={!text || !!rewriteBusyKey} onMouseDown={(event) => event.preventDefault()} onClick={() => void rewriteComment(student.id, selectedSubject, "shorter")}>짧게</button><button disabled={!text || !!rewriteBusyKey} onMouseDown={(event) => event.preventDefault()} onClick={() => void rewriteComment(student.id, selectedSubject, "specific")}>구체적으로</button><button disabled={!selectedText[key] || !!rewriteBusyKey} onMouseDown={(event) => event.preventDefault()} onClick={() => void rewriteComment(student.id, selectedSubject, "selection")}>{rewriteBusyKey === `${key}|selection` ? "생성 중…" : "선택 문장 재생성"}</button><button className="evidence-button" onMouseDown={(event) => event.preventDefault()} onClick={() => setEvidenceKey((current) => current === key ? "" : key)}>생성 근거 {evidenceKey === key ? "닫기" : "보기"}</button></div>
                     {candidates.length > 1 && <div className="comment-candidates"><strong>AI 후보</strong>{candidates.map((candidate, candidateIndex) => <button className={candidate === text ? "active" : ""} title={candidate} onMouseDown={(event) => event.preventDefault()} onClick={() => void chooseCandidate(student.id, selectedSubject, candidate)} key={`${candidateIndex}-${candidate.slice(0, 20)}`}>{candidateIndex + 1}안 · {new TextEncoder().encode(candidate).length}B</button>)}</div>}
                     {evidenceKey === key && <div className="comment-evidence">{evidence.length ? evidence.map((item, evidenceIndex) => <article key={`${item.unit}-${evidenceIndex}`}><strong>{item.unit} · {item.domain} · {item.level}</strong><span>{item.level === "상" ? item.high : item.level === "중" ? item.middle : item.low}</span></article>) : <p>평어 생성에 사용된 상·중·하 평가 근거가 없습니다.</p>}</div>}
                   </td>
-                  <td className="validation-cell"><div><span className={validation.endingsOk ? "pass" : "fail"}>종결 {validation.endingsOk ? "정상" : "확인"}</span><span className={!validation.forbidden.length ? "pass" : "fail"}>금지어 {!validation.forbidden.length ? "없음" : "확인"}</span><span className={validation.spellingOk ? "pass" : "fail"} title={validation.spellingIssues.join("\n")}>맞춤법 {validation.spellingOk ? "정상" : `${validation.spellingIssues.length}건`}</span><span className={!similarStudents.length ? "pass" : "fail"}>최대 중복 {closest?.score ? `${Math.round(closest.score * 100)}%` : "0%"}</span><span className={factValidation.status === "pass" ? "pass" : "fail"} title={factValidation.issues.join("\n")}>근거 {factValidation.status === "pass" ? "일치" : factValidation.status === "review" ? "확인 필요" : "미검수"}</span></div>{closest?.score > 0 && <div className="similarity-detail"><strong>{closest.student.name} 학생과 {Math.round(closest.score * 100)}%</strong>{closest.overlaps.length > 0 && <span>겹치는 표현: {closest.overlaps.join(" · ")}</span>}</div>}{!validation.spellingOk && <ul className="spelling-issues">{validation.spellingIssues.map((issue, issueIndex) => <li key={issueIndex}>{issue}</li>)}</ul>}<button className="evidence-validation-button" disabled={!text || !!rewriteBusyKey} onClick={() => void validateEvidence(student.id, selectedSubject)}>{rewriteBusyKey === `${key}|validate` ? "AI 검수 중…" : "AI 사실 검수"}</button>{factValidation.status === "review" && factValidation.issues.length > 0 && <ul className="evidence-issues">{factValidation.issues.map((issue, issueIndex) => <li key={issueIndex}>{issue}</li>)}</ul>}<button className="history-button" disabled={!text} onClick={() => void loadHistory(student.id, student.name)}>이전 기록</button><button className={confirmed ? "confirmed" : ""} disabled={!validation.valid || !!similarStudents.length || factValidation.status !== "pass"} onMouseDown={(event) => event.preventDefault()} onClick={() => void saveComment(student.id, selectedSubject, text, !confirmed)}>{confirmed ? "확정됨 ✓" : "최종 확정"}</button></td>
+                  <td className="validation-cell"><div><span className={validation.endingsOk ? "pass" : "fail"}>종결 {validation.endingsOk ? "정상" : "확인"}</span><span className={!validation.forbidden.length ? "pass" : "fail"}>금지어 {!validation.forbidden.length ? "없음" : "확인"}</span><span className={validation.spellingOk ? "pass" : "fail"} title={validation.spellingIssues.join("\n")}>맞춤법 {validation.spellingOk ? "정상" : `${validation.spellingIssues.length}건`}</span><span className={!similarStudents.length ? "pass" : "fail"}>최대 중복 {closest?.score ? `${Math.round(closest.score * 100)}%` : "0%"}</span></div>{closest?.score > 0 && <div className="similarity-detail"><strong>{closest.student.name} 학생과 {Math.round(closest.score * 100)}%</strong>{closest.overlaps.length > 0 && <span>겹치는 표현: {closest.overlaps.join(" · ")}</span>}</div>}{!validation.spellingOk && <ul className="spelling-issues">{validation.spellingIssues.map((issue, issueIndex) => <li key={issueIndex}>{issue}</li>)}</ul>}<button className="history-button" disabled={!text} onClick={() => void loadHistory(student.id, student.name)}>이전 기록</button><button className={confirmed ? "confirmed" : ""} disabled={!validation.valid || !!similarStudents.length} onMouseDown={(event) => event.preventDefault()} onClick={() => void saveComment(student.id, selectedSubject, text, !confirmed)}>{confirmed ? "확정됨 ✓" : "최종 확정"}</button></td>
                 </tr>;
               })}</tbody>
             </table>
@@ -1545,22 +1517,6 @@ function Behavior({ roster }: { roster: AssessmentStudent[] }) {
       setError(confirmed ? "검수 항목을 모두 통과한 행동특성만 확정할 수 있습니다." : "수정한 행동특성 내용을 저장하지 못했습니다. 잠시 후 다시 시도해 주세요.");
     }
   };
-  const validateBehaviorEvidence = async (studentId: number, record: BehaviorRecord) => {
-    if (!record.characteristic.trim() || !record.behavior.trim()) return setError("관찰 사실과 행동특성을 모두 입력해 주세요.");
-    setError("");
-    try {
-      await saveRecord(studentId, record, false);
-      const response = await fetch("/api/validate-behavior-evidence", {
-        method: "POST", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ studentId, characteristic: record.characteristic, behavior: record.behavior }),
-      });
-      const result = await response.json() as { status?: "pass" | "review"; issues?: string[]; error?: string };
-      if (!response.ok || !result.status) throw new Error(result.error || "행동특성 사실 검수를 완료하지 못했습니다.");
-      updateRecord(studentId, { evidenceStatus: result.status, evidenceIssues: result.issues ?? [], confirmed: false });
-    } catch (reason) {
-      setError(reason instanceof Error ? reason.message : "행동특성 사실 검수를 완료하지 못했습니다.");
-    }
-  };
   const rewriteBehavior = async (studentId: number, record: BehaviorRecord, mode: "regenerate" | "length") => {
     if (!record.characteristic.trim()) return setError("관찰 사실을 먼저 입력해 주세요.");
     const busyKey = `${studentId}|${mode}`;
@@ -1639,7 +1595,7 @@ function Behavior({ roster }: { roster: AssessmentStudent[] }) {
                 const closest = comparisons[0];
                 const eligible = Boolean(record.characteristic.trim());
                 const selected = eligible && !excludedStudentIds.includes(student.id);
-                return <tr className={activeStudentId === student.id ? "active-reference-row" : ""} key={student.id}><td><input aria-label={`${student.name} 행동특성 생성 대상`} type="checkbox" disabled={!eligible} checked={selected} onChange={(event) => setExcludedStudentIds((current) => event.target.checked ? current.filter((id) => id !== student.id) : [...new Set([...current, student.id])])} /></td><td>{student.number ?? student.id}</td><td><strong>{student.name}</strong></td><td><textarea className={sourceIssues.length ? "input-blocked" : ""} value={record.characteristic} onFocus={() => setActiveStudentId(student.id)} onChange={(event) => updateRecord(student.id, { characteristic: event.target.value, confirmed: false, evidenceStatus: "unchecked", evidenceIssues: [] })} onBlur={() => void saveRecord(student.id, records[student.id] ?? record)} placeholder="관찰한 행동과 변화 모습을 입력하세요." />{sourceIssues.length > 0 && <small className="source-warning">AI 전송 불가: {sourceIssues.join(" · ")}</small>}</td><td><textarea value={record.behavior} onChange={(event) => updateRecord(student.id, { behavior: event.target.value, confirmed: false, evidenceStatus: "unchecked", evidenceIssues: [] })} onBlur={() => void saveRecord(student.id, records[student.id] ?? record)} placeholder={record.characteristic ? "AI 행특 생성 버튼을 누르면 결과가 표시됩니다." : "특성을 먼저 입력해 주세요."} /><small>{record.behavior ? `${validation.bytes} bytes` : ""}</small><div className="comment-row-actions"><button disabled={!record.characteristic || !sourceValidation.valid || !!rewriteBusyKey} onMouseDown={(event) => event.preventDefault()} onClick={() => void rewriteBehavior(student.id, record, "regenerate")}>{rewriteBusyKey === `${student.id}|regenerate` ? "생성 중…" : "다시 생성"}</button><button disabled={!record.characteristic || !record.behavior || !sourceValidation.valid || !!rewriteBusyKey} onMouseDown={(event) => event.preventDefault()} onClick={() => void rewriteBehavior(student.id, record, "length")}>{rewriteBusyKey === `${student.id}|length` ? "조정 중…" : "500~550B 맞춤"}</button></div></td><td className="validation-cell behavior-validation"><div><span className={validation.lengthOk ? "pass" : "fail"}>500~550B</span><span className={validation.endingsOk ? "pass" : "fail"}>종결</span><span className={validation.growthIncluded ? "pass" : "fail"}>성장</span><span className={!validation.forbidden.length ? "pass" : "fail"}>금지어</span><span className={validation.spellingOk ? "pass" : "fail"} title={validation.spellingIssues.join("\n")}>맞춤법 {validation.spellingOk ? "정상" : `${validation.spellingIssues.length}건`}</span><span className={!validation.repeated.length ? "pass" : "fail"}>반복</span><span className={!similarStudents.length ? "pass" : "fail"}>최대 중복 {closest?.score ? `${Math.round(closest.score * 100)}%` : "0%"}</span><span className={record.evidenceStatus === "pass" ? "pass" : "fail"} title={record.evidenceIssues.join("\n")}>근거 {record.evidenceStatus === "pass" ? "일치" : record.evidenceStatus === "review" ? "확인 필요" : "미검수"}</span></div>{closest?.score > 0 && <div className="similarity-detail"><strong>{closest.student.name} 학생과 {Math.round(closest.score * 100)}%</strong>{closest.overlaps.length > 0 && <span>겹치는 표현: {closest.overlaps.join(" · ")}</span>}</div>}{!validation.spellingOk && <ul className="spelling-issues">{validation.spellingIssues.map((issue, issueIndex) => <li key={issueIndex}>{issue}</li>)}</ul>}<button className="evidence-validation-button" disabled={!record.characteristic || !record.behavior || !sourceValidation.valid || !!rewriteBusyKey} onClick={() => void validateBehaviorEvidence(student.id, record)}>AI 사실 검수</button>{record.evidenceStatus === "review" && record.evidenceIssues.length > 0 && <ul className="evidence-issues">{record.evidenceIssues.map((issue, issueIndex) => <li key={issueIndex}>{issue}</li>)}</ul>}<button className="history-button" disabled={!record.behavior} onClick={() => void loadHistory(student.id, student.name)}>이전 기록</button><button className={record.confirmed ? "confirmed" : ""} disabled={!validation.valid || !!similarStudents.length || record.evidenceStatus !== "pass" || !!rewriteBusyKey} onMouseDown={(event) => event.preventDefault()} onClick={() => void saveRecord(student.id, record, !record.confirmed)}>{record.confirmed ? "확정됨 ✓" : "최종 확정"}</button></td></tr>;
+                return <tr className={activeStudentId === student.id ? "active-reference-row" : ""} key={student.id}><td><input aria-label={`${student.name} 행동특성 생성 대상`} type="checkbox" disabled={!eligible} checked={selected} onChange={(event) => setExcludedStudentIds((current) => event.target.checked ? current.filter((id) => id !== student.id) : [...new Set([...current, student.id])])} /></td><td>{student.number ?? student.id}</td><td><strong>{student.name}</strong></td><td><textarea className={sourceIssues.length ? "input-blocked" : ""} value={record.characteristic} onFocus={() => setActiveStudentId(student.id)} onChange={(event) => updateRecord(student.id, { characteristic: event.target.value, confirmed: false, evidenceStatus: "unchecked", evidenceIssues: [] })} onBlur={() => void saveRecord(student.id, records[student.id] ?? record)} placeholder="관찰한 행동과 변화 모습을 입력하세요." />{sourceIssues.length > 0 && <small className="source-warning">AI 전송 불가: {sourceIssues.join(" · ")}</small>}</td><td><textarea value={record.behavior} onChange={(event) => updateRecord(student.id, { behavior: event.target.value, confirmed: false, evidenceStatus: "unchecked", evidenceIssues: [] })} onBlur={() => void saveRecord(student.id, records[student.id] ?? record)} placeholder={record.characteristic ? "AI 행특 생성 버튼을 누르면 결과가 표시됩니다." : "특성을 먼저 입력해 주세요."} /><small>{record.behavior ? `${validation.bytes} bytes` : ""}</small><div className="comment-row-actions"><button disabled={!record.characteristic || !sourceValidation.valid || !!rewriteBusyKey} onMouseDown={(event) => event.preventDefault()} onClick={() => void rewriteBehavior(student.id, record, "regenerate")}>{rewriteBusyKey === `${student.id}|regenerate` ? "생성 중…" : "다시 생성"}</button><button disabled={!record.characteristic || !record.behavior || !sourceValidation.valid || !!rewriteBusyKey} onMouseDown={(event) => event.preventDefault()} onClick={() => void rewriteBehavior(student.id, record, "length")}>{rewriteBusyKey === `${student.id}|length` ? "조정 중…" : "500~550B 맞춤"}</button></div></td><td className="validation-cell behavior-validation"><div><span className={validation.lengthOk ? "pass" : "fail"}>500~550B</span><span className={validation.endingsOk ? "pass" : "fail"}>종결</span><span className={validation.growthIncluded ? "pass" : "fail"}>성장</span><span className={!validation.forbidden.length ? "pass" : "fail"}>금지어</span><span className={validation.spellingOk ? "pass" : "fail"} title={validation.spellingIssues.join("\n")}>맞춤법 {validation.spellingOk ? "정상" : `${validation.spellingIssues.length}건`}</span><span className={!validation.repeated.length ? "pass" : "fail"}>반복</span><span className={!similarStudents.length ? "pass" : "fail"}>최대 중복 {closest?.score ? `${Math.round(closest.score * 100)}%` : "0%"}</span></div>{closest?.score > 0 && <div className="similarity-detail"><strong>{closest.student.name} 학생과 {Math.round(closest.score * 100)}%</strong>{closest.overlaps.length > 0 && <span>겹치는 표현: {closest.overlaps.join(" · ")}</span>}</div>}{!validation.spellingOk && <ul className="spelling-issues">{validation.spellingIssues.map((issue, issueIndex) => <li key={issueIndex}>{issue}</li>)}</ul>}<button className="history-button" disabled={!record.behavior} onClick={() => void loadHistory(student.id, student.name)}>이전 기록</button><button className={record.confirmed ? "confirmed" : ""} disabled={!validation.valid || !!similarStudents.length || !!rewriteBusyKey} onMouseDown={(event) => event.preventDefault()} onClick={() => void saveRecord(student.id, record, !record.confirmed)}>{record.confirmed ? "확정됨 ✓" : "최종 확정"}</button></td></tr>;
               })}</tbody>
             </table>
           </div>
