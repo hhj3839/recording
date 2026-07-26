@@ -722,7 +722,7 @@ function PlanManager({ plan, onChanged, current }: { plan: AssessmentPlan[]; onC
       <div className="shared-plan-list">{filteredSharedPlans.length ? filteredSharedPlans.map((shared) => <article key={shared.id}><div><strong>{shared.name}</strong><span>{shared.schoolYear}학년도 {shared.semester}학기 · {shared.grade}학년 · {shared.itemCount}개</span><small>{shared.subjects.join(" · ") || "과목 정보 없음"} · {new Date(shared.updatedAt).toLocaleString("ko-KR")}</small></div><button className="secondary" disabled={busy} onClick={() => void previewSharedPlan(shared)}>미리보기</button><button disabled={busy} onClick={() => void importSharedPlan(shared)}>현재 학급에 적용</button>{shared.canDelete && <button className="danger-text" disabled={busy} onClick={() => void deleteSharedPlan(shared)}>삭제</button>}</article>) : <p className="empty-cell">{sharedPlans.length ? "검색 조건에 맞는 공동 평가계획이 없습니다." : "아직 공유된 평가계획이 없습니다."}</p>}</div>
     </section>}
     <section className="plan-paste-entry">
-      <div className="section-heading"><div><p className="eyebrow">PASTE TABLE</p><h2>평가계획 표 붙여넣기</h2><p>엑셀이나 한글 표에서 10개 열을 복사하거나 탭으로 구분된 여러 행을 그대로 붙여넣으세요.</p></div><button disabled={busy || !planText.trim()} onClick={interpretPlanText}>표 이해하기</button></div>
+      <div className="section-heading"><div><p className="eyebrow">PASTE TABLE</p><h2>평가계획 표 붙여넣기</h2><p>엑셀이나 한글 표에서 10개 열을 복사하거나 탭으로 구분된 여러 행을 그대로 붙여넣으세요.</p></div><button disabled={busy || !planText.trim()} onClick={interpretPlanText}>표 분석·미리보기</button></div>
       <div className="plan-paste-columns">과목 → 단원 → 평가목표 → 영역 → 평가유형 → 평가관점 → 상 → 중 → 하 → 유의점</div>
       <textarea value={planText} onChange={(event) => setPlanText(event.target.value)} placeholder={"국어\t1. 생생하게 표현해요\t상황에 알맞게 표현할 수 있다.\t듣기·말하기\t구술 평가\t상황에 맞게 표현하는가?\t정확하고 실감 나게 표현할 수 있다.\t알맞게 표현할 수 있다.\t도움을 받아 표현하기 위해 노력한다.\t다양한 표현을 고려한다."} />
     </section>
@@ -734,7 +734,7 @@ function PlanManager({ plan, onChanged, current }: { plan: AssessmentPlan[]; onC
       <div className="plan-preview-list">{preview.slice(0, 8).map((item, index) => <article key={`${item.subject}-${item.unit}-${index}`}><b>{item.subject} · {item.unit}</b><span>{item.goal}</span><small>{item.domain} / {item.type || "유형 미입력"}</small></article>)}</div>
     </section>}
     <section className="plan-list">
-      <div className="section-heading"><div><p className="eyebrow">SAVED</p><h2>저장된 평가계획 · {plan.length}개</h2></div><button className="danger-text" disabled={busy || !plan.length} onClick={() => void clearCurrentPlan()}>현재 계획 전체 삭제</button></div>
+      <div className="section-heading"><div><p className="eyebrow">SAVED</p><h2>저장된 평가계획 · {plan.length}개</h2></div><button className="danger-text" disabled={busy || !plan.length} onClick={() => void clearCurrentPlan()}>현재 평가계획 초기화</button></div>
       {plan.map((item, index) => <article className="plan-card" key={item.id ?? `${item.subject}-${index}`}>
         <div className="plan-card-summary">
           <div className="plan-card-title"><strong>{index + 1}. {item.subject} · {item.unit}</strong><span>{item.domain}</span><span>{item.type || "유형 미입력"}</span></div>
