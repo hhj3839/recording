@@ -152,11 +152,40 @@ test("로그인부터 명단·평가계획·평가수준·교과 평어 화면�
     const clipboardText = await page.evaluate(() => navigator.clipboard.readText());
     expect(clipboardText.replaceAll("\r\n", "\n")).toBe(seededComments.join("\n"));
 
+    const seededCharacteristics = [
+      "학습 태도: 수업에 성실히 참여함\n교우관계: 친구의 말을 경청함\n책임감: 맡은 역할을 끝까지 수행함\n성장 모습: 발표에 꾸준히 참여함",
+      "학습 태도: 궁금한 점을 질문함\n협력: 모둠 활동에 적극적으로 참여함\n자기관리: 준비물을 스스로 점검함\n성장 모습: 자신의 생각을 구체적으로 표현함",
+    ];
+    const seededBehaviors = [
+      "수업에 성실히 참여하고 친구의 말을 경청하며 맡은 역할을 끝까지 수행하는 책임감이 돋보임.",
+      "궁금한 점을 질문으로 해결하고 모둠 활동에 협력하며 준비물을 스스로 점검하는 습관을 실천함.",
+    ];
+    for (const [index, student] of orderedStudents.entries()) {
+      const saved = await page.request.put("/api/student-behaviors", {
+        data: {
+          studentId: student.id,
+          characteristic: seededCharacteristics[index],
+          behavior: seededBehaviors[index],
+          confirmed: false,
+        },
+      });
+      expect(saved.ok(), `${student.name} 학생의 E2E 행동특성 저장에 실패했습니다.`).toBeTruthy();
+    }
+
     await navigate(page, "행동특성", "behavior");
     await expect(page.getByRole("heading", { name: "행동특성 작성" })).toBeVisible();
     await expect(page.getByText("특성을 입력한 학생은 자동 포함", { exact: false })).toBeVisible();
     await expect(page.getByLabel("관찰 사실 입력 학생 전체 선택")).toHaveCount(0);
     await expect(page.locator('.behavior-table input[type="checkbox"]')).toHaveCount(0);
+    const behaviorRows = page.locator(".behavior-table tbody tr");
+    await expect(behaviorRows).toHaveCount(2);
+    await expect(behaviorRows.nth(0).locator("textarea").nth(0)).toHaveValue(seededCharacteristics[0]);
+    await expect(behaviorRows.nth(0).locator("textarea").nth(1)).toHaveValue(seededBehaviors[0]);
+    await expect(behaviorRows.nth(1).locator("textarea").nth(1)).toHaveValue(seededBehaviors[1]);
+    await page.getByRole("button", { name: "행동특성만 복사하기" }).click();
+    await expect(page.getByRole("button", { name: "복사됨 ✓" })).toBeVisible();
+    const behaviorClipboard = await page.evaluate(() => navigator.clipboard.readText());
+    expect(behaviorClipboard.replaceAll("\r\n", "\n")).toBe(seededBehaviors.join("\n"));
 
     if (process.env.E2E_RUN_AI === "1") {
       await page.getByRole("button", { name: "✦ AI 평어 생성" }).click();
