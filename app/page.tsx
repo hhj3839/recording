@@ -1744,6 +1744,62 @@ function PilotFeedback() {
   </section>;
 }
 
+function SchoolTeam() {
+  type Member = { id: number; email: string; role: "admin" | "teacher"; status: "invited" | "active"; isMe: boolean };
+  const [organization, setOrganization] = useState<{ name: string } | null>(null);
+  const [members, setMembers] = useState<Member[]>([]);
+  const [currentRole, setCurrentRole] = useState<"admin" | "teacher">("teacher");
+  const [email, setEmail] = useState("");
+  const [role, setRole] = useState<"admin" | "teacher">("teacher");
+  const [message, setMessage] = useState("");
+  const [busy, setBusy] = useState(false);
+  const load = async () => {
+    try {
+      const response = await fetch("/api/school-members");
+      const result = await response.json() as { organization?: { name: string }; currentRole?: "admin" | "teacher"; members?: Member[]; error?: string };
+      if (!response.ok) throw new Error(result.error || "학교 구성원을 불러오지 못했습니다.");
+      setOrganization(result.organization ?? null);
+      setCurrentRole(result.currentRole ?? "teacher");
+      setMembers(result.members ?? []);
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : "학교 구성원을 불러오지 못했습니다.");
+    }
+  };
+  useEffect(() => { void load(); }, []);
+  const invite = async (event: React.FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    setBusy(true); setMessage("");
+    try {
+      const response = await fetch("/api/school-members", {
+        method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ email, role }),
+      });
+      const result = await response.json() as { error?: string };
+      if (!response.ok) throw new Error(result.error || "구성원을 초대하지 못했습니다.");
+      setEmail(""); setMessage("학교 구성원을 등록했습니다."); await load();
+    } catch (error) { setMessage(error instanceof Error ? error.message : "구성원을 초대하지 못했습니다."); }
+    finally { setBusy(false); }
+  };
+  const remove = async (member: Member) => {
+    if (!window.confirm(`${member.email} 구성원을 학교 작업공간에서 삭제할까요?`)) return;
+    setBusy(true);
+    try {
+      const response = await fetch("/api/school-members", {
+        method: "DELETE", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ id: member.id }),
+      });
+      const result = await response.json() as { error?: string };
+      if (!response.ok) throw new Error(result.error || "구성원을 삭제하지 못했습니다.");
+      await load();
+    } catch (error) { setMessage(error instanceof Error ? error.message : "구성원을 삭제하지 못했습니다."); }
+    finally { setBusy(false); }
+  };
+  return <section className="school-team-card">
+    <div className="section-heading"><div><p className="eyebrow">SCHOOL WORKSPACE</p><h2>{organization?.name ?? "학교 작업공간"}</h2><p>현재 단계에서는 구성원과 역할만 관리하며 개인 학급 자료는 공유되지 않습니다.</p></div><span className="security-badge">{currentRole === "admin" ? "학교 관리자" : "교사"}</span></div>
+    {message && <p className="student-message">{message}</p>}
+    {currentRole === "admin" && <form className="school-invite-form" onSubmit={(event) => void invite(event)}><label><span>교사 이메일</span><input type="email" value={email} onChange={(event) => setEmail(event.target.value)} required /></label><label><span>역할</span><select value={role} onChange={(event) => setRole(event.target.value as "admin" | "teacher")}><option value="teacher">교사</option><option value="admin">관리자</option></select></label><button disabled={busy}>{busy ? "처리 중…" : "구성원 등록"}</button></form>}
+    <div className="school-member-list">{members.map((member) => <article key={member.id}><div><strong>{member.email}{member.isMe ? " (나)" : ""}</strong><span>{member.status === "active" ? "가입 완료" : "가입 대기"}</span></div><b>{member.role === "admin" ? "관리자" : "교사"}</b>{currentRole === "admin" && !member.isMe && <button disabled={busy} onClick={() => void remove(member)}>삭제</button>}</article>)}</div>
+  </section>;
+}
+
 function PrivacySettings({ currentName, onNameChanged }: { currentName: string; onNameChanged: (name: string) => void }) {
   const [summary, setSummary] = useState<PrivacySummary | null>(null);
   const [classConfirmation, setClassConfirmation] = useState("");
@@ -1835,6 +1891,7 @@ function PrivacySettings({ currentName, onNameChanged }: { currentName: string; 
       <ul className="security-list"><li>로그인 세션은 보안 쿠키로 관리됩니다.</li><li>OpenAI API 키와 Supabase 관리 키는 서버에만 저장됩니다.</li><li>모든 조회·수정 요청에서 교사 ID와 학급 ID를 함께 확인합니다.</li></ul>
       <nav className="privacy-legal-links"><a href="/privacy" target="_blank">개인정보 처리방침</a><a href="/terms" target="_blank">서비스 이용약관</a></nav>
     </section>
+    <SchoolTeam />
     <div className="account-settings-grid">
     <form className="profile-settings-card" onSubmit={(event) => void changeProfile(event)}>
       <div><p className="eyebrow">TEACHER PROFILE</p><h2>교사 이름</h2><p>대시보드와 앱 왼쪽 아래에 표시되는 이름입니다.</p></div>
