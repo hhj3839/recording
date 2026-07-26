@@ -1085,7 +1085,7 @@ function Comments({ assessmentDataBySubject, plan, roster }: { assessmentDataByS
       <div className="page-heading"><div><p className="eyebrow">AI DRAFT</p><h1>전 과목 교과 평어</h1><p>과목을 선택하면 해당 과목의 학생별 평어를 한 화면에서 확인할 수 있습니다.</p></div><div className="ai-generate-actions">{formattedLastGeneratedAt && <span>마지막 사용 {formattedLastGeneratedAt}</span>}<button onClick={() => void generateAllComments()} disabled={loading}>{loading ? generationProgress || "전 과목 생성 중…" : "✦ AI 평어 생성"}</button></div></div>
       <div className="review-layout comments-review-layout">
         <div className="review-content">
-          <div className="comments-toolbar">
+          <div className="workspace-toolbar comments-toolbar">
             <SubjectNavigator subjects={subjects} activeSubject={selectedSubject} onChange={(subject) => { setSelectedSubject(subject); setCopied(false); }} progress={(subject) => `${roster.filter((student) => comments[`${student.id}|${subject}`]).length}/${roster.length}명`} />
             <button className="copy-comments" onClick={() => void copySubjectComments()} disabled={!roster.some((student) => comments[`${student.id}|${selectedSubject}`])}>{copied ? "복사됨 ✓" : "평어만 복사하기"}</button>
           </div>
