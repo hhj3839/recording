@@ -566,6 +566,31 @@ function PlanManager({ plan, onChanged, current }: { plan: AssessmentPlan[]; onC
     onChanged(plan.filter((current) => current.id !== item.id));
     setMessage("평가계획을 삭제했습니다.");
   };
+  const clearCurrentPlan = async () => {
+    if (!plan.length) return;
+    const confirmation = window.prompt(
+      `현재 학급의 평가계획 ${plan.length}개와 연결된 평가수준·교과 평어를 삭제합니다.\n공동 평가계획과 버전 기록은 삭제되지 않습니다.\n\n계속하려면 평가계획삭제를 입력하세요.`,
+    );
+    if (confirmation !== "평가계획삭제") return;
+    setBusy(true);
+    setErrors([]);
+    try {
+      const response = await fetch("/api/assessment-plan", {
+        method: "DELETE",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ scope: "all", confirmation }),
+      });
+      const result = await response.json() as { deleted?: number; error?: string };
+      if (!response.ok) throw new Error(result.error || "평가계획을 전체 삭제하지 못했습니다.");
+      onChanged([]);
+      setPreview([]);
+      setMessage(`현재 학급의 평가계획 ${result.deleted ?? plan.length}개를 삭제했습니다. 공동 평가계획은 유지됩니다.`);
+    } catch (error) {
+      setErrors([error instanceof Error ? error.message : "평가계획을 전체 삭제하지 못했습니다."]);
+    } finally {
+      setBusy(false);
+    }
+  };
   const loadVersions = async () => {
     setErrors([]);
     try {
@@ -709,7 +734,7 @@ function PlanManager({ plan, onChanged, current }: { plan: AssessmentPlan[]; onC
       <div className="plan-preview-list">{preview.slice(0, 8).map((item, index) => <article key={`${item.subject}-${item.unit}-${index}`}><b>{item.subject} · {item.unit}</b><span>{item.goal}</span><small>{item.domain} / {item.type || "유형 미입력"}</small></article>)}</div>
     </section>}
     <section className="plan-list">
-      <div className="section-heading"><div><p className="eyebrow">SAVED</p><h2>저장된 평가계획 · {plan.length}개</h2></div></div>
+      <div className="section-heading"><div><p className="eyebrow">SAVED</p><h2>저장된 평가계획 · {plan.length}개</h2></div><button className="danger-text" disabled={busy || !plan.length} onClick={() => void clearCurrentPlan()}>현재 계획 전체 삭제</button></div>
       {plan.map((item, index) => <article className="plan-card" key={item.id ?? `${item.subject}-${index}`}>
         <div className="plan-card-summary">
           <div className="plan-card-title"><strong>{index + 1}. {item.subject} · {item.unit}</strong><span>{item.domain}</span><span>{item.type || "유형 미입력"}</span></div>

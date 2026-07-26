@@ -145,6 +145,42 @@ export async function PATCH(request: Request) {
 
 export async function DELETE(request: Request) {
   try {
+    const body = await request.json().catch(() => ({})) as { scope?: unknown; confirmation?: unknown };
+    if (body.scope === "all") {
+      if (body.confirmation !== "평가계획삭제") {
+        return Response.json({ error: "확인 문구가 올바르지 않습니다." }, { status: 400 });
+      }
+      const { user, classId } = await getDataScope();
+      const current = await selectRows<{ id: number }>("assessment_plans", {
+        owner_id: eq(user.id), class_id: eq(classId),
+      });
+      if (!current.length) return Response.json({ error: "삭제할 평가계획이 없습니다." }, { status: 404 });
+      await snapshotAssessmentPlan({
+        ownerId: user.id, ownerEmail: user.email, classId, source: "before-clear",
+        label: `전체 삭제 전 평가계획 ${current.length}개`,
+      });
+      await supabaseRequest("assessment_levels", {
+        method: "DELETE", query: { owner_id: eq(user.id), class_id: eq(classId) },
+      });
+      await supabaseRequest("generated_comments", {
+        method: "DELETE", query: { owner_id: eq(user.id), class_id: eq(classId) },
+      });
+      await supabaseRequest("record_revisions", {
+        method: "DELETE", query: { owner_id: eq(user.id), class_id: eq(classId), record_type: eq("comment") },
+      });
+      await supabaseRequest("generation_jobs", {
+        method: "DELETE", query: { owner_id: eq(user.id), class_id: eq(classId), job_type: eq("comments") },
+      });
+      await supabaseRequest("assessment_plans", {
+        method: "DELETE", query: { owner_id: eq(user.id), class_id: eq(classId) },
+      });
+      return Response.json({
+        ok: true,
+        deleted: current.length,
+        sharedPlansPreserved: true,
+        versionPreserved: true,
+      });
+    }
     const id = Number(new URL(request.url).searchParams.get("id"));
     if (!Number.isInteger(id)) return Response.json({ error: "삭제할 평가계획을 찾을 수 없습니다." }, { status: 400 });
     const { user, classId } = await getDataScope();
