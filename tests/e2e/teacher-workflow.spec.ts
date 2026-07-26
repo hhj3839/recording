@@ -107,6 +107,8 @@ test("로그인부터 명단·평가계획·평가수준·교과 평어 화면�
 
     await page.getByRole("button", { name: "평가 수준 입력" }).click();
     await expect(page.getByRole("heading", { name: "평가 수준 입력" })).toBeVisible();
+    await expect(page.locator(".assessment-workspace-toolbar .unified-subject-tabs").getByRole("button", { name: /국어/ })).toBeVisible();
+    await page.getByText("일괄 입력 도구", { exact: true }).click();
     await page.getByRole("button", { name: "미입력 전체 적용" }).click();
     const levelResponse = page.waitForResponse((response) =>
       response.url().endsWith("/api/assessment-levels") && response.request().method() === "PUT");
@@ -132,7 +134,7 @@ test("로그인부터 명단·평가계획·평가수준·교과 평어 화면�
     await page.getByRole("button", { name: "교과 평어" }).click();
     await expect(page.getByRole("heading", { name: "전 과목 교과 평어" })).toBeVisible();
     await expect(page.getByRole("button", { name: "✦ AI 평어 생성" })).toBeVisible();
-    await expect(page.locator(".subject-navigator").getByRole("button", { name: /국어/ })).toBeVisible();
+    await expect(page.locator(".comments-toolbar .unified-subject-tabs").getByRole("button", { name: /국어/ })).toBeVisible();
     await expect(page.locator(".subject-comments-table textarea")).toHaveCount(2);
     await expect(page.locator(".subject-comments-table textarea").nth(0)).toHaveValue(seededComments[0]);
     await expect(page.locator(".subject-comments-table textarea").nth(1)).toHaveValue(seededComments[1]);
@@ -140,6 +142,12 @@ test("로그인부터 명단·평가계획·평가수준·교과 평어 화면�
     await expect(page.getByRole("button", { name: "복사됨 ✓" })).toBeVisible();
     const clipboardText = await page.evaluate(() => navigator.clipboard.readText());
     expect(clipboardText.replaceAll("\r\n", "\n")).toBe(seededComments.join("\n"));
+
+    await page.getByRole("button", { name: "행동특성" }).click();
+    await expect(page.getByRole("heading", { name: "행동특성 작성" })).toBeVisible();
+    await expect(page.getByText("특성을 입력한 학생은 자동 포함", { exact: false })).toBeVisible();
+    await expect(page.getByLabel("관찰 사실 입력 학생 전체 선택")).toHaveCount(0);
+    await expect(page.locator('.behavior-table input[type="checkbox"]')).toHaveCount(0);
 
     if (process.env.E2E_RUN_AI === "1") {
       await page.getByRole("button", { name: "✦ AI 평어 생성" }).click();
