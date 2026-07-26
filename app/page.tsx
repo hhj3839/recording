@@ -334,54 +334,6 @@ function StudentManager({ roster, onAdded, onChanged, onDeleted, onImported }: {
     setMessage(`${result.student.name} 학생 정보를 저장했습니다.`);
   }
 
-  async function uploadRoster(event: React.ChangeEvent<HTMLInputElement>) {
-    const file = event.target.files?.[0];
-    event.target.value = "";
-    if (!file) return;
-    setBusy(true);
-    setMessage("");
-    try {
-      const XLSX = await import("xlsx");
-      const workbook = XLSX.read(await file.arrayBuffer(), { type: "array" });
-      const sheet = workbook.Sheets[workbook.SheetNames[0]];
-      const rows = XLSX.utils.sheet_to_json<Record<string, unknown>>(sheet, { defval: "" });
-      const parsed = rows.flatMap((row) => {
-        const rawNumber = row["번호"] ?? row["순번"] ?? row["No"] ?? row["no"];
-        const rawName = row["이름"] ?? row["학생명"] ?? row["성명"] ?? row["name"];
-        const studentNumber = Number(rawNumber);
-        const studentName = String(rawName ?? "").trim();
-        return Number.isInteger(studentNumber) && studentNumber > 0 && studentName
-          ? [{ number: studentNumber, name: studentName }]
-          : [];
-      });
-      if (!parsed.length) throw new Error("첫 행에 ‘번호’와 ‘이름’ 열이 있는지 확인해 주세요.");
-      if (parsed.length !== rows.length) throw new Error("번호 또는 이름이 비어 있는 행이 있습니다.");
-      if (new Set(parsed.map((row) => row.number)).size !== parsed.length) throw new Error("중복된 학생 번호가 있습니다.");
-      const response = await fetch("/api/students", {
-        method: "PUT",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ students: parsed }),
-      });
-      const result = await response.json() as { students?: Array<{ id: number; number: number; name: string }>; error?: string };
-      if (!response.ok || !result.students) throw new Error(result.error ?? "명단을 저장하지 못했습니다.");
-      onImported(result.students);
-      setMessage(`${result.students.length}명의 명단을 저장했습니다.`);
-    } catch (error) {
-      setMessage(error instanceof Error ? error.message : "파일을 읽지 못했습니다.");
-    } finally {
-      setBusy(false);
-    }
-  }
-
-  function downloadTemplate() {
-    const csv = "\uFEFF번호,이름\n1,홍길동\n2,김하늘\n";
-    const url = URL.createObjectURL(new Blob([csv], { type: "text/csv;charset=utf-8" }));
-    const link = document.createElement("a");
-    link.href = url;
-    link.download = "기록샘_학생명단_양식.csv";
-    link.click();
-    URL.revokeObjectURL(url);
-  }
   async function restoreStudent(student: { id: number; number: number; name: string }) {
     setBusy(true);
     setMessage("");
@@ -451,16 +403,12 @@ function StudentManager({ roster, onAdded, onChanged, onDeleted, onImported }: {
     }
   }
   return <section>
-    <div className="page-heading"><div><p className="eyebrow">CLASS ROSTER</p><h1>학생 관리</h1><p>번호와 이름만 등록하며, 업로드한 파일은 브라우저에서 읽은 뒤 현재 학급에 저장됩니다.</p></div></div>
-    <div className="student-tools">
+    <div className="page-heading"><div><p className="eyebrow">CLASS ROSTER</p><h1>학생 관리</h1><p>번호와 이름 두 열을 붙여넣으면 명단을 인식해 현재 학급에 등록합니다.</p></div></div>
+    <div className="student-tools roster-paste-tools">
       <form className="roster-text-form" onSubmit={addStudentsFromText}>
-        <label><span>번호와 이름 붙여넣기</span><textarea aria-label="번호와 이름 명단" value={rosterText} onChange={(event) => setRosterText(event.target.value)} placeholder={"1\t강예린\n2\t김민성\n3\t김민준\n4\t김선"} required /></label>
+        <label><span>번호와 이름 붙여넣기</span><small>엑셀이나 문서에서 번호와 이름 두 열을 복사해 그대로 붙여넣으세요.</small><textarea aria-label="번호와 이름 명단" value={rosterText} onChange={(event) => setRosterText(event.target.value)} placeholder={"1\t김○○\n2\t이○○\n3\t박○○\n4\t최○○"} required /></label>
         <button type="submit" disabled={busy}>{busy ? "추가 중…" : "명단 인식·추가"}</button>
       </form>
-      <div>
-        <button type="button" onClick={downloadTemplate}>CSV 양식 받기</button>
-        <label className="file-upload-button">{busy ? "업로드 중…" : "Excel·CSV 명단 업로드"}<input type="file" accept=".xlsx,.xls,.csv" onChange={(event) => void uploadRoster(event)} disabled={busy} /></label>
-      </div>
     </div>
     {message && <p className="student-message" role="status">{message}</p>}
     <div className="student-status-tabs">
@@ -478,7 +426,7 @@ function StudentManager({ roster, onAdded, onChanged, onDeleted, onImported }: {
           <td><input aria-label={`${student.name} 이름`} value={draft.name} onChange={(event) => setDrafts((current) => ({ ...current, [student.id]: { ...draft, name: event.target.value } }))} /></td>
           <td><div className="student-row-actions"><span className="order-buttons"><button disabled={busy || index === 0} title="한 칸 위로" onClick={() => moveStudent(student.id, -1)}>↑</button><button disabled={busy || index === orderedRoster.length - 1} title="한 칸 아래로" onClick={() => moveStudent(student.id, 1)}>↓</button></span><button onClick={() => void saveStudent(student.id)}>저장</button><button className="danger-text" onClick={() => onDeleted(student.id)}>비활성화</button></div></td>
         </tr>;
-      }) : <tr><td colSpan={3} className="empty-cell">등록된 학생이 없습니다. 번호·이름 명단을 붙여넣거나 파일을 업로드해 주세요.</td></tr>}</tbody>
+      }) : <tr><td colSpan={3} className="empty-cell">등록된 학생이 없습니다. 번호·이름 명단을 붙여넣어 주세요.</td></tr>}</tbody>
     </table></div>
     ) : (
       <div className="table-wrap student-table-wrap"><table className="students-table inactive-students-table">
@@ -492,13 +440,7 @@ function StudentManager({ roster, onAdded, onChanged, onDeleted, onImported }: {
   </section>;
 }
 
-const blankPlan = (): AssessmentPlan => ({
-  subject: "", unit: "", goal: "", domain: "", type: "수행평가",
-  perspective: "", high: "", middle: "", low: "", caution: "",
-});
-
 function PlanManager({ plan, onChanged, current }: { plan: AssessmentPlan[]; onChanged: (plan: AssessmentPlan[]) => void; current: ClassroomInfo | null }) {
-  const [draft, setDraft] = useState<AssessmentPlan>(blankPlan);
   const [planText, setPlanText] = useState("");
   const [preview, setPreview] = useState<AssessmentPlan[]>([]);
   const [errors, setErrors] = useState<string[]>([]);
@@ -565,7 +507,6 @@ function PlanManager({ plan, onChanged, current }: { plan: AssessmentPlan[]; onC
       setPreview([]);
       setPlanText("");
       setMessage(`${result.plan.length}개 평가계획을 저장했습니다.`);
-      setDraft(blankPlan());
     } catch (error) {
       setErrors([error instanceof Error ? error.message : "평가계획을 저장하지 못했습니다."]);
     } finally {
@@ -614,73 +555,6 @@ function PlanManager({ plan, onChanged, current }: { plan: AssessmentPlan[]; onC
     onChanged(plan.filter((current) => current.id !== item.id));
     setMessage("평가계획을 삭제했습니다.");
   };
-  const upload = async (file: File) => {
-    setMessage("");
-    setErrors([]);
-    setWarnings([]);
-    try {
-      const XLSX = await import("xlsx");
-      const workbook = XLSX.read(await file.arrayBuffer(), { type: "array", cellFormula: true, cellStyles: true });
-      const sheet = workbook.Sheets[workbook.SheetNames[0]];
-      const fileErrors: string[] = [];
-      const fileWarnings: string[] = [];
-      const headerRows = XLSX.utils.sheet_to_json<unknown[]>(sheet, { header: 1, defval: "", range: 0 });
-      const headers = (headerRows[0] ?? []).map((value) => String(value ?? "").trim().replace(/\s+/g, ""));
-      const raw = XLSX.utils.sheet_to_json<Record<string, unknown>>(sheet, { defval: "" });
-      const aliases: Record<string, keyof AssessmentPlan> = {
-        "과목": "subject", "단원": "unit", "평가목표": "goal", "평가 목표": "goal", "영역": "domain",
-        "평가유형": "type", "평가 유형": "type", "평가관점": "perspective", "평가 관점": "perspective",
-        "상": "high", "중": "middle", "하": "low", "평가상의 유의점": "caution", "유의점": "caution",
-      };
-      const normalizedAliases = Object.fromEntries(Object.entries(aliases).map(([name, key]) => [name.replace(/\s+/g, ""), key])) as Record<string, keyof AssessmentPlan>;
-      const detected = new Set(headers.flatMap((header) => normalizedAliases[header] ? [normalizedAliases[header]] : []));
-      const requiredHeaders: Array<[keyof AssessmentPlan, string]> = [
-        ["subject", "과목"], ["unit", "단원"], ["goal", "평가목표"], ["domain", "영역"],
-        ["perspective", "평가 관점"], ["high", "상"], ["middle", "중"], ["low", "하"],
-      ];
-      const missingHeaders = requiredHeaders.filter(([key]) => !detected.has(key)).map(([, label]) => label);
-      if (missingHeaders.length) fileErrors.push(`필수 열이 없습니다: ${missingHeaders.join(", ")}`);
-      const merges = sheet["!merges"] ?? [];
-      if (merges.length) fileErrors.push(`병합된 셀이 ${merges.length}개 있습니다. 병합을 해제해 주세요.`);
-      const formulaCells = Object.entries(sheet).filter(([address, cell]) => !address.startsWith("!") && typeof cell === "object" && cell && "f" in cell);
-      if (formulaCells.length) fileErrors.push(`수식 셀이 ${formulaCells.length}개 있습니다. 계산 결과를 값으로 붙여 넣어 주세요.`);
-      const hiddenRows = (sheet["!rows"] ?? []).flatMap((row, index) => row?.hidden ? [index + 1] : []);
-      if (hiddenRows.length) fileWarnings.push(`숨김 행 ${hiddenRows.slice(0, 10).join(", ")}${hiddenRows.length > 10 ? "…" : ""}이 포함되어 있습니다.`);
-      const sheetInfo = workbook.Workbook?.Sheets?.find((item) => item.name === workbook.SheetNames[0]);
-      if (sheetInfo?.Hidden) fileWarnings.push("첫 번째 시트가 숨김 상태입니다.");
-      const rows = raw.map((source) => {
-        const row = blankPlan();
-        Object.entries(source).forEach(([header, value]) => {
-          const key = normalizedAliases[header.trim().replace(/\s+/g, "")];
-          if (key && key !== "id" && key !== "sortOrder") row[key] = String(value ?? "").trim();
-        });
-        return row;
-      }).filter((row) => Object.values(row).some(Boolean));
-      if (!rows.length) throw new Error("첫 번째 시트에서 평가계획을 찾지 못했습니다.");
-      if (rows.length > 200) throw new Error("한 번에 200개까지만 업로드할 수 있습니다.");
-      const validation = [...fileErrors, ...validatePlans(rows)];
-      const reviewWarnings = [...fileWarnings, ...validateWarnings(rows)];
-      setPreview(rows);
-      setErrors(validation);
-      setWarnings(reviewWarnings);
-      setMessage(validation.length ? "저장할 수 없는 오류를 수정한 뒤 다시 업로드해 주세요." : reviewWarnings.length ? `${rows.length}개를 읽었습니다. 확인 필요 항목을 검토한 뒤 저장하세요.` : `${rows.length}개 평가계획이 정상 검증되었습니다. 내용을 확인하고 저장하세요.`);
-    } catch (error) {
-      setPreview([]);
-      setErrors([error instanceof Error ? error.message : "파일을 읽지 못했습니다."]);
-      setWarnings([]);
-    }
-  };
-  const downloadTemplate = () => {
-    const headers = columns.map(([, label]) => label).join(",");
-    const sample = ["국어", "1단원", "상황에 알맞게 표현하기", "듣기·말하기", "수행평가", "표정과 목소리 활용", "실감 나게 표현함", "알맞게 표현함", "도움을 받아 표현함", ""]
-      .map((value) => `"${value}"`).join(",");
-    const blob = new Blob([`\uFEFF${headers}\n${sample}`], { type: "text/csv;charset=utf-8" });
-    const anchor = document.createElement("a");
-    anchor.href = URL.createObjectURL(blob);
-    anchor.download = "평가계획_업로드_양식.csv";
-    anchor.click();
-    URL.revokeObjectURL(anchor.href);
-  };
   const loadVersions = async () => {
     setErrors([]);
     try {
@@ -726,7 +600,7 @@ function PlanManager({ plan, onChanged, current }: { plan: AssessmentPlan[]; onC
     } catch (error) { setErrors([error instanceof Error ? error.message : "공동 평가계획을 불러오지 못했습니다."]); }
   };
   const publishSharedPlan = async () => {
-    const name = window.prompt("학교 구성원이 알아볼 공동 평가계획 이름을 입력해 주세요.", `${current?.schoolYear ?? ""}학년도 ${current?.grade ?? ""}학년 ${current?.semester ?? ""}학기`);
+    const name = window.prompt("다른 교사가 알아볼 공동 평가계획 이름을 입력해 주세요.", `${current?.schoolYear ?? ""}학년도 ${current?.grade ?? ""}학년 ${current?.semester ?? ""}학기`);
     if (!name?.trim()) return;
     setBusy(true);
     try {
@@ -735,7 +609,7 @@ function PlanManager({ plan, onChanged, current }: { plan: AssessmentPlan[]; onC
       });
       const result = await response.json() as { error?: string };
       if (!response.ok) throw new Error(result.error || "평가계획을 공유하지 못했습니다.");
-      setMessage("현재 평가계획을 학교 작업공간에 공유했습니다.");
+      setMessage("현재 평가계획을 모든 교사가 볼 수 있는 공동 계획에 공유했습니다.");
       await loadSharedPlans();
     } catch (error) { setErrors([error instanceof Error ? error.message : "평가계획을 공유하지 못했습니다."]); }
     finally { setBusy(false); }
@@ -793,8 +667,8 @@ function PlanManager({ plan, onChanged, current }: { plan: AssessmentPlan[]; onC
   });
   return <section>
     <div className="page-heading">
-      <div><p className="eyebrow">학급별 평가 기준</p><h1>평가계획 관리</h1><p>직접 입력하거나 Excel·CSV를 검증한 뒤 저장하세요.</p></div>
-      <div className="heading-actions"><button className="secondary" onClick={() => void loadSharedPlans()}>공동 평가계획</button><button className="secondary" onClick={() => void loadVersions()}>버전 기록</button><button className="secondary" onClick={downloadTemplate}>업로드 양식 받기</button><label className="file-upload-button">Excel/CSV 불러오기<input type="file" accept=".xlsx,.xls,.csv" onChange={(event) => { const file = event.target.files?.[0]; if (file) void upload(file); event.target.value = ""; }} /></label></div>
+      <div><p className="eyebrow">학급별 평가 기준</p><h1>평가계획 관리</h1><p>10개 열로 정리한 평가계획을 붙여넣으면 자동으로 인식하고 검증합니다.</p></div>
+      <div className="heading-actions"><button className="secondary" onClick={() => void loadSharedPlans()}>공동 평가계획</button><button className="secondary" onClick={() => void loadVersions()}>버전 기록</button></div>
     </div>
     {versionsOpen && <section className="plan-version-panel">
       <div className="section-heading"><div><p className="eyebrow">VERSION HISTORY</p><h2>평가계획 버전 기록</h2></div><button className="secondary" onClick={() => setVersionsOpen(false)}>닫기</button></div>
@@ -824,10 +698,6 @@ function PlanManager({ plan, onChanged, current }: { plan: AssessmentPlan[]; onC
       <div className="section-heading"><div><p className="eyebrow">PREVIEW</p><h2>저장 전 미리보기 · {preview.length}개</h2></div><button disabled={busy || !!errors.length} onClick={() => void saveMany(preview)}>{busy ? "저장 중…" : "검증된 계획 저장"}</button></div>
       <div className="plan-preview-list">{preview.slice(0, 8).map((item, index) => <article key={`${item.subject}-${item.unit}-${index}`}><b>{item.subject} · {item.unit}</b><span>{item.goal}</span><small>{item.domain} / {item.type || "유형 미입력"}</small></article>)}</div>
     </section>}
-    <section className="plan-entry">
-      <div className="section-heading"><div><p className="eyebrow">DIRECT INPUT</p><h2>평가계획 직접 추가</h2></div><button disabled={busy} onClick={() => void saveMany([draft])}>＋ 계획 추가</button></div>
-      <div className="plan-form">{columns.map(([key, label]) => <label key={key}><span>{label}</span><input value={String(draft[key] ?? "")} onChange={(event) => setDraft({ ...draft, [key]: event.target.value })} /></label>)}</div>
-    </section>
     <section className="plan-list">
       <div className="section-heading"><div><p className="eyebrow">SAVED</p><h2>저장된 평가계획 · {plan.length}개</h2></div></div>
       {plan.map((item, index) => <article className="plan-card" key={item.id ?? `${item.subject}-${index}`}>
@@ -1636,62 +1506,6 @@ type PrivacySummary = {
   counts: { students: number; plans: number; levels: number; comments: number; behaviors: number };
 };
 
-function SchoolTeam() {
-  type Member = { id: number; email: string; role: "admin" | "teacher"; status: "invited" | "active"; isMe: boolean };
-  const [organization, setOrganization] = useState<{ name: string } | null>(null);
-  const [members, setMembers] = useState<Member[]>([]);
-  const [currentRole, setCurrentRole] = useState<"admin" | "teacher">("teacher");
-  const [email, setEmail] = useState("");
-  const [role, setRole] = useState<"admin" | "teacher">("teacher");
-  const [message, setMessage] = useState("");
-  const [busy, setBusy] = useState(false);
-  const load = useCallback(async () => {
-    try {
-      const response = await fetch("/api/school-members");
-      const result = await response.json() as { organization?: { name: string }; currentRole?: "admin" | "teacher"; members?: Member[]; error?: string };
-      if (!response.ok) throw new Error(result.error || "학교 구성원을 불러오지 못했습니다.");
-      setOrganization(result.organization ?? null);
-      setCurrentRole(result.currentRole ?? "teacher");
-      setMembers(result.members ?? []);
-    } catch (error) {
-      setMessage(error instanceof Error ? error.message : "학교 구성원을 불러오지 못했습니다.");
-    }
-  }, []);
-  useEffect(() => { queueMicrotask(() => void load()); }, [load]);
-  const invite = async (event: React.FormEvent<HTMLFormElement>) => {
-    event.preventDefault();
-    setBusy(true); setMessage("");
-    try {
-      const response = await fetch("/api/school-members", {
-        method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ email, role }),
-      });
-      const result = await response.json() as { error?: string };
-      if (!response.ok) throw new Error(result.error || "구성원을 초대하지 못했습니다.");
-      setEmail(""); setMessage("학교 구성원을 등록했습니다."); await load();
-    } catch (error) { setMessage(error instanceof Error ? error.message : "구성원을 초대하지 못했습니다."); }
-    finally { setBusy(false); }
-  };
-  const remove = async (member: Member) => {
-    if (!window.confirm(`${member.email} 구성원을 학교 작업공간에서 삭제할까요?`)) return;
-    setBusy(true);
-    try {
-      const response = await fetch("/api/school-members", {
-        method: "DELETE", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ id: member.id }),
-      });
-      const result = await response.json() as { error?: string };
-      if (!response.ok) throw new Error(result.error || "구성원을 삭제하지 못했습니다.");
-      await load();
-    } catch (error) { setMessage(error instanceof Error ? error.message : "구성원을 삭제하지 못했습니다."); }
-    finally { setBusy(false); }
-  };
-  return <section className="school-team-card">
-    <div className="section-heading"><div><p className="eyebrow">SCHOOL WORKSPACE</p><h2>{organization?.name ?? "학교 작업공간"}</h2><p>현재 단계에서는 구성원과 역할만 관리하며 개인 학급 자료는 공유되지 않습니다.</p></div><span className="security-badge">{currentRole === "admin" ? "학교 관리자" : "교사"}</span></div>
-    {message && <p className="student-message">{message}</p>}
-    {currentRole === "admin" && <form className="school-invite-form" onSubmit={(event) => void invite(event)}><label><span>교사 이메일</span><input type="email" value={email} onChange={(event) => setEmail(event.target.value)} required /></label><label><span>역할</span><select value={role} onChange={(event) => setRole(event.target.value as "admin" | "teacher")}><option value="teacher">교사</option><option value="admin">관리자</option></select></label><button disabled={busy}>{busy ? "처리 중…" : "구성원 등록"}</button></form>}
-    <div className="school-member-list">{members.map((member) => <article key={member.id}><div><strong>{member.email}{member.isMe ? " (나)" : ""}</strong><span>{member.status === "active" ? "가입 완료" : "가입 대기"}</span></div><b>{member.role === "admin" ? "관리자" : "교사"}</b>{currentRole === "admin" && !member.isMe && <button disabled={busy} onClick={() => void remove(member)}>삭제</button>}</article>)}</div>
-  </section>;
-}
-
 function PrivacySettings({ currentName, onNameChanged }: { currentName: string; onNameChanged: (name: string) => void }) {
   const [summary, setSummary] = useState<PrivacySummary | null>(null);
   const [classConfirmation, setClassConfirmation] = useState("");
@@ -1783,7 +1597,6 @@ function PrivacySettings({ currentName, onNameChanged }: { currentName: string; 
       <ul className="security-list"><li>로그인 세션은 보안 쿠키로 관리됩니다.</li><li>OpenAI API 키와 Supabase 관리 키는 서버에만 저장됩니다.</li><li>모든 조회·수정 요청에서 교사 ID와 학급 ID를 함께 확인합니다.</li></ul>
       <nav className="privacy-legal-links"><a href="/privacy" target="_blank">개인정보 처리방침</a><a href="/terms" target="_blank">서비스 이용약관</a></nav>
     </section>
-    <SchoolTeam />
     <div className="account-settings-grid">
     <form className="profile-settings-card" onSubmit={(event) => void changeProfile(event)}>
       <div><p className="eyebrow">TEACHER PROFILE</p><h2>교사 이름</h2><p>대시보드와 앱 왼쪽 아래에 표시되는 이름입니다.</p></div>

@@ -47,7 +47,6 @@ const protectedReads = [
   "/api/privacy-data",
   "/api/usage",
   "/api/auth/preferences",
-  "/api/school-members",
   "/api/shared-assessment-plans",
 ];
 

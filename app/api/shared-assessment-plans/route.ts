@@ -1,12 +1,24 @@
 import { eq, insertRows, selectRows, supabaseRequest, upsertRows } from "../../../db/supabase";
 import { snapshotAssessmentPlan } from "../../assessment-plan-versions";
 import { dataError, getDataScope } from "../../data-scope";
-import { SchoolMember, schoolWorkspaceContext } from "../../school-workspace";
 
 type SharedPlan = {
   id: number; organization_id: string; name: string; school_year: number; semester: number; grade: number;
   plan: Array<Record<string, unknown>>; item_count: number; created_by: string; created_by_email: string; updated_at: string;
 };
+type SharedPlanOrganization = { id: string; name: string; owner_id: string };
+const GLOBAL_LIBRARY_NAME = "기록샘 공동계획";
+
+async function globalLibrary(userId: string) {
+  const existing = (await selectRows<SharedPlanOrganization>("school_organizations", {
+    name: eq(GLOBAL_LIBRARY_NAME), limit: 1,
+  }))[0];
+  if (existing) return existing;
+  return (await insertRows<SharedPlanOrganization>("school_organizations", [{
+    name: GLOBAL_LIBRARY_NAME, owner_id: userId,
+  }]))[0];
+}
+
 const present = (row: SharedPlan) => ({
   id: Number(row.id), name: row.name, schoolYear: Number(row.school_year), semester: Number(row.semester),
   grade: Number(row.grade), itemCount: Number(row.item_count), createdByEmail: "공유 교사",
@@ -40,14 +52,10 @@ export async function GET(request: Request) {
         },
       });
     }
-    const adminMemberships = await selectRows<SchoolMember>("school_members", {
-      user_id: eq(user.id), role: eq("admin"), status: eq("active"),
-    });
-    const adminOrganizationIds = new Set(adminMemberships.map((membership) => membership.organization_id));
     const rows = await selectRows<SharedPlan>("shared_assessment_plans", {
       order: "school_year.desc,semester.desc,grade.asc,updated_at.desc",
     });
-    return Response.json({ plans: rows.map((row) => ({ ...present(row), canDelete: row.created_by === user.id || adminOrganizationIds.has(row.organization_id) })) });
+    return Response.json({ plans: rows.map((row) => ({ ...present(row), canDelete: row.created_by === user.id })) });
   } catch (error) {
     return dataError(error, "공동 평가계획을 불러오지 못했습니다.");
   }
@@ -55,7 +63,8 @@ export async function GET(request: Request) {
 
 export async function POST(request: Request) {
   try {
-    const { user, classroom, classId, organization } = await schoolWorkspaceContext();
+    const { user, classroom, classId } = await getDataScope();
+    const organization = await globalLibrary(user.id);
     const body = await request.json().catch(() => ({}));
     const name = String(body.name ?? "").trim().slice(0, 80);
     if (name.length < 2) return Response.json({ error: "공유 계획 이름을 2자 이상 입력해 주세요." }, { status: 400 });
@@ -74,7 +83,7 @@ export async function POST(request: Request) {
     }], "organization_id,school_year,semester,grade,name");
     return Response.json({ plan: { ...present(rows[0]), canDelete: true } });
   } catch (error) {
-    return dataError(error, "평가계획을 학교 작업공간에 공유하지 못했습니다.");
+    return dataError(error, "평가계획을 공동 계획으로 공유하지 못했습니다.");
   }
 }
 
@@ -102,14 +111,14 @@ export async function PUT(request: Request) {
 
 export async function DELETE(request: Request) {
   try {
-    const { user, membership, organization } = await schoolWorkspaceContext();
+    const { user } = await getDataScope();
     const body = await request.json().catch(() => ({}));
     const id = Number(body.id);
-    const shared = (await selectRows<SharedPlan>("shared_assessment_plans", { id: eq(id), organization_id: eq(organization.id), limit: 1 }))[0];
-    if (!shared || (membership.role !== "admin" && shared.created_by !== user.id)) {
+    const shared = (await selectRows<SharedPlan>("shared_assessment_plans", { id: eq(id), limit: 1 }))[0];
+    if (!shared || shared.created_by !== user.id) {
       return Response.json({ error: "공동 평가계획 삭제 권한이 없습니다." }, { status: 403 });
     }
-    await supabaseRequest("shared_assessment_plans", { method: "DELETE", query: { id: eq(id), organization_id: eq(organization.id) } });
+    await supabaseRequest("shared_assessment_plans", { method: "DELETE", query: { id: eq(id) } });
     return Response.json({ ok: true });
   } catch (error) {
     return dataError(error, "공동 평가계획을 삭제하지 못했습니다.");
