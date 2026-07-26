@@ -99,6 +99,7 @@ export async function generateCommentBatch(evidence: CommentEvidence[], avoidCom
     ? decoded.results as Array<{ studentId?: unknown; subject?: unknown; sentences?: unknown }>
     : [];
   const allowed = new Set(evidence.map((item) => `${item.studentId}|${item.subject}`));
+  const diagnostics: string[] = [];
   const comments = Array.isArray(parsed) ? parsed.flatMap((item) => {
     const studentId = Number(item.studentId);
     const subject = typeof item.subject === "string" ? item.subject : "";
@@ -119,13 +120,27 @@ export async function generateCommentBatch(evidence: CommentEvidence[], avoidCom
     const ordered = expectedIds.map((id) => sentenceRows.find((row) => row.itemId === id)?.text ?? "");
     const sentenceFormatsOk = ordered.length > 0
       && ordered.every((sentence) => validateGeneratedComment(sentence, 1).valid);
+    if (!complete || !sentenceFormatsOk) {
+      diagnostics.push(JSON.stringify({
+        studentId,
+        subject,
+        expectedIds,
+        returnedIds: sentenceRows.map((row) => row.itemId),
+        lengths: ordered.map((sentence) => Array.from(sentence).length),
+        endings: ordered.map((sentence) => sentence.endsWith("함.")),
+        forbidden: ordered.flatMap((sentence) => validateGeneratedComment(sentence, 1).forbidden),
+      }));
+    }
     const candidates = sentenceFormatsOk ? [ordered.join(" ")] : [];
     const format = candidates.length ? validateGeneratedComment(candidates[0], expectedIds.length) : null;
     return allowed.has(`${studentId}|${subject}`) && candidates.length && complete && format?.valid
       ? [{ studentId, subject, comment: candidates[0], candidates }]
       : [];
   }) : [];
-  if (!comments.length) throw new Error("AI 결과가 영역별 1문장·50~60자·함 종결 검수를 통과하지 못했습니다.");
+  if (!comments.length) {
+    const detail = diagnostics.slice(0, 3).join(" | ");
+    throw new Error(`AI 결과가 영역별 1문장·50~60자·함 종결 검수를 통과하지 못했습니다.${detail ? ` 진단: ${detail}` : ""}`);
+  }
   return comments;
 }
 
