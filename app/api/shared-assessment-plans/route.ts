@@ -1,7 +1,7 @@
 import { eq, insertRows, selectRows, supabaseRequest, upsertRows } from "../../../db/supabase";
 import { snapshotAssessmentPlan } from "../../assessment-plan-versions";
-import { dataError } from "../../data-scope";
-import { schoolWorkspaceContext } from "../../school-workspace";
+import { dataError, getDataScope } from "../../data-scope";
+import { SchoolMember, schoolWorkspaceContext } from "../../school-workspace";
 
 type SharedPlan = {
   id: number; organization_id: string; name: string; school_year: number; semester: number; grade: number;
@@ -9,17 +9,21 @@ type SharedPlan = {
 };
 const present = (row: SharedPlan) => ({
   id: Number(row.id), name: row.name, schoolYear: Number(row.school_year), semester: Number(row.semester),
-  grade: Number(row.grade), itemCount: Number(row.item_count), createdByEmail: row.created_by_email,
+  grade: Number(row.grade), itemCount: Number(row.item_count), createdByEmail: "공유 교사",
   updatedAt: row.updated_at, canDelete: false,
 });
 
 export async function GET() {
   try {
-    const { user, membership, organization } = await schoolWorkspaceContext();
-    const rows = await selectRows<SharedPlan>("shared_assessment_plans", {
-      organization_id: eq(organization.id), order: "school_year.desc,semester.desc,grade.asc,updated_at.desc",
+    const { user } = await getDataScope();
+    const adminMemberships = await selectRows<SchoolMember>("school_members", {
+      user_id: eq(user.id), role: eq("admin"), status: eq("active"),
     });
-    return Response.json({ plans: rows.map((row) => ({ ...present(row), canDelete: membership.role === "admin" || row.created_by === user.id })) });
+    const adminOrganizationIds = new Set(adminMemberships.map((membership) => membership.organization_id));
+    const rows = await selectRows<SharedPlan>("shared_assessment_plans", {
+      order: "school_year.desc,semester.desc,grade.asc,updated_at.desc",
+    });
+    return Response.json({ plans: rows.map((row) => ({ ...present(row), canDelete: row.created_by === user.id || adminOrganizationIds.has(row.organization_id) })) });
   } catch (error) {
     return dataError(error, "공동 평가계획을 불러오지 못했습니다.");
   }
@@ -52,11 +56,11 @@ export async function POST(request: Request) {
 
 export async function PUT(request: Request) {
   try {
-    const { user, classId, organization } = await schoolWorkspaceContext();
+    const { user, classId } = await getDataScope();
     const body = await request.json().catch(() => ({}));
     const id = Number(body.id);
     if (!Number.isInteger(id)) return Response.json({ error: "가져올 공동 평가계획을 확인해 주세요." }, { status: 400 });
-    const shared = (await selectRows<SharedPlan>("shared_assessment_plans", { id: eq(id), organization_id: eq(organization.id), limit: 1 }))[0];
+    const shared = (await selectRows<SharedPlan>("shared_assessment_plans", { id: eq(id), limit: 1 }))[0];
     if (!shared) return Response.json({ error: "접근할 수 없는 공동 평가계획입니다." }, { status: 403 });
     const levels = await selectRows<{ id: number }>("assessment_levels", { owner_id: eq(user.id), class_id: eq(classId), limit: 1 });
     if (levels.length) return Response.json({ error: "현재 학급에 평가수준이 입력되어 있어 공동 계획으로 교체할 수 없습니다." }, { status: 409 });

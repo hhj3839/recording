@@ -890,7 +890,7 @@ function PlanManager({ plan, onChanged, current }: { plan: AssessmentPlan[]; onC
   return <section>
     <div className="page-heading">
       <div><p className="eyebrow">학급별 평가 기준</p><h1>평가계획 관리</h1><p>직접 입력하거나 Excel·CSV를 검증한 뒤 저장하세요.</p></div>
-      <div className="heading-actions"><button className="secondary" onClick={() => void loadSharedPlans()}>학교 공동 계획</button><button className="secondary" onClick={() => void loadVersions()}>버전 기록</button><button className="secondary" onClick={downloadTemplate}>업로드 양식 받기</button><label className="file-upload-button">Excel/CSV 불러오기<input type="file" accept=".xlsx,.xls,.csv" onChange={(event) => { const file = event.target.files?.[0]; if (file) void upload(file); event.target.value = ""; }} /></label></div>
+      <div className="heading-actions"><button className="secondary" onClick={() => void loadSharedPlans()}>공동 평가계획</button><button className="secondary" onClick={() => void loadVersions()}>버전 기록</button><button className="secondary" onClick={downloadTemplate}>업로드 양식 받기</button><label className="file-upload-button">Excel/CSV 불러오기<input type="file" accept=".xlsx,.xls,.csv" onChange={(event) => { const file = event.target.files?.[0]; if (file) void upload(file); event.target.value = ""; }} /></label></div>
     </div>
     {versionsOpen && <section className="plan-version-panel">
       <div className="section-heading"><div><p className="eyebrow">VERSION HISTORY</p><h2>평가계획 버전 기록</h2></div><button className="secondary" onClick={() => setVersionsOpen(false)}>닫기</button></div>
@@ -901,9 +901,9 @@ function PlanManager({ plan, onChanged, current }: { plan: AssessmentPlan[]; onC
       </article>) : <p className="empty-cell">저장된 평가계획 버전이 없습니다.</p>}</div>
     </section>}
     {sharedOpen && <section className="shared-plan-panel">
-      <div className="section-heading"><div><p className="eyebrow">SCHOOL SHARED PLAN</p><h2>학년 공동 평가계획</h2></div><div><button disabled={busy || !plan.length} onClick={() => void publishSharedPlan()}>현재 계획 공유</button><button className="secondary" onClick={() => setSharedOpen(false)}>닫기</button></div></div>
-      <p>학교 구성원이 게시한 계획을 현재 학급에 가져올 수 있습니다. 평가수준이 입력된 학급은 계획을 교체할 수 없습니다.</p>
-      <div className="shared-plan-list">{sharedPlans.length ? sharedPlans.map((shared) => <article key={shared.id}><div><strong>{shared.name}</strong><span>{shared.schoolYear}학년도 {shared.semester}학기 · {shared.grade}학년 · {shared.itemCount}개</span><small>{shared.createdByEmail} · {new Date(shared.updatedAt).toLocaleString("ko-KR")}</small></div><button disabled={busy} onClick={() => void importSharedPlan(shared)}>현재 학급에 적용</button>{shared.canDelete && <button className="danger-text" disabled={busy} onClick={() => void deleteSharedPlan(shared)}>삭제</button>}</article>) : <p className="empty-cell">학교에 공유된 평가계획이 없습니다.</p>}</div>
+      <div className="section-heading"><div><p className="eyebrow">SHARED PLAN LIBRARY</p><h2>공동 평가계획</h2></div><div><button disabled={busy || !plan.length} onClick={() => void publishSharedPlan()}>현재 계획 공유</button><button className="secondary" onClick={() => setSharedOpen(false)}>닫기</button></div></div>
+      <p>기록샘을 사용하는 모든 교사가 공유한 계획을 현재 학급에 가져올 수 있습니다. 평가수준이 입력된 학급은 계획을 교체할 수 없습니다.</p>
+      <div className="shared-plan-list">{sharedPlans.length ? sharedPlans.map((shared) => <article key={shared.id}><div><strong>{shared.name}</strong><span>{shared.schoolYear}학년도 {shared.semester}학기 · {shared.grade}학년 · {shared.itemCount}개</span><small>{shared.createdByEmail} · {new Date(shared.updatedAt).toLocaleString("ko-KR")}</small></div><button disabled={busy} onClick={() => void importSharedPlan(shared)}>현재 학급에 적용</button>{shared.canDelete && <button className="danger-text" disabled={busy} onClick={() => void deleteSharedPlan(shared)}>삭제</button>}</article>) : <p className="empty-cell">아직 공유된 평가계획이 없습니다.</p>}</div>
     </section>}
     <div className="plan-help"><strong>필수 열</strong> 과목 · 단원 · 평가목표 · 영역 · 평가 관점 · 상 · 중 · 하 <span>평가 유형과 유의점은 선택 항목입니다.</span></div>
     <section className="plan-copy">
