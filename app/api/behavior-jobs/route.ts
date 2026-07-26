@@ -2,6 +2,7 @@ import { waitUntil } from "@vercel/functions";
 import { eq, insertRows, selectRows } from "../../../db/supabase";
 import { getAiUsage, MONTHLY_AI_LIMIT } from "../../ai-usage";
 import { BehaviorInput, BehaviorOptions } from "../../behavior-generation";
+import { createBehaviorVariations } from "../../behavior-variation";
 import { signCommentJob } from "../../comment-generation";
 import { dataError, getDataScope, requireOwnedStudentIds } from "../../data-scope";
 import { validateBehaviorSource } from "../../record-validation";
@@ -60,6 +61,8 @@ export async function POST(request: Request) {
       error: `${blocked.length}명의 관찰 사실에 금지 내용 또는 개인정보가 있어 AI 생성을 시작하지 않았습니다.`,
       blocked,
     }, { status: 400 });
+    const variations = createBehaviorVariations(inputs.length);
+    inputs.forEach((item, index) => { item.variation = variations[index]; });
     const { user, classId } = await getDataScope();
     await requireOwnedStudentIds(inputs.map((item) => item.studentId), user.id, classId);
     const active = await selectRows<JobRow>("generation_jobs", {

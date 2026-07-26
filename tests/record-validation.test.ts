@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
+import { createBehaviorVariations } from "../app/behavior-variation.ts";
 import { selectMostDiverseComments } from "../app/comment-diversity.ts";
 import { createCommentVariations } from "../app/comment-variation.ts";
 import { recordSimilarity, recordSimilarityDetails, validateBehaviorSource, validateRecord } from "../app/record-validation.ts";
@@ -10,6 +11,13 @@ test("distributes randomized comment styles across a class batch", () => {
   assert.equal(new Set(variations.slice(0, 6).map((item) => item.structure)).size, 6);
   assert.equal(new Set(variations.slice(0, 4).map((item) => item.opening)).size, 4);
   assert.equal(variations.every((item) => item.structure && item.opening && item.focusOrder), true);
+});
+
+test("distributes randomized behavior styles across a class batch", () => {
+  const variations = createBehaviorVariations(10);
+  assert.equal(variations.length, 10);
+  assert.equal(new Set(variations.slice(0, 6).map((item) => item.structure)).size, 6);
+  assert.equal(new Set(variations.slice(0, 4).map((item) => item.opening)).size, 4);
 });
 
 test("selects the least repetitive AI comment candidate", () => {

@@ -1561,7 +1561,7 @@ function Behavior({ roster }: { roster: AssessmentStudent[] }) {
       const response = await fetch("/api/generate-behavior", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ observation: record.characteristic, currentBehavior: record.behavior, mode, options: generationOptions }),
+        body: JSON.stringify({ studentId, observation: record.characteristic, currentBehavior: record.behavior, mode, options: generationOptions }),
       });
       const result = await response.json() as { behavior?: string; error?: string };
       if (!response.ok || !result.behavior) throw new Error(result.error || "행동특성을 다시 생성하지 못했습니다.");
