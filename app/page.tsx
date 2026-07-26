@@ -1349,7 +1349,7 @@ function Comments({ assessmentDataBySubject, plan, roster }: { assessmentDataByS
           {history && <RevisionPanel title={`${history.studentName} · ${selectedSubject}`} revisions={history.revisions} onRestore={(revision) => void restoreComment(revision)} onClose={() => setHistory(null)} />}
           {loading && <div className="comment-loading class-loading"><span>✦</span><p>모든 학생의 전 과목 평어를 생성하고 있어요.</p></div>}
           <div className="comments-table-wrap">
-            <table className="comments-table">
+            <table className="comments-table subject-comments-table">
               <thead><tr><th><input aria-label="현재 화면 학생 전체 선택" type="checkbox" checked={roster.length > 0 && selectedStudentIds.length === roster.length} onChange={(event) => setSelectedStudentIds(event.target.checked ? roster.map((student) => student.id) : [])} /></th><th>번호</th><th>이름</th><th>평어</th><th>검수·확정</th></tr></thead>
               <tbody>{roster.map((student, index) => {
                 const key = `${student.id}|${selectedSubject}`;
