@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { recordSimilarity, validateRecord } from "../app/record-validation.ts";
+import { recordSimilarity, recordSimilarityDetails, validateRecord } from "../app/record-validation.ts";
 
 test("accepts a valid school-record comment", () => {
   const result = validateRecord("학습 활동에 성실하게 참여하며 자신의 생각을 구체적으로 표현함.");
@@ -57,4 +57,12 @@ test("measures similar records without using student identity", () => {
   const different = "풍부한 상상력을 바탕으로 미술 활동에서 색채를 다양하게 활용하고 독창적으로 표현함.";
   assert.equal(recordSimilarity(left, right), 1);
   assert.equal(recordSimilarity(left, different) < 0.3, true);
+});
+
+test("reports overlap percentage and shared phrases", () => {
+  const left = "수업에 성실하게 참여하며 친구의 의견을 경청하고 맡은 역할을 책임감 있게 수행함.";
+  const right = "수업에 성실하게 참여하며 친구의 의견을 경청하고 자신의 역할을 꾸준히 수행함.";
+  const details = recordSimilarityDetails(left, right);
+  assert.equal(details.score > 0.4, true);
+  assert.equal(details.overlaps.some((phrase) => phrase.includes("수업에 성실하게 참여하며")), true);
 });

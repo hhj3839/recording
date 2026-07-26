@@ -57,12 +57,34 @@ export function validateRecord(text: string, behavior = false): ValidationResult
   };
 }
 
-export function recordSimilarity(left: string, right: string) {
-  const words = (value: string) => value.replace(/[.,!?()[\]{}]/g, " ").split(/\s+/).filter((word) => word.length > 1);
-  const leftWords = new Set(words(left));
-  const rightWords = new Set(words(right));
-  if (leftWords.size < 5 || rightWords.size < 5) return 0;
-  const intersection = [...leftWords].filter((word) => rightWords.has(word)).length;
+const similarityWords = (value: string) =>
+  value.replace(/[.,!?()[\]{}]/g, " ").split(/\s+/).map((word) => word.trim()).filter((word) => word.length > 1);
+
+export function recordSimilarityDetails(left: string, right: string) {
+  const leftWordList = similarityWords(left);
+  const rightWordList = similarityWords(right);
+  const leftWords = new Set(leftWordList);
+  const rightWords = new Set(rightWordList);
+  if (leftWords.size < 5 || rightWords.size < 5) return { score: 0, overlaps: [] as string[] };
+  const commonWords = [...leftWords].filter((word) => rightWords.has(word));
   const union = new Set([...leftWords, ...rightWords]).size;
-  return union ? intersection / union : 0;
+  const phrases = new Set<string>();
+  for (let size = 4; size >= 2; size -= 1) {
+    for (let index = 0; index <= leftWordList.length - size; index += 1) {
+      const phraseWords = leftWordList.slice(index, index + size);
+      const phrase = phraseWords.join(" ");
+      if (rightWordList.join(" ").includes(phrase)) phrases.add(phrase);
+    }
+  }
+  const overlaps = [...phrases]
+    .sort((leftPhrase, rightPhrase) => rightPhrase.length - leftPhrase.length)
+    .filter((phrase, index, all) => !all.slice(0, index).some((existing) => existing.includes(phrase)))
+    .slice(0, 3);
+  if (!overlaps.length) overlaps.push(...commonWords.sort((a, b) => b.length - a.length).slice(0, 5));
+  return { score: union ? commonWords.length / union : 0, overlaps };
+}
+
+export function recordSimilarity(left: string, right: string) {
+  const { score } = recordSimilarityDetails(left, right);
+  return score;
 }
