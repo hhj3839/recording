@@ -23,11 +23,10 @@ export async function POST(request: Request) {
     const observation = typeof body.observation === "string" ? body.observation.trim().slice(0, 4000) : "";
     const currentBehavior = typeof body.currentBehavior === "string" ? body.currentBehavior.trim().slice(0, 8000) : "";
     const mode = body.mode === "length" ? "length" : "regenerate";
-    const rawOptions = body.options && typeof body.options === "object" ? body.options as Record<string, unknown> : {};
     const options = {
-      sentenceCount: Math.min(6, Math.max(2, Number(rawOptions.sentenceCount) || 4)),
-      maxBytes: Math.min(700, Math.max(300, Number(rawOptions.maxBytes) || 550)),
-      emphasis: rawOptions.emphasis === "strength" || rawOptions.emphasis === "growth" ? rawOptions.emphasis : "balanced",
+      sentenceCount: 4,
+      maxBytes: 550,
+      emphasis: "balanced",
     };
     if (!observation) return Response.json({ error: "관찰 사실을 입력해 주세요." }, { status: 400 });
     const sourceValidation = validateBehaviorSource(observation);

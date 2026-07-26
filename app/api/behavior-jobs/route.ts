@@ -39,11 +39,10 @@ export async function POST(request: Request) {
   try {
     const body = await request.json() as { students?: unknown; options?: unknown };
     if (!Array.isArray(body.students)) return Response.json({ error: "학생 특성을 다시 확인해 주세요." }, { status: 400 });
-    const rawOptions = body.options && typeof body.options === "object" ? body.options as Record<string, unknown> : {};
     const options: BehaviorOptions = {
-      sentenceCount: Math.min(6, Math.max(2, Number(rawOptions.sentenceCount) || 4)),
-      maxBytes: Math.min(700, Math.max(300, Number(rawOptions.maxBytes) || 550)),
-      emphasis: rawOptions.emphasis === "strength" || rawOptions.emphasis === "growth" ? rawOptions.emphasis : "balanced",
+      sentenceCount: 4,
+      maxBytes: 550,
+      emphasis: "balanced",
     };
     const inputs: BehaviorInput[] = body.students.flatMap((item) => {
       if (!item || typeof item !== "object") return [];

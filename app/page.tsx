@@ -1436,8 +1436,6 @@ function Behavior({ roster }: { roster: AssessmentStudent[] }) {
   const [history, setHistory] = useState<{ studentId: number; studentName: string; revisions: RevisionItem[] } | null>(null);
   const [rewriteBusyKey, setRewriteBusyKey] = useState("");
   const [excludedStudentIds, setExcludedStudentIds] = useState<number[]>([]);
-  const [generationOptions, setGenerationOptions] = useState({ sentenceCount: 4, maxBytes: 550, emphasis: "balanced" as "balanced" | "strength" | "growth" });
-  const [preferencesLoaded, setPreferencesLoaded] = useState(false);
   useEffect(() => setExcludedStudentIds((current) => current.filter((id) => roster.some((student) => student.id === id))), [roster]);
 
   const loadBehaviors = async () => {
@@ -1453,11 +1451,6 @@ function Behavior({ roster }: { roster: AssessmentStudent[] }) {
   };
   useEffect(() => {
     void loadBehaviors();
-    fetch("/api/auth/preferences").then(async (response) => {
-      const result = await response.json() as { preferences?: { behaviors?: typeof generationOptions } };
-      if (response.ok && result.preferences?.behaviors) setGenerationOptions(result.preferences.behaviors);
-      setPreferencesLoaded(true);
-    }).catch(() => setPreferencesLoaded(true));
     fetch("/api/behavior-jobs").then(async (response) => {
       const result = await response.json() as { job?: BehaviorJob | null };
       if (response.ok && result.job) {
@@ -1466,16 +1459,6 @@ function Behavior({ roster }: { roster: AssessmentStudent[] }) {
       }
     }).catch(() => undefined);
   }, []);
-  useEffect(() => {
-    if (!preferencesLoaded) return;
-    const timer = window.setTimeout(() => {
-      void fetch("/api/auth/preferences", {
-        method: "PUT", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ preferences: { behaviors: generationOptions } }),
-      });
-    }, 700);
-    return () => window.clearTimeout(timer);
-  }, [generationOptions, preferencesLoaded]);
   useEffect(() => {
     if (!activeJob || !["queued", "running"].includes(activeJob.status)) return;
     setGenerationProgress(`${activeJob.completedItems}/${activeJob.totalItems}`);
@@ -1527,7 +1510,7 @@ function Behavior({ roster }: { roster: AssessmentStudent[] }) {
       const response = await fetch("/api/behavior-jobs", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ students: inputs, options: generationOptions }),
+        body: JSON.stringify({ students: inputs }),
       });
       const result = await response.json() as { job?: BehaviorJob; error?: string };
       if (!response.ok || !result.job) throw new Error(result.error || "행동특성 백그라운드 작업을 시작하지 못했습니다.");
@@ -1587,7 +1570,7 @@ function Behavior({ roster }: { roster: AssessmentStudent[] }) {
       const response = await fetch("/api/generate-behavior", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ studentId, observation: record.characteristic, currentBehavior: record.behavior, mode, options: generationOptions }),
+        body: JSON.stringify({ studentId, observation: record.characteristic, currentBehavior: record.behavior, mode }),
       });
       const result = await response.json() as { behavior?: string; error?: string };
       if (!response.ok || !result.behavior) throw new Error(result.error || "행동특성을 다시 생성하지 못했습니다.");
@@ -1635,14 +1618,7 @@ function Behavior({ roster }: { roster: AssessmentStudent[] }) {
         <div className="ai-generate-actions">{formattedLastGeneratedAt && <span>마지막 사용 {formattedLastGeneratedAt}</span>}<button onClick={() => void generateAll()} disabled={loading || blockedSourceCount > 0}>{loading ? generationProgress || "전체 생성 중…" : blockedSourceCount ? `입력 확인 ${blockedSourceCount}명` : "✦ AI 행특 생성"}</button></div>
       </div>
       <div className="review-content behavior-table-content">
-        <div className="comment-generation-settings behavior-generation-settings">
-          <div className="selection-summary"><strong>생성 대상 {selectedBehaviorStudentIds.length}/{roster.length}명</strong><span>관찰 사실 입력 시 자동 포함</span></div>
-          <label><span>문장 수</span><select value={generationOptions.sentenceCount} onChange={(event) => setGenerationOptions((current) => ({ ...current, sentenceCount: Number(event.target.value) }))}>{[2, 3, 4, 5, 6].map((count) => <option value={count} key={count}>{count}문장</option>)}</select></label>
-          <label><span>목표 바이트</span><input type="number" min={300} max={700} step={10} value={generationOptions.maxBytes} onChange={(event) => setGenerationOptions((current) => ({ ...current, maxBytes: Number(event.target.value) }))} /></label>
-          <label><span>작성 방향</span><select value={generationOptions.emphasis} onChange={(event) => setGenerationOptions((current) => ({ ...current, emphasis: event.target.value as "balanced" | "strength" | "growth" }))}><option value="balanced">전체 균형</option><option value="strength">강점 우선</option><option value="growth">성장 우선</option></select></label>
-          <small>설정은 교사 계정에 자동 저장됩니다.</small>
-        </div>
-        <div className="behavior-table-toolbar"><span>특성 입력 {roster.filter((student) => records[student.id]?.characteristic.trim()).length} / {roster.length}명</span><div><button className="reference-open-button" onClick={() => setReferenceOpen((current) => !current)}>{referenceOpen ? "참고자료 닫기" : "참고자료 열기"}</button><button className="copy-comments" onClick={() => void copyBehaviors()} disabled={!roster.some((student) => records[student.id]?.behavior)}>{copied ? "복사됨 ✓" : "행동특성만 복사하기"}</button></div></div>
+        <div className="behavior-table-toolbar"><span><strong>생성 대상 {selectedBehaviorStudentIds.length}/{roster.length}명</strong> · 관찰 사실 입력 시 자동 포함 · 전체 균형 550B 내외</span><div><button className="reference-open-button" onClick={() => setReferenceOpen((current) => !current)}>{referenceOpen ? "참고자료 닫기" : "참고자료 열기"}</button><button className="copy-comments" onClick={() => void copyBehaviors()} disabled={!roster.some((student) => records[student.id]?.behavior)}>{copied ? "복사됨 ✓" : "행동특성만 복사하기"}</button></div></div>
         {error && <p className="generation-error">! {error}</p>}
         {history && <RevisionPanel title={history.studentName} revisions={history.revisions} onRestore={(revision) => void restoreBehavior(revision)} onClose={() => setHistory(null)} />}
         {loading && <div className="comment-loading class-loading"><span>✦</span><p>입력된 모든 학생의 행동특성을 생성하고 있어요.</p></div>}
