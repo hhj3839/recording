@@ -81,7 +81,7 @@ export async function POST(request: Request) {
       break;
     }
     try {
-      const generated = await generateCommentBatch(pending, avoidComments);
+      const generated = await generateCommentBatch(pending, avoidComments, attempt > 0);
       comments = [...comments, ...generated];
       const generatedKeys = new Set(generated.map((item) => `${item.studentId}|${item.subject}`));
       pending = pending.filter((item) => !generatedKeys.has(`${item.studentId}|${item.subject}`));

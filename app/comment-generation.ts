@@ -16,7 +16,7 @@ function extractOutputText(payload: unknown): string {
     .map((item) => item.text).join("").trim();
 }
 
-export async function generateCommentBatch(evidence: CommentEvidence[], avoidComments: string[] = []) {
+export async function generateCommentBatch(evidence: CommentEvidence[], avoidComments: string[] = [], repair = false) {
   const apiKey = process.env.OPENAI_API_KEY;
   if (!apiKey) throw new Error("AI 생성 설정이 아직 완료되지 않았습니다.");
   const evidenceItems = [...new Set(evidence.flatMap((item) => item.items))];
@@ -42,11 +42,11 @@ export async function generateCommentBatch(evidence: CommentEvidence[], avoidCom
       input: [
         {
           role: "system",
-          content: [{ type: "input_text", text: "당신은 초등학교 담임교사의 학생평가 작성 전문가이며 학교생활기록부 교과학습발달상황에 사용할 교과 평어를 작성한다. 학생 입력의 itemIds에 연결된 각 평가 영역마다 해당 수준에 맞는 문장을 정확히 1개씩 작성한다. 영역 수와 문장 수는 반드시 같아야 하며 입력된 영역명·수준·평가기준만 사용하고 없는 영역·수준·사실을 만들지 않는다. 각 문장은 평가기준을 그대로 복사하지 말고 실제 관찰 가능한 행동 중심으로 자연스럽게 바꾸어 쓴다. 성취기준과 평가요소, 수업·평가 활동의 수행 내용, 수행 결과와 학습 태도가 구체적으로 드러나게 작성한다. 일반적인 칭찬을 피하고 모든 문장을 긍정적·발전적 관점으로 작성한다. 상 수준은 안정적인 수행과 정확성·적극성·자기주도성이, 중 수준은 대부분의 성취기준 수행과 꾸준한 참여·적절한 적용이, 하 수준은 활동 참여와 배운 내용을 익혀 가는 과정·교사의 도움을 받아 수행하는 모습·성장 가능성이 드러나게 작성한다. 부족함, 미흡함, 못함, 어려워함, 이해하지 못함, 소극적임, 불성실함을 쓰지 않는다. 각 문장은 공백과 마침표를 포함해 반드시 50~60자로 작성하고 정확히 ‘함.’으로 끝낸다. 문장 시작과 문형을 반복하지 않고, variation의 구조·시작 방식·근거 순서를 활용하며 같은 묶음 학생 및 avoidComments와 표현을 겹치지 않게 한다. 최종 평어는 영역별 문장을 마침표 뒤 한 칸으로 이어 붙인 한 문단이어야 한다. 제목·번호·설명·따옴표·상중하 표시는 출력하지 않는다. 후보는 정확히 1개만 만든다. 반드시 JSON 배열만 출력하며 각 원소는 studentId, subject, candidates(문자열 1개 배열), coveredItemIds 필드를 가진다. coveredItemIds에는 실제 평어에 반영한 itemIds 전체를 입력과 동일하게 넣는다." }],
+          content: [{ type: "input_text", text: "당신은 초등학교 담임교사의 학생평가 작성 전문가이며 학교생활기록부 교과학습발달상황에 사용할 교과 평어를 작성한다. 학생 입력의 itemIds에 연결된 각 평가 영역마다 해당 수준에 맞는 문장을 정확히 1개씩 작성한다. 영역 수와 문장 수는 반드시 같아야 하며 입력된 영역명·수준·평가기준만 사용하고 없는 영역·수준·사실을 만들지 않는다. 각 문장은 평가기준을 그대로 복사하지 말고 실제 관찰 가능한 행동 중심으로 자연스럽게 바꾸어 쓴다. 성취기준과 평가요소, 수업·평가 활동의 수행 내용, 수행 결과와 학습 태도가 구체적으로 드러나게 작성한다. 일반적인 칭찬을 피하고 모든 문장을 긍정적·발전적 관점으로 작성한다. 상 수준은 안정적인 수행과 정확성·적극성·자기주도성이, 중 수준은 대부분의 성취기준 수행과 꾸준한 참여·적절한 적용이, 하 수준은 활동 참여와 배운 내용을 익혀 가는 과정·교사의 도움을 받아 수행하는 모습·성장 가능성이 드러나게 작성한다. 부족함, 미흡함, 못함, 어려워함, 이해하지 못함, 소극적임, 불성실함을 쓰지 않는다. 각 문장은 공백과 마침표를 포함해 반드시 50~60자로 작성하고 정확히 ‘함.’으로 끝낸다. 문장마다 글자 수를 직접 세어 49자 이하 또는 61자 이상이면 출력 전에 고친다. 문장 시작과 문형을 반복하지 않고, variation의 구조·시작 방식·근거 순서를 활용하며 같은 묶음 학생 및 avoidComments와 표현을 겹치지 않게 한다. 제목·번호·설명·따옴표·상중하 표시는 쓰지 않는다. 반드시 JSON 배열만 출력한다. 각 원소는 studentId, subject, sentences 필드를 가지며 sentences는 입력 itemIds와 같은 순서의 {itemId, text} 배열이다. 각 text는 해당 itemId 하나만 반영한 50~60자의 ‘함.’ 문장이다." }],
         },
         {
           role: "user",
-          content: [{ type: "input_text", text: `근거 사전과 학생별 근거 ID를 연결하여 각각 교과 평어를 작성해 줘.\n근거 사전: ${JSON.stringify(evidenceDictionary)}\n학생 입력: ${JSON.stringify(requestEvidence)}\n피해야 할 기존 시작 표현: ${JSON.stringify(avoidanceHints)}` }],
+          content: [{ type: "input_text", text: `${repair ? "이전 응답이 문장 수·글자 수·함 종결 검사를 통과하지 못했다. 각 문장을 출력하기 전에 글자 수를 다시 세어 엄격히 수정해 줘.\n" : ""}근거 사전과 학생별 근거 ID를 연결하여 각각 교과 평어를 작성해 줘.\n근거 사전: ${JSON.stringify(evidenceDictionary)}\n학생 입력: ${JSON.stringify(requestEvidence)}\n피해야 할 기존 시작 표현: ${JSON.stringify(avoidanceHints)}` }],
         },
       ],
       text: { verbosity: "low" },
@@ -55,7 +55,7 @@ export async function generateCommentBatch(evidence: CommentEvidence[], avoidCom
   const payload = await response.json() as unknown;
   if (!response.ok) throw new Error("AI 생성 요청을 처리하지 못했습니다.");
   const raw = extractOutputText(payload).replace(/^```json\s*/i, "").replace(/\s*```$/, "");
-  const parsed = JSON.parse(raw) as Array<{ studentId?: unknown; subject?: unknown; comment?: unknown; candidates?: unknown; coveredItemIds?: unknown }>;
+  const parsed = JSON.parse(raw) as Array<{ studentId?: unknown; subject?: unknown; sentences?: unknown }>;
   const allowed = new Set(evidence.map((item) => `${item.studentId}|${item.subject}`));
   const comments = Array.isArray(parsed) ? parsed.flatMap((item) => {
     const studentId = Number(item.studentId);
@@ -64,10 +64,20 @@ export async function generateCommentBatch(evidence: CommentEvidence[], avoidCom
     const expectedIds = [...new Set(source?.items
       .map((evidenceItem) => evidenceIds.get(evidenceItem))
       .filter((id): id is string => Boolean(id)) ?? [])];
-    const candidates = Array.isArray(item.candidates)
-      ? item.candidates.filter((candidate): candidate is string => typeof candidate === "string").map((candidate) => candidate.trim()).filter(Boolean).slice(0, 1)
-      : typeof item.comment === "string" ? [item.comment.trim()].filter(Boolean) : [];
-    const complete = hasCompleteEvidenceCoverage(expectedIds, item.coveredItemIds);
+    const sentenceRows = Array.isArray(item.sentences)
+      ? item.sentences.flatMap((row) => {
+          if (!row || typeof row !== "object") return [];
+          const value = row as { itemId?: unknown; text?: unknown };
+          return typeof value.itemId === "string" && typeof value.text === "string"
+            ? [{ itemId: value.itemId, text: value.text.trim() }]
+            : [];
+        })
+      : [];
+    const complete = hasCompleteEvidenceCoverage(expectedIds, sentenceRows.map((row) => row.itemId));
+    const ordered = expectedIds.map((id) => sentenceRows.find((row) => row.itemId === id)?.text ?? "");
+    const sentenceFormatsOk = ordered.length > 0
+      && ordered.every((sentence) => validateGeneratedComment(sentence, 1).valid);
+    const candidates = sentenceFormatsOk ? [ordered.join(" ")] : [];
     const format = candidates.length ? validateGeneratedComment(candidates[0], expectedIds.length) : null;
     return allowed.has(`${studentId}|${subject}`) && candidates.length && complete && format?.valid
       ? [{ studentId, subject, comment: candidates[0], candidates }]

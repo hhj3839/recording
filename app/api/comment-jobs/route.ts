@@ -115,7 +115,7 @@ export async function POST(request: Request) {
 
     const batches = [...new Set(evidence.map((item) => item.subject))].flatMap((subject) => {
       const items = evidence.filter((item) => item.subject === subject);
-      return Array.from({ length: Math.ceil(items.length / 10) }, (_, index) => items.slice(index * 10, index * 10 + 10));
+      return Array.from({ length: Math.ceil(items.length / 5) }, (_, index) => items.slice(index * 5, index * 5 + 5));
     });
     const usage = await getAiUsage(user.id);
     if (usage.monthly + batches.length > MONTHLY_AI_LIMIT) {
