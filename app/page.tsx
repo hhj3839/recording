@@ -2209,11 +2209,11 @@ export default function Home() {
         <button className="brand" onClick={() => setView("dashboard")}><span>기록</span>샘<i>교사의 기록을 더 가치 있게</i></button>
         <nav>{navItems.map((item) => <button className={view === item.id ? "active" : ""} key={item.id} onClick={() => setView(item.id)}><span>{item.icon}</span>{item.label}</button>)}</nav>
         <div className="nav-divider" />
-        <nav><button className={view === "export" ? "active" : ""} onClick={() => setView("export")}><span>⇧</span>결과 내보내기</button><button className={view === "pilot" ? "active" : ""} onClick={() => setView("pilot")}><span>◈</span>교사 파일럿</button><button className={view === "settings" ? "active" : ""} onClick={() => setView("settings")}><span>⚙</span>개인정보·설정</button></nav>
+        <nav><button className={view === "export" ? "active" : ""} onClick={() => setView("export")}><span>⇧</span>결과 내보내기</button><button className={view === "settings" ? "active" : ""} onClick={() => setView("settings")}><span>⚙</span>개인정보·설정</button></nav>
         <div className="sidebar-bottom"><div className="storage"><span>이번 달 AI 생성</span><strong>{aiUsage.monthly} / {aiUsage.limit}</strong><div><i style={{ width: `${Math.min(100, aiUsage.limit ? (aiUsage.monthly / aiUsage.limit) * 100 : 0)}%` }} /></div></div><div className="profile"><span className="avatar">{currentUser.slice(0, 1)}</span><span><b>{currentUser}</b><small>{classroom?.schoolName ?? "학교 정보 확인 중"}</small></span><form action="/api/auth/logout" method="post"><button type="submit">로그아웃</button></form></div></div>
       </aside>
       <main>
-        <header className="mobile-header"><button className="brand" onClick={() => setView("dashboard")}><span>기록</span>샘</button><select value={view} onChange={(e) => setView(e.target.value as View)}>{navItems.map((item) => <option value={item.id} key={item.id}>{item.label}</option>)}<option value="export">결과 내보내기</option><option value="pilot">교사 파일럿</option><option value="settings">개인정보·설정</option></select></header>
+        <header className="mobile-header"><button className="brand" onClick={() => setView("dashboard")}><span>기록</span>샘</button><select value={view} onChange={(e) => setView(e.target.value as View)}>{navItems.map((item) => <option value={item.id} key={item.id}>{item.label}</option>)}<option value="export">결과 내보내기</option><option value="settings">개인정보·설정</option></select></header>
         <div className="content">
           {view === "dashboard" && <Dashboard move={setView} teacherName={currentUser} classroom={classroom} studentCount={roster.length} completedLevels={completedLevels} totalLevels={totalLevels} commentCount={generatedCommentCount} expectedComments={roster.length * new Set(plan.map((item) => item.subject)).size} behaviorCount={generatedBehaviorCount} />}
           {view === "classes" && <ClassroomManager current={classroom} />}
@@ -2223,7 +2223,6 @@ export default function Home() {
           {view === "comments" && <Comments assessmentDataBySubject={assessmentDataBySubject} plan={plan} roster={roster} />}
           {view === "behavior" && <Behavior roster={roster} />}
           {view === "export" && <ExportResults roster={roster} plan={plan} classroom={classroom} />}
-          {view === "pilot" && <PilotFeedback />}
           {view === "settings" && <PrivacySettings currentName={currentUser} onNameChanged={setCurrentUser} />}
         </div>
       </main>
