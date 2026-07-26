@@ -78,7 +78,7 @@ export async function POST(request: Request) {
       owner_id: eq(user.id),
       class_id: eq(classId),
       job_type: eq("comments"),
-      status: "in.(queued,running)",
+      status: "in.(queued,running,processing)",
       limit: 1,
     });
     if (active[0]) {

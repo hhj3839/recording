@@ -22,6 +22,7 @@ type JobRow = {
   failed_items: number;
   error_message: string;
   started_at: string | null;
+  updated_at: string;
 };
 
 function queueNext(request: Request, jobId: string) {
@@ -45,7 +46,12 @@ export async function POST(request: Request) {
   }
 
   const job = (await selectRows<JobRow>("generation_jobs", { id: eq(jobId), limit: 1 }))[0];
-  if (!job || !["queued", "running"].includes(job.status)) return Response.json({ ok: true, terminal: true });
+  if (!job) return Response.json({ ok: true, terminal: true });
+  const lockAge = Date.now() - Date.parse(job.updated_at);
+  if (job.status === "processing" && lockAge < 360_000) {
+    return Response.json({ ok: true, terminal: false, busy: true });
+  }
+  if (!["queued", "running", "processing"].includes(job.status)) return Response.json({ ok: true, terminal: true });
   const batchIndex = Number(job.current_batch);
   const batch = job.batches[batchIndex];
   if (!batch?.length) {
@@ -57,11 +63,14 @@ export async function POST(request: Request) {
     return Response.json({ ok: true, terminal: true });
   }
 
-  await updateRows("generation_jobs", { id: eq(jobId) }, {
-    status: "running",
+  const claimed = await updateRows<JobRow>("generation_jobs", {
+    id: eq(jobId), status: eq(job.status), updated_at: eq(job.updated_at),
+  }, {
+    status: "processing",
     started_at: job.started_at ?? new Date().toISOString(),
     updated_at: new Date().toISOString(),
   });
+  if (!claimed[0]) return Response.json({ ok: true, terminal: false, busy: true });
 
   let comments: GeneratedComment[] = [];
   let errorMessage = "";
