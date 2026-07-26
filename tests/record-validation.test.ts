@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { recordSimilarity, recordSimilarityDetails, validateRecord } from "../app/record-validation.ts";
+import { recordSimilarity, recordSimilarityDetails, validateBehaviorSource, validateRecord } from "../app/record-validation.ts";
 
 test("accepts a valid school-record comment", () => {
   const result = validateRecord("학습 활동에 성실하게 참여하며 자신의 생각을 구체적으로 표현함.");
@@ -65,4 +65,14 @@ test("reports overlap percentage and shared phrases", () => {
   const details = recordSimilarityDetails(left, right);
   assert.equal(details.score > 0.4, true);
   assert.equal(details.overlaps.some((phrase) => phrase.includes("수업에 성실하게 참여하며")), true);
+});
+
+test("blocks prohibited and sensitive observation data before AI generation", () => {
+  assert.equal(validateBehaviorSource("친구의 의견을 경청하고 맡은 역할을 꾸준히 수행함.").valid, true);
+  const prohibited = validateBehaviorSource("학원에서 배운 내용을 수업 중 설명함.");
+  assert.equal(prohibited.valid, false);
+  assert.deepEqual(prohibited.forbidden, ["학원"]);
+  const sensitive = validateBehaviorSource("보호자 연락처는 010-1234-5678임.");
+  assert.equal(sensitive.valid, false);
+  assert.deepEqual(sensitive.sensitive, ["휴대전화 번호"]);
 });

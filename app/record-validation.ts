@@ -11,6 +11,12 @@ export type ValidationResult = {
 };
 
 const forbiddenTerms = ["수상", "대회 실적", "사교육", "학원", "공인시험", "부모 직업", "가정형편", "사회경제적"];
+const sensitiveInputPatterns: Array<{ pattern: RegExp; label: string }> = [
+  { pattern: /\b\d{6}-?[1-4]\d{6}\b/, label: "주민등록번호 형식" },
+  { pattern: /\b01[016789][-\s]?\d{3,4}[-\s]?\d{4}\b/, label: "휴대전화 번호" },
+  { pattern: /\b[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}\b/i, label: "이메일 주소" },
+  { pattern: /(어머니|아버지|부모님?|보호자).{0,12}(직업|근무|소득|재산|경제)/, label: "가정·보호자 정보" },
+];
 const sentenceEnd = /(음|임|함|됨|보임|돋보임|있음|나타남|기대됨)[.!?]?$/;
 const spellingRules: Array<{ pattern: RegExp; message: string }> = [
   { pattern: /[^\S\r\n]{2,}/, message: "띄어쓰기가 두 칸 이상 연속된 부분이 있음" },
@@ -55,6 +61,13 @@ export function validateRecord(text: string, behavior = false): ValidationResult
     spellingIssues,
     valid: lengthOk && endingsOk && !forbidden.length && !repeated.length && growthIncluded && spellingOk,
   };
+}
+
+export function validateBehaviorSource(text: string) {
+  const normalized = text.trim();
+  const forbidden = forbiddenTerms.filter((term) => normalized.includes(term));
+  const sensitive = sensitiveInputPatterns.filter((item) => item.pattern.test(normalized)).map((item) => item.label);
+  return { valid: Boolean(normalized) && !forbidden.length && !sensitive.length, forbidden, sensitive };
 }
 
 const similarityWords = (value: string) =>

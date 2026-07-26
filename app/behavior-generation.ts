@@ -1,6 +1,7 @@
 import { upsertRows } from "../db/supabase";
 import { recordAiUsage } from "./ai-usage";
 import { archiveBehavior } from "./record-revisions";
+import { validateBehaviorSource } from "./record-validation";
 
 export type BehaviorInput = { studentId: number; characteristic: string };
 export type GeneratedBehavior = BehaviorInput & { behavior: string };
@@ -15,6 +16,9 @@ function outputText(payload: unknown) {
 }
 
 export async function generateBehaviorBatch(inputs: BehaviorInput[]) {
+  if (inputs.some((item) => !validateBehaviorSource(item.characteristic).valid)) {
+    throw new Error("금지 내용이나 개인정보가 포함된 관찰 사실은 AI로 전송할 수 없습니다.");
+  }
   const apiKey = process.env.OPENAI_API_KEY;
   if (!apiKey) throw new Error("AI 생성 설정이 아직 완료되지 않았습니다.");
   const response = await fetch("https://api.openai.com/v1/responses", {

@@ -4,6 +4,7 @@ import { getAiUsage, MONTHLY_AI_LIMIT } from "../../ai-usage";
 import { BehaviorInput } from "../../behavior-generation";
 import { signCommentJob } from "../../comment-generation";
 import { dataError, getDataScope, requireOwnedStudentIds } from "../../data-scope";
+import { validateBehaviorSource } from "../../record-validation";
 
 type JobRow = {
   id: string; status: string; current_batch: number; total_batches: number; total_items: number;
@@ -45,6 +46,14 @@ export async function POST(request: Request) {
       return Number.isInteger(studentId) && characteristic ? [{ studentId, characteristic }] : [];
     });
     if (!inputs.length) return Response.json({ error: "한 명 이상의 특성을 입력해 주세요." }, { status: 400 });
+    const blocked = inputs.flatMap((item) => {
+      const validation = validateBehaviorSource(item.characteristic);
+      return validation.valid ? [] : [{ studentId: item.studentId, issues: [...validation.forbidden, ...validation.sensitive] }];
+    });
+    if (blocked.length) return Response.json({
+      error: `${blocked.length}명의 관찰 사실에 금지 내용 또는 개인정보가 있어 AI 생성을 시작하지 않았습니다.`,
+      blocked,
+    }, { status: 400 });
     const { user, classId } = await getDataScope();
     await requireOwnedStudentIds(inputs.map((item) => item.studentId), user.id, classId);
     const active = await selectRows<JobRow>("generation_jobs", {

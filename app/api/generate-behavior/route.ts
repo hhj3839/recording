@@ -1,5 +1,6 @@
 import { dataError, getDataScope } from "../../data-scope";
 import { checkAiUsage, recordAiUsage } from "../../ai-usage";
+import { validateBehaviorSource } from "../../record-validation";
 
 function extractOutputText(payload: unknown): string {
   if (!payload || typeof payload !== "object") return "";
@@ -20,6 +21,11 @@ export async function POST(request: Request) {
     const currentBehavior = typeof body.currentBehavior === "string" ? body.currentBehavior.trim().slice(0, 8000) : "";
     const mode = body.mode === "length" ? "length" : "regenerate";
     if (!observation) return Response.json({ error: "관찰 사실을 입력해 주세요." }, { status: 400 });
+    const sourceValidation = validateBehaviorSource(observation);
+    if (!sourceValidation.valid) return Response.json({
+      error: "금지 내용이나 개인정보가 포함된 관찰 사실은 AI로 전송할 수 없습니다.",
+      issues: [...sourceValidation.forbidden, ...sourceValidation.sensitive],
+    }, { status: 400 });
     const apiKey = process.env.OPENAI_API_KEY;
     if (!apiKey) return Response.json({ error: "AI 생성 설정이 아직 완료되지 않았습니다." }, { status: 503 });
     const response = await fetch("https://api.openai.com/v1/responses", {
