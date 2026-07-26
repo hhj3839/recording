@@ -1,7 +1,7 @@
 import { waitUntil } from "@vercel/functions";
 import { eq, insertRows, selectRows } from "../../../db/supabase";
 import { getAiUsage, MONTHLY_AI_LIMIT } from "../../ai-usage";
-import { BehaviorInput } from "../../behavior-generation";
+import { BehaviorInput, BehaviorOptions } from "../../behavior-generation";
 import { signCommentJob } from "../../comment-generation";
 import { dataError, getDataScope, requireOwnedStudentIds } from "../../data-scope";
 import { validateBehaviorSource } from "../../record-validation";
@@ -36,14 +36,20 @@ export async function GET() {
 
 export async function POST(request: Request) {
   try {
-    const body = await request.json() as { students?: unknown };
+    const body = await request.json() as { students?: unknown; options?: unknown };
     if (!Array.isArray(body.students)) return Response.json({ error: "학생 특성을 다시 확인해 주세요." }, { status: 400 });
+    const rawOptions = body.options && typeof body.options === "object" ? body.options as Record<string, unknown> : {};
+    const options: BehaviorOptions = {
+      sentenceCount: Math.min(6, Math.max(2, Number(rawOptions.sentenceCount) || 4)),
+      maxBytes: Math.min(700, Math.max(300, Number(rawOptions.maxBytes) || 550)),
+      emphasis: rawOptions.emphasis === "strength" || rawOptions.emphasis === "growth" ? rawOptions.emphasis : "balanced",
+    };
     const inputs: BehaviorInput[] = body.students.flatMap((item) => {
       if (!item || typeof item !== "object") return [];
       const row = item as Record<string, unknown>;
       const studentId = Number(row.studentId);
       const characteristic = typeof row.characteristic === "string" ? row.characteristic.trim().slice(0, 4000) : "";
-      return Number.isInteger(studentId) && characteristic ? [{ studentId, characteristic }] : [];
+      return Number.isInteger(studentId) && characteristic ? [{ studentId, characteristic, options }] : [];
     });
     if (!inputs.length) return Response.json({ error: "한 명 이상의 특성을 입력해 주세요." }, { status: 400 });
     const blocked = inputs.flatMap((item) => {

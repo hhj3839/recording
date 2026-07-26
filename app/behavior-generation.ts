@@ -3,7 +3,8 @@ import { recordAiUsage } from "./ai-usage";
 import { archiveBehavior } from "./record-revisions";
 import { validateBehaviorSource } from "./record-validation";
 
-export type BehaviorInput = { studentId: number; characteristic: string };
+export type BehaviorOptions = { sentenceCount: number; maxBytes: number; emphasis: "balanced" | "strength" | "growth" };
+export type BehaviorInput = { studentId: number; characteristic: string; options?: BehaviorOptions };
 export type GeneratedBehavior = BehaviorInput & { behavior: string };
 
 function outputText(payload: unknown) {
@@ -30,7 +31,7 @@ export async function generateBehaviorBatch(inputs: BehaviorInput[]) {
       store: false,
       max_output_tokens: Math.min(5000, Math.max(1800, inputs.length * 700)),
       input: [
-        { role: "system", content: [{ type: "input_text", text: "대한민국 초등학교 담임교사로서 학생별 행동특성 및 발달상황을 작성한다. 입력된 특성만 활용하고 새로운 사실을 만들지 않는다. 학생 이름·성별·가정환경·수상·사교육·비교 표현을 포함하지 않는다. 장점과 성장 가능성을 구체적으로 연결하고 모든 문장을 명사형 종결어미로 끝낸다. 학생별 3~5문장, UTF-8 약 500~550바이트로 작성한다. 반드시 JSON 배열만 출력하며 각 원소는 studentId와 behavior 필드를 가진다." }] },
+        { role: "system", content: [{ type: "input_text", text: "대한민국 초등학교 담임교사로서 학생별 행동특성 및 발달상황을 작성한다. 입력된 특성만 활용하고 새로운 사실을 만들지 않는다. 학생 이름·성별·가정환경·수상·사교육·비교 표현을 포함하지 않는다. 각 입력의 options에 지정된 sentenceCount와 maxBytes에 최대한 맞춘다. emphasis가 strength이면 장점을, growth이면 변화와 발전 가능성을, balanced이면 전체 특성을 균형 있게 연결한다. 모든 문장을 명사형 종결어미로 끝낸다. 반드시 JSON 배열만 출력하며 각 원소는 studentId와 behavior 필드를 가진다." }] },
         { role: "user", content: [{ type: "input_text", text: `다음 학생 식별번호별 특성을 바탕으로 각각 행동특성을 작성해 줘.\n${JSON.stringify(inputs)}` }] },
       ],
       text: { verbosity: "low" },

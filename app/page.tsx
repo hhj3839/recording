@@ -996,13 +996,29 @@ function Comments({ assessmentDataBySubject, plan, roster }: { assessmentDataByS
   const [selectedText, setSelectedText] = useState<Record<string, string>>({});
   const [selectedStudentIds, setSelectedStudentIds] = useState<number[]>(roster.map((student) => student.id));
   const [generationOptions, setGenerationOptions] = useState({ candidateCount: 2, sentenceCount: 2, maxBytes: 500, emphasis: "balanced" as "balanced" | "strength" });
+  const [preferencesLoaded, setPreferencesLoaded] = useState(false);
   useEffect(() => setSelectedStudentIds((current) => {
     const valid = current.filter((id) => roster.some((student) => student.id === id));
     return valid.length ? valid : roster.map((student) => student.id);
   }), [roster]);
   useEffect(() => {
     setLastGeneratedAt(window.localStorage.getItem("giroksam:last-generated-at") ?? "");
+    fetch("/api/auth/preferences").then(async (response) => {
+      const result = await response.json() as { preferences?: { comments?: typeof generationOptions } };
+      if (response.ok && result.preferences?.comments) setGenerationOptions(result.preferences.comments);
+      setPreferencesLoaded(true);
+    }).catch(() => setPreferencesLoaded(true));
   }, []);
+  useEffect(() => {
+    if (!preferencesLoaded) return;
+    const timer = window.setTimeout(() => {
+      void fetch("/api/auth/preferences", {
+        method: "PUT", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ preferences: { comments: generationOptions } }),
+      });
+    }, 700);
+    return () => window.clearTimeout(timer);
+  }, [generationOptions, preferencesLoaded]);
   const loadGeneratedComments = async () => {
     try {
       const response = await fetch("/api/generated-comments");
@@ -1268,6 +1284,13 @@ function Behavior({ roster }: { roster: AssessmentStudent[] }) {
   const [activeStudentId, setActiveStudentId] = useState<number | null>(roster[0]?.id ?? null);
   const [history, setHistory] = useState<{ studentId: number; studentName: string; revisions: RevisionItem[] } | null>(null);
   const [rewriteBusyKey, setRewriteBusyKey] = useState("");
+  const [selectedStudentIds, setSelectedStudentIds] = useState<number[]>(roster.map((student) => student.id));
+  const [generationOptions, setGenerationOptions] = useState({ sentenceCount: 4, maxBytes: 550, emphasis: "balanced" as "balanced" | "strength" | "growth" });
+  const [preferencesLoaded, setPreferencesLoaded] = useState(false);
+  useEffect(() => setSelectedStudentIds((current) => {
+    const valid = current.filter((id) => roster.some((student) => student.id === id));
+    return valid.length ? valid : roster.map((student) => student.id);
+  }), [roster]);
 
   const loadBehaviors = async () => {
     try {
@@ -1282,6 +1305,11 @@ function Behavior({ roster }: { roster: AssessmentStudent[] }) {
   };
   useEffect(() => {
     void loadBehaviors();
+    fetch("/api/auth/preferences").then(async (response) => {
+      const result = await response.json() as { preferences?: { behaviors?: typeof generationOptions } };
+      if (response.ok && result.preferences?.behaviors) setGenerationOptions(result.preferences.behaviors);
+      setPreferencesLoaded(true);
+    }).catch(() => setPreferencesLoaded(true));
     fetch("/api/behavior-jobs").then(async (response) => {
       const result = await response.json() as { job?: BehaviorJob | null };
       if (response.ok && result.job) {
@@ -1290,6 +1318,16 @@ function Behavior({ roster }: { roster: AssessmentStudent[] }) {
       }
     }).catch(() => undefined);
   }, []);
+  useEffect(() => {
+    if (!preferencesLoaded) return;
+    const timer = window.setTimeout(() => {
+      void fetch("/api/auth/preferences", {
+        method: "PUT", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ preferences: { behaviors: generationOptions } }),
+      });
+    }, 700);
+    return () => window.clearTimeout(timer);
+  }, [generationOptions, preferencesLoaded]);
   useEffect(() => {
     if (!activeJob || !["queued", "running"].includes(activeJob.status)) return;
     setGenerationProgress(`${activeJob.completedItems}/${activeJob.totalItems}`);
@@ -1327,7 +1365,8 @@ function Behavior({ roster }: { roster: AssessmentStudent[] }) {
     setError("");
   };
   const generateAll = async () => {
-    const inputs = roster.map((student) => ({ studentId: student.id, characteristic: records[student.id]?.characteristic ?? "" })).filter((item) => item.characteristic.trim());
+    if (!selectedStudentIds.length) return setError("생성할 학생을 한 명 이상 선택해 주세요.");
+    const inputs = roster.filter((student) => selectedStudentIds.includes(student.id)).map((student) => ({ studentId: student.id, characteristic: records[student.id]?.characteristic ?? "" })).filter((item) => item.characteristic.trim());
     if (!inputs.length) return setError("한 명 이상의 특성을 입력해 주세요.");
     const blocked = inputs.filter((item) => !validateBehaviorSource(item.characteristic).valid);
     if (blocked.length) {
@@ -1341,7 +1380,7 @@ function Behavior({ roster }: { roster: AssessmentStudent[] }) {
       const response = await fetch("/api/behavior-jobs", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ students: inputs }),
+        body: JSON.stringify({ students: inputs, options: generationOptions }),
       });
       const result = await response.json() as { job?: BehaviorJob; error?: string };
       if (!response.ok || !result.job) throw new Error(result.error || "행동특성 백그라운드 작업을 시작하지 못했습니다.");
@@ -1401,7 +1440,7 @@ function Behavior({ roster }: { roster: AssessmentStudent[] }) {
       const response = await fetch("/api/generate-behavior", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ observation: record.characteristic, currentBehavior: record.behavior, mode }),
+        body: JSON.stringify({ observation: record.characteristic, currentBehavior: record.behavior, mode, options: generationOptions }),
       });
       const result = await response.json() as { behavior?: string; error?: string };
       if (!response.ok || !result.behavior) throw new Error(result.error || "행동특성을 다시 생성하지 못했습니다.");
@@ -1447,6 +1486,14 @@ function Behavior({ roster }: { roster: AssessmentStudent[] }) {
         <div className="ai-generate-actions">{formattedLastGeneratedAt && <span>마지막 사용 {formattedLastGeneratedAt}</span>}<button onClick={() => void generateAll()} disabled={loading || blockedSourceCount > 0}>{loading ? generationProgress || "전체 생성 중…" : blockedSourceCount ? `입력 확인 ${blockedSourceCount}명` : "✦ AI 행특 생성"}</button></div>
       </div>
       <div className="review-content behavior-table-content">
+        <div className="comment-generation-settings behavior-generation-settings">
+          <div className="selection-summary"><strong>생성 대상 {selectedStudentIds.length}/{roster.length}명</strong><button onClick={() => setSelectedStudentIds(roster.map((student) => student.id))}>전체 선택</button><button onClick={() => setSelectedStudentIds([])}>전체 해제</button></div>
+          <label className="student-target-picker"><span>학생 선택(Ctrl·Shift로 복수 선택)</span><select multiple value={selectedStudentIds.map(String)} onChange={(event) => setSelectedStudentIds(Array.from(event.currentTarget.selectedOptions, (option) => Number(option.value)))}>{roster.map((student) => <option value={student.id} key={student.id}>{student.number ?? student.id}번 {student.name}</option>)}</select></label>
+          <label><span>문장 수</span><select value={generationOptions.sentenceCount} onChange={(event) => setGenerationOptions((current) => ({ ...current, sentenceCount: Number(event.target.value) }))}>{[2, 3, 4, 5, 6].map((count) => <option value={count} key={count}>{count}문장</option>)}</select></label>
+          <label><span>목표 바이트</span><input type="number" min={300} max={700} step={10} value={generationOptions.maxBytes} onChange={(event) => setGenerationOptions((current) => ({ ...current, maxBytes: Number(event.target.value) }))} /></label>
+          <label><span>작성 방향</span><select value={generationOptions.emphasis} onChange={(event) => setGenerationOptions((current) => ({ ...current, emphasis: event.target.value as "balanced" | "strength" | "growth" }))}><option value="balanced">전체 균형</option><option value="strength">강점 우선</option><option value="growth">성장 우선</option></select></label>
+          <small>설정은 교사 계정에 자동 저장됩니다.</small>
+        </div>
         <div className="behavior-table-toolbar"><span>특성 입력 {roster.filter((student) => records[student.id]?.characteristic.trim()).length} / {roster.length}명</span><div><button className="reference-open-button" onClick={() => setReferenceOpen((current) => !current)}>{referenceOpen ? "참고자료 닫기" : "참고자료 열기"}</button><button className="copy-comments" onClick={() => void copyBehaviors()} disabled={!roster.some((student) => records[student.id]?.behavior)}>{copied ? "복사됨 ✓" : "행동특성만 복사하기"}</button></div></div>
         {error && <p className="generation-error">! {error}</p>}
         {history && <RevisionPanel title={history.studentName} revisions={history.revisions} onRestore={(revision) => void restoreBehavior(revision)} onClose={() => setHistory(null)} />}
