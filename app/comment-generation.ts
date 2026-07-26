@@ -22,10 +22,19 @@ function extractOutputText(payload: unknown): string {
 export async function generateCommentBatch(evidence: CommentEvidence[], avoidComments: string[] = []) {
   const apiKey = process.env.OPENAI_API_KEY;
   if (!apiKey) throw new Error("AI 생성 설정이 아직 완료되지 않았습니다.");
+  const evidenceItems = [...new Set(evidence.flatMap((item) => item.items))];
+  const evidenceDictionary = Object.fromEntries(evidenceItems.map((item, index) => [`e${index + 1}`, item]));
+  const evidenceIds = new Map(evidenceItems.map((item, index) => [item, `e${index + 1}`]));
   const requestEvidence = evidence.map((item) => ({
-    ...item,
-    options: { ...optionsOf(item), candidateCount: Math.max(2, optionsOf(item).candidateCount) },
+    studentId: item.studentId,
+    subject: item.subject,
+    itemIds: item.items
+      .map((evidenceItem) => evidenceIds.get(evidenceItem))
+      .filter((id): id is string => Boolean(id)),
+    variation: item.variation,
+    options: optionsOf(item),
   }));
+  const avoidanceHints = [...new Set(avoidComments.map((item) => item.split(/[.!?]/)[0]?.trim().slice(0, 90)).filter(Boolean))].slice(0, 20);
   const response = await fetch("https://api.openai.com/v1/responses", {
     method: "POST",
     headers: { Authorization: `Bearer ${apiKey}`, "Content-Type": "application/json" },
@@ -41,7 +50,7 @@ export async function generateCommentBatch(evidence: CommentEvidence[], avoidCom
         },
         {
           role: "user",
-          content: [{ type: "input_text", text: `다음 학생 식별번호별·과목별 근거로 각각 교과 평어를 작성해 줘.\n입력: ${JSON.stringify(requestEvidence)}\n피해야 할 기존 평어: ${JSON.stringify(avoidComments.slice(0, 30).map((item) => item.slice(0, 500)))}` }],
+          content: [{ type: "input_text", text: `근거 사전과 학생별 근거 ID를 연결하여 각각 교과 평어를 작성해 줘.\n근거 사전: ${JSON.stringify(evidenceDictionary)}\n학생 입력: ${JSON.stringify(requestEvidence)}\n피해야 할 기존 시작 표현: ${JSON.stringify(avoidanceHints)}` }],
         },
       ],
       text: { verbosity: "low" },
@@ -56,7 +65,7 @@ export async function generateCommentBatch(evidence: CommentEvidence[], avoidCom
     const studentId = Number(item.studentId);
     const subject = typeof item.subject === "string" ? item.subject : "";
     const source = evidence.find((entry) => entry.studentId === studentId && entry.subject === subject);
-    const requested = source ? Math.max(2, optionsOf(source).candidateCount) : 2;
+    const requested = source ? optionsOf(source).candidateCount : 1;
     const candidates = Array.isArray(item.candidates)
       ? item.candidates.filter((candidate): candidate is string => typeof candidate === "string").map((candidate) => candidate.trim()).filter(Boolean).slice(0, requested)
       : typeof item.comment === "string" ? [item.comment.trim()].filter(Boolean) : [];

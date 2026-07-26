@@ -1146,7 +1146,7 @@ function Comments({ assessmentDataBySubject, plan, roster }: { assessmentDataByS
   const [rewriteBusyKey, setRewriteBusyKey] = useState("");
   const [selectedText, setSelectedText] = useState<Record<string, string>>({});
   const [selectedStudentIds, setSelectedStudentIds] = useState<number[]>(roster.map((student) => student.id));
-  const [generationOptions, setGenerationOptions] = useState({ candidateCount: 2, sentenceCount: 2, maxBytes: 500, emphasis: "balanced" as "balanced" | "strength" });
+  const [generationOptions, setGenerationOptions] = useState({ candidateCount: 1, sentenceCount: 2, maxBytes: 500, emphasis: "balanced" as "balanced" | "strength" });
   const [preferencesLoaded, setPreferencesLoaded] = useState(false);
   useEffect(() => setSelectedStudentIds((current) => {
     const valid = current.filter((id) => roster.some((student) => student.id === id));
