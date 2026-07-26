@@ -61,9 +61,18 @@ export async function POST(request: Request) {
 
   let comments: GeneratedComment[] = [];
   let errorMessage = "";
+  const subject = batch[0]?.subject ?? "";
+  const batchStudentIds = new Set(batch.map((item) => item.studentId));
+  const existingComments = subject ? await selectRows<{ student_id: number; comment: string }>("generated_comments", {
+    owner_id: eq(job.owner_id), class_id: eq(job.class_id), subject: eq(subject),
+  }) : [];
+  const avoidComments = existingComments
+    .filter((item) => !batchStudentIds.has(Number(item.student_id)))
+    .map((item) => item.comment)
+    .filter(Boolean);
   for (let attempt = 0; attempt < 2 && !comments.length; attempt += 1) {
     try {
-      comments = await generateCommentBatch(batch);
+      comments = await generateCommentBatch(batch, avoidComments);
     } catch (error) {
       errorMessage = error instanceof Error ? error.message : "AI 생성 오류";
     }

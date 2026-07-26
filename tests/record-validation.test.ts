@@ -1,6 +1,15 @@
 import assert from "node:assert/strict";
 import test from "node:test";
+import { createCommentVariations } from "../app/comment-variation.ts";
 import { recordSimilarity, recordSimilarityDetails, validateBehaviorSource, validateRecord } from "../app/record-validation.ts";
+
+test("distributes randomized comment styles across a class batch", () => {
+  const variations = createCommentVariations(10);
+  assert.equal(variations.length, 10);
+  assert.equal(new Set(variations.slice(0, 6).map((item) => item.structure)).size, 6);
+  assert.equal(new Set(variations.slice(0, 4).map((item) => item.opening)).size, 4);
+  assert.equal(variations.every((item) => item.structure && item.opening && item.focusOrder), true);
+});
 
 test("accepts a valid school-record comment", () => {
   const result = validateRecord("학습 활동에 성실하게 참여하며 자신의 생각을 구체적으로 표현함.");

@@ -2,6 +2,7 @@ import { waitUntil } from "@vercel/functions";
 import { eq, insertRows, selectRows } from "../../../db/supabase";
 import { getAiUsage, MONTHLY_AI_LIMIT } from "../../ai-usage";
 import { CommentEvidence, CommentOptions, signCommentJob } from "../../comment-generation";
+import { createCommentVariations } from "../../comment-variation";
 import { dataError, getDataScope, requireOwnedStudentIds } from "../../data-scope";
 
 type Level = "상" | "중" | "하" | "미응시" | "평가 예정" | "-";
@@ -115,6 +116,8 @@ export async function POST(request: Request) {
       }
     }
     if (!evidence.length) return Response.json({ error: "전 과목 중 평가 수준을 한 개 이상 입력해 주세요." }, { status: 400 });
+    const variations = createCommentVariations(evidence.length);
+    evidence.forEach((item, index) => { item.variation = variations[index]; });
     await requireOwnedStudentIds(evidence.map((item) => item.studentId), user.id, classId);
 
     const batches = [...new Set(evidence.map((item) => item.subject))].flatMap((subject) => {

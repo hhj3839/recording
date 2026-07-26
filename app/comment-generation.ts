@@ -1,10 +1,11 @@
 import { createHmac, timingSafeEqual } from "node:crypto";
 import { upsertRows } from "../db/supabase";
 import { recordAiUsage } from "./ai-usage";
+import { CommentVariation } from "./comment-variation";
 import { archiveComment } from "./record-revisions";
 
 export type CommentOptions = { candidateCount: number; sentenceCount: number; maxBytes: number; emphasis: "balanced" | "strength" };
-export type CommentEvidence = { studentId: number; subject: string; items: string[]; options?: CommentOptions };
+export type CommentEvidence = { studentId: number; subject: string; items: string[]; options?: CommentOptions; variation?: CommentVariation };
 export type GeneratedComment = { studentId: number; subject: string; comment: string; candidates: string[] };
 const defaultOptions: CommentOptions = { candidateCount: 1, sentenceCount: 2, maxBytes: 500, emphasis: "balanced" };
 const optionsOf = (item: CommentEvidence) => item.options ?? defaultOptions;
@@ -18,7 +19,7 @@ function extractOutputText(payload: unknown): string {
     .map((item) => item.text).join("").trim();
 }
 
-export async function generateCommentBatch(evidence: CommentEvidence[]) {
+export async function generateCommentBatch(evidence: CommentEvidence[], avoidComments: string[] = []) {
   const apiKey = process.env.OPENAI_API_KEY;
   if (!apiKey) throw new Error("AI 생성 설정이 아직 완료되지 않았습니다.");
   const response = await fetch("https://api.openai.com/v1/responses", {
@@ -32,11 +33,11 @@ export async function generateCommentBatch(evidence: CommentEvidence[]) {
       input: [
         {
           role: "system",
-          content: [{ type: "input_text", text: "대한민국 초등학교 교과학습발달상황 작성 전문가이다. 제공된 평가계획과 수준만 활용한다. 학생 이름·성별·추측·학생 간 비교를 쓰지 않는다. 하 수준도 성장 중심으로 표현한다. 각 입력의 options에 지정된 candidateCount만큼 서로 다른 후보를 만들고 sentenceCount와 maxBytes에 최대한 맞춘다. emphasis가 strength이면 강점 근거를 우선하고 balanced이면 서로 다른 영역을 균형 있게 반영한다. 모든 문장을 함·됨·보임·돋보임 등의 명사형으로 끝낸다. 반드시 JSON 배열만 출력하며 각 원소는 studentId, subject, candidates 문자열 배열 필드를 가진다." }],
+          content: [{ type: "input_text", text: "대한민국 초등학교 교과학습발달상황 작성 전문가이다. 제공된 평가계획과 수준만 활용한다. 학생 이름·성별·추측·학생 간 비교를 쓰지 않는다. 하 수준도 성장 중심으로 표현한다. 각 입력의 variation에 지정된 문장 구조·시작 방식·근거 순서를 따르되 근거에 없는 사실을 만들지 않는다. 같은 묶음의 학생끼리 첫 구절, 핵심 동사, 문장 구조, 종결 표현이 겹치지 않게 적극적으로 분산한다. avoidComments의 문장을 복사하거나 비슷하게 바꾸어 쓰지 않는다. 각 입력의 options에 지정된 candidateCount만큼 서로 다른 후보를 만들고 후보끼리도 문장 구조가 달라야 한다. sentenceCount와 maxBytes에 최대한 맞춘다. emphasis가 strength이면 강점 근거를 우선하고 balanced이면 서로 다른 영역을 균형 있게 반영한다. 모든 문장을 함·됨·보임·돋보임 등의 명사형으로 끝낸다. 반드시 JSON 배열만 출력하며 각 원소는 studentId, subject, candidates 문자열 배열 필드를 가진다." }],
         },
         {
           role: "user",
-          content: [{ type: "input_text", text: `다음 학생 식별번호별·과목별 근거로 각각 교과 평어를 작성해 줘.\n${JSON.stringify(evidence)}` }],
+          content: [{ type: "input_text", text: `다음 학생 식별번호별·과목별 근거로 각각 교과 평어를 작성해 줘.\n입력: ${JSON.stringify(evidence)}\n피해야 할 기존 평어: ${JSON.stringify(avoidComments.slice(0, 30).map((item) => item.slice(0, 500)))}` }],
         },
       ],
       text: { verbosity: "low" },

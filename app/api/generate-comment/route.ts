@@ -1,5 +1,7 @@
 import { dataError, getDataScope } from "../../data-scope";
 import { checkAiUsage, recordAiUsage } from "../../ai-usage";
+import { createCommentVariations } from "../../comment-variation";
+import { eq, selectRows } from "../../../db/supabase";
 
 type Level = "상" | "중" | "하" | "미응시" | "평가 예정" | "-";
 
@@ -99,6 +101,7 @@ export async function POST(request: Request) {
     const mode = ["shorter", "specific", "selection"].includes(String(body.mode)) ? String(body.mode) : "new";
     const currentComment = typeof body.currentComment === "string" ? body.currentComment.trim().slice(0, 4000) : "";
     const selectedText = typeof body.selectedText === "string" ? body.selectedText.trim().slice(0, 2000) : "";
+    const studentId = Number(body.studentId);
     if (mode !== "new" && !currentComment) return Response.json({ error: "다시 작성할 기존 평어가 없습니다." }, { status: 400 });
     if (mode === "selection" && !selectedText) return Response.json({ error: "다시 생성할 문장을 먼저 선택해 주세요." }, { status: 400 });
 
@@ -122,6 +125,17 @@ export async function POST(request: Request) {
         : mode === "selection"
           ? `기존 평어에서 선택한 부분만 평가 근거에 맞는 자연스러운 문장으로 바꿔 줘. 반드시 교체할 문장만 출력해 줘.\n기존 평어: ${currentComment}\n선택한 부분: ${selectedText}`
           : "다음 평가 근거를 종합하여 교과 평어를 작성해 줘.";
+    const variation = createCommentVariations(1)[0];
+    const existingComments = Number.isInteger(studentId)
+      ? await selectRows<{ student_id: number; comment: string }>("generated_comments", {
+          owner_id: eq(user.id), class_id: eq(classId), subject: eq(plan[0]?.subject ?? ""),
+        })
+      : [];
+    const avoidComments = existingComments
+      .filter((item) => Number(item.student_id) !== studentId)
+      .map((item) => item.comment)
+      .filter(Boolean)
+      .slice(0, 30);
     const openAIResponse = await fetch("https://api.openai.com/v1/responses", {
       method: "POST",
       headers: {
@@ -138,14 +152,14 @@ export async function POST(request: Request) {
             role: "system",
             content: [{
               type: "input_text",
-              text: "대한민국 초등학교 교과학습발달상황 작성 전문가로서 입력된 평가계획과 평가 수준만 활용한다. 학생 이름, 성별, 추측한 사실, 비교 표현을 포함하지 않는다. 하 수준도 부정적으로 단정하지 말고 수행 과정과 성장 가능성을 중심으로 쓴다. 여러 평가 항목을 단순 나열하지 말고 자연스럽게 연결한다. 2~3문장, 약 150~250바이트의 한국어로 작성하고 모든 문장을 '함', '됨', '보임', '돋보임' 같은 명사형 종결어미로 끝낸다. 설명이나 제목 없이 교과 평어 본문만 출력한다.",
+              text: "대한민국 초등학교 교과학습발달상황 작성 전문가로서 입력된 평가계획과 평가 수준만 활용한다. 학생 이름, 성별, 추측한 사실, 비교 표현을 포함하지 않는다. 하 수준도 부정적으로 단정하지 말고 수행 과정과 성장 가능성을 중심으로 쓴다. 지정된 variation의 문장 구조·시작 방식·근거 순서를 따르되 근거에 없는 사실을 만들지 않는다. 피해야 할 기존 평어와 첫 구절, 핵심 동사, 문장 구조가 겹치지 않게 작성한다. 여러 평가 항목을 단순 나열하지 말고 자연스럽게 연결한다. 2~3문장, 약 150~250바이트의 한국어로 작성하고 모든 문장을 '함', '됨', '보임', '돋보임' 같은 명사형 종결어미로 끝낸다. 설명이나 제목 없이 교과 평어 본문만 출력한다.",
             }],
           },
           {
             role: "user",
             content: [{
               type: "input_text",
-              text: `${modeInstruction}\n\n평가 근거:\n${evidence}`,
+              text: `${modeInstruction}\n\n표현 방식: ${JSON.stringify(variation)}\n피해야 할 기존 평어: ${JSON.stringify(avoidComments.map((item) => item.slice(0, 500)))}\n\n평가 근거:\n${evidence}`,
             }],
           },
         ],
