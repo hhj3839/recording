@@ -15,8 +15,10 @@ export async function POST(request: Request) {
     const { user, classId } = await getDataScope();
     const usage = await checkAiUsage(user.id);
     if (!usage.allowed) return Response.json({ error: usage.reason === "monthly" ? "이번 달 AI 생성 한도 300회를 모두 사용했습니다." : "요청이 너무 빠릅니다. 1분 후 다시 시도해 주세요.", usage }, { status: 429 });
-    const body = await request.json() as { observation?: unknown };
+    const body = await request.json() as { observation?: unknown; currentBehavior?: unknown; mode?: unknown };
     const observation = typeof body.observation === "string" ? body.observation.trim().slice(0, 4000) : "";
+    const currentBehavior = typeof body.currentBehavior === "string" ? body.currentBehavior.trim().slice(0, 8000) : "";
+    const mode = body.mode === "length" ? "length" : "regenerate";
     if (!observation) return Response.json({ error: "관찰 사실을 입력해 주세요." }, { status: 400 });
     const apiKey = process.env.OPENAI_API_KEY;
     if (!apiKey) return Response.json({ error: "AI 생성 설정이 아직 완료되지 않았습니다." }, { status: 503 });
@@ -30,7 +32,9 @@ export async function POST(request: Request) {
         max_output_tokens: 1200,
         input: [
           { role: "system", content: [{ type: "input_text", text: "대한민국 초등학교 담임교사로서 행동특성 및 발달상황을 작성한다. 입력된 관찰 사실만 활용하고 새로운 사실을 만들지 않는다. 학생 이름·성별·가정환경·수상·사교육·비교 표현을 포함하지 않는다. 장점과 성장 가능성을 구체적으로 연결하고 모든 문장을 명사형 종결어미로 끝낸다. 3~5문장, UTF-8 약 500~550바이트로 작성하며 제목이나 설명 없이 본문만 출력한다." }] },
-          { role: "user", content: [{ type: "input_text", text: `다음 관찰 사실을 바탕으로 행동특성을 작성해 줘.\n${observation}` }] },
+          { role: "user", content: [{ type: "input_text", text: mode === "length" && currentBehavior
+            ? `다음 관찰 사실과 기존 문장만 활용하여 기존 행동특성을 UTF-8 500~550바이트로 다시 작성해 줘. 사실을 추가하거나 삭제하지 말고 자연스럽게 길이만 조정해 줘.\n\n관찰 사실:\n${observation}\n\n기존 행동특성:\n${currentBehavior}`
+            : `다음 관찰 사실을 바탕으로 표현과 문장 구조가 다른 행동특성을 새로 작성해 줘.\n${observation}` }] },
         ],
         text: { verbosity: "low" },
       }),
