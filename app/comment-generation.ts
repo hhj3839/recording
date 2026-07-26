@@ -43,7 +43,7 @@ export async function generateCommentBatch(evidence: CommentEvidence[], avoidCom
       input: [
         {
           role: "system",
-          content: [{ type: "input_text", text: "당신은 초등학교 담임교사의 학생평가 작성 전문가이며 학교생활기록부 교과학습발달상황에 사용할 교과 평어를 작성한다. 학생 입력의 itemIds에 연결된 각 평가 영역마다 해당 수준에 맞는 문장을 정확히 1개씩 작성한다. 영역 수와 문장 수는 반드시 같아야 하며 입력된 영역명·수준·평가기준만 사용하고 없는 영역·수준·사실을 만들지 않는다. 각 문장은 평가기준을 그대로 복사하지 말고 실제 관찰 가능한 행동 중심으로 자연스럽게 바꾸어 쓴다. 성취기준과 평가요소, 수업·평가 활동의 수행 내용, 수행 결과와 학습 태도가 구체적으로 드러나게 작성한다. 일반적인 칭찬을 피하고 모든 문장을 긍정적·발전적 관점으로 작성한다. 상 수준은 안정적인 수행과 정확성·적극성·자기주도성이, 중 수준은 대부분의 성취기준 수행과 꾸준한 참여·적절한 적용이, 하 수준은 활동 참여와 배운 내용을 익혀 가는 과정·교사의 도움을 받아 수행하는 모습·성장 가능성이 드러나게 작성한다. 부족함, 미흡함, 못함, 어려워함, 이해하지 못함, 소극적임, 불성실함을 쓰지 않는다. 최종 허용 범위는 공백과 마침표를 포함해 50~60자이지만 경계 오차를 피하도록 각 문장을 54~56자로 작성하고 정확히 ‘함.’으로 끝낸다. 문장마다 글자 수를 직접 세어 54자 미만 또는 56자 초과이면 출력 전에 고친다. 문장 시작과 문형을 반복하지 않고, variation의 구조·시작 방식·근거 순서를 활용하며 같은 묶음 학생 및 avoidComments와 표현을 겹치지 않게 한다. 제목·번호·설명·따옴표·상중하 표시는 쓰지 않는다. 결과는 results 배열에 넣는다. 각 원소는 studentId, subject, sentences 필드를 가지며 sentences는 입력 itemIds와 같은 순서의 {itemId, text} 배열이다. 각 text는 해당 itemId 하나만 반영한 54~56자의 ‘함.’ 문장이다." }],
+          content: [{ type: "input_text", text: "당신은 초등학교 담임교사의 학생평가 작성 전문가이며 학교생활기록부 교과학습발달상황에 사용할 교과 평어를 작성한다. 학생 입력의 itemIds에 연결된 각 평가 영역마다 해당 수준에 맞는 문장을 정확히 1개씩 작성한다. 영역 수와 문장 수는 반드시 같아야 하며 입력된 영역명·수준·평가기준만 사용하고 없는 영역·수준·사실을 만들지 않는다. 각 문장은 평가기준을 그대로 복사하지 말고 실제 관찰 가능한 행동 중심으로 자연스럽게 바꾸어 쓴다. 성취기준과 평가요소, 수업·평가 활동의 수행 내용, 수행 결과와 학습 태도가 구체적으로 드러나게 작성한다. 일반적인 칭찬을 피하고 모든 문장을 긍정적·발전적 관점으로 작성한다. 상 수준은 안정적인 수행과 정확성·적극성·자기주도성이, 중 수준은 대부분의 성취기준 수행과 꾸준한 참여·적절한 적용이, 하 수준은 활동 참여와 배운 내용을 익혀 가는 과정·교사의 도움을 받아 수행하는 모습·성장 가능성이 드러나게 작성한다. 부족함, 미흡함, 못함, 어려워함, 이해하지 못함, 소극적임, 불성실함을 쓰지 않는다. sentences의 stem에는 마침표와 종결어미를 제외한 문장 본문만 작성하고, 뒤에 ending의 ‘함.’을 붙였을 때 자연스러운 문장이 되게 한다. stem은 52~54자로 작성하여 서버가 ending과 결합한 최종 문장이 54~56자가 되게 한다. 문장 시작과 문형을 반복하지 않고, variation의 구조·시작 방식·근거 순서를 활용하며 같은 묶음 학생 및 avoidComments와 표현을 겹치지 않게 한다. 제목·번호·설명·따옴표·상중하 표시는 쓰지 않는다. 결과는 results 배열에 넣는다. 각 원소는 studentId, subject, sentences 필드를 가지며 sentences는 입력 itemIds와 같은 순서의 {itemId, stem, ending} 배열이다. ending은 반드시 스키마가 지정한 ‘함.’을 사용한다." }],
         },
         {
           role: "user",
@@ -75,10 +75,11 @@ export async function generateCommentBatch(evidence: CommentEvidence[], avoidCom
                       items: {
                         type: "object",
                         additionalProperties: false,
-                        required: ["itemId", "text"],
+                        required: ["itemId", "stem", "ending"],
                         properties: {
                           itemId: { type: "string" },
-                          text: { type: "string" },
+                          stem: { type: "string" },
+                          ending: { type: "string", enum: ["함."] },
                         },
                       },
                     },
@@ -110,9 +111,9 @@ export async function generateCommentBatch(evidence: CommentEvidence[], avoidCom
     const sentenceRows = Array.isArray(item.sentences)
       ? item.sentences.flatMap((row) => {
           if (!row || typeof row !== "object") return [];
-          const value = row as { itemId?: unknown; text?: unknown };
-          return typeof value.itemId === "string" && typeof value.text === "string"
-            ? [{ itemId: value.itemId, text: value.text.trim() }]
+          const value = row as { itemId?: unknown; stem?: unknown; ending?: unknown };
+          return typeof value.itemId === "string" && typeof value.stem === "string" && value.ending === "함."
+            ? [{ itemId: value.itemId, text: `${value.stem.trim().replace(/[.。]+$/, "")}함.` }]
             : [];
         })
       : [];
