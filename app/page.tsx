@@ -1309,7 +1309,7 @@ function Behavior({ roster }: { roster: AssessmentStudent[] }) {
 type ExportComment = { studentId: number; subject: string; comment: string; confirmed: boolean; updatedAt: string };
 type ExportBehavior = { studentId: number; characteristic: string; behavior: string; confirmed: boolean; updatedAt: string };
 
-function ExportResults({ roster, plan, classroom }: { roster: AssessmentStudent[]; plan: AssessmentPlan[]; classroom: ClassroomInfo | null }) {
+function ExportResults({ roster, plan }: { roster: AssessmentStudent[]; plan: AssessmentPlan[] }) {
   const [comments, setComments] = useState<ExportComment[]>([]);
   const [behaviors, setBehaviors] = useState<ExportBehavior[]>([]);
   const [selectedSubject, setSelectedSubject] = useState("");
@@ -1398,48 +1398,6 @@ function ExportResults({ roster, plan, classroom }: { roster: AssessmentStudent[
       setMessage("클립보드 권한을 확인해 주세요.");
     }
   };
-  const exportWorkbook = async () => {
-    const XLSX = await import("xlsx");
-    const ordered = [...roster].sort((a, b) => (a.number ?? a.id) - (b.number ?? b.id));
-    const subjectRows = subjects.flatMap((subject) => ordered.map((student) => {
-      const result = commentMap.get(`${student.id}|${subject}`);
-      const value = result?.confirmed ? result.comment : "";
-      return {
-        번호: student.number ?? student.id, 이름: student.name, 과목: subject,
-        "교과 평어": value, "바이트 수": byteLength(value),
-        "작성 상태": result?.confirmed ? "확정" : result?.comment ? "미확정" : "미작성", "최종 수정일": result?.updatedAt ? new Date(result.updatedAt).toLocaleString("ko-KR") : "",
-      };
-    }));
-    const behaviorRows = ordered.map((student) => {
-      const result = behaviorMap.get(student.id);
-      const value = result?.confirmed ? result.behavior : "";
-      return {
-        번호: student.number ?? student.id, 이름: student.name, 특성: result?.characteristic ?? "",
-        "행동특성 및 발달상황": value, "바이트 수": byteLength(value),
-        "검수 결과": result?.confirmed ? "검수 통과" : result?.behavior ? "미확정" : "미작성",
-        "작성 상태": result?.confirmed ? "확정" : result?.behavior ? "미확정" : "미작성", "최종 수정일": result?.updatedAt ? new Date(result.updatedAt).toLocaleString("ko-KR") : "",
-      };
-    });
-    const summaryRows = ordered.map((student) => ({
-      번호: student.number ?? student.id,
-      이름: student.name,
-      "교과 평어 확정": `${subjects.filter((subject) => commentMap.get(`${student.id}|${subject}`)?.confirmed).length}/${subjects.length}`,
-      "행동특성 확정": behaviorMap.get(student.id)?.confirmed ? "완료" : "미확정",
-    }));
-    const workbook = XLSX.utils.book_new();
-    const addSheet = (name: string, rows: Record<string, unknown>[], widths: number[]) => {
-      const sheet = XLSX.utils.json_to_sheet(rows);
-      sheet["!cols"] = widths.map((wch) => ({ wch }));
-      sheet["!autofilter"] = rows.length ? { ref: sheet["!ref"] ?? "A1" } : undefined;
-      XLSX.utils.book_append_sheet(workbook, sheet, name);
-    };
-    addSheet("작성현황", summaryRows, [8, 12, 18, 18]);
-    addSheet("교과평어", subjectRows, [8, 12, 12, 70, 12, 12, 22]);
-    addSheet("행동특성", behaviorRows, [8, 12, 40, 80, 12, 16, 12, 22]);
-    const classLabel = classroom ? `${classroom.schoolYear}_${classroom.grade}학년_${classroom.classNumber}반` : "학급";
-    XLSX.writeFile(workbook, `기록샘_${classLabel}_최종결과.xlsx`);
-    setMessage("전체 결과 Excel 파일을 내려받았습니다.");
-  };
   const downloadCsv = (kind: "comments" | "behaviors") => {
     const ordered = [...roster].sort((a, b) => (a.number ?? a.id) - (b.number ?? b.id));
     const rows = kind === "comments"
@@ -1461,7 +1419,7 @@ function ExportResults({ roster, plan, classroom }: { roster: AssessmentStudent[
   return <section>
     <div className="page-heading">
       <div><p className="eyebrow">GOOGLE SHEETS · NEIS READY</p><h1>전체 결과 공유</h1><p>전체 교과 평어와 행동특성을 Google 스프레드시트로 만들거나 나이스용으로 복사합니다.</p></div>
-      <div className="heading-actions"><button onClick={() => void createGoogleSheet()} disabled={loading || googleBusy}>{googleBusy ? "Google 시트 생성 중…" : "Google 스프레드시트 생성"}</button><button className="secondary" onClick={() => void exportWorkbook()} disabled={loading}>Excel 내려받기</button></div>
+      <div className="heading-actions"><button onClick={() => void createGoogleSheet()} disabled={loading || googleBusy}>{googleBusy ? "Google 시트 생성 중…" : "Google 스프레드시트 생성"}</button></div>
     </div>
     <section className="google-connect-card">
       <div><span className={`google-status-dot ${googleConnected ? "connected" : ""}`} /><div><strong>{googleConnected ? "Google 계정 연결됨" : "Google 계정 연결 필요"}</strong><p>{googleConnected ? `${googleEmail || "연결한 계정"}의 Drive에 새 스프레드시트를 생성합니다.` : "앱이 생성한 파일만 관리할 수 있는 최소 권한을 요청합니다."}</p></div></div>
@@ -1791,7 +1749,7 @@ export default function Home() {
           {view === "assessments" && <Assessments data={assessmentDataBySubject[activeSubject] ?? []} setData={(updater) => setAssessmentDataBySubject((current) => ({ ...current, [activeSubject]: typeof updater === "function" ? updater(current[activeSubject] ?? []) : updater }))} plan={plan} activeSubject={activeSubject} setActiveSubject={setActiveSubject} onDeleteStudent={(id) => void deleteStudent(id)} onSave={saveAssessmentLevels} />}
           {view === "comments" && <Comments assessmentDataBySubject={assessmentDataBySubject} plan={plan} roster={roster} />}
           {view === "behavior" && <Behavior roster={roster} />}
-          {SHOW_EXPORT_RESULTS && view === "export" && <ExportResults roster={roster} plan={plan} classroom={classroom} />}
+          {SHOW_EXPORT_RESULTS && view === "export" && <ExportResults roster={roster} plan={plan} />}
           {view === "settings" && <PrivacySettings currentName={currentUser} onNameChanged={setCurrentUser} />}
         </div>
       </main>
