@@ -10,6 +10,7 @@ type SharedPlan = {
 const present = (row: SharedPlan) => ({
   id: Number(row.id), name: row.name, schoolYear: Number(row.school_year), semester: Number(row.semester),
   grade: Number(row.grade), itemCount: Number(row.item_count), createdByEmail: "공유 교사",
+  subjects: [...new Set(row.plan.map((item) => String(item.subject ?? "").trim()).filter(Boolean))],
   updatedAt: row.updated_at, canDelete: false,
 });
 

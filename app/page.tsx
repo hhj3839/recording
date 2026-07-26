@@ -623,8 +623,13 @@ function PlanManager({ plan, onChanged, current }: { plan: AssessmentPlan[]; onC
   const [targetClassId, setTargetClassId] = useState("");
   const [versions, setVersions] = useState<Array<{ id: number; source: string; label: string; itemCount: number; createdAt: string }>>([]);
   const [versionsOpen, setVersionsOpen] = useState(false);
-  const [sharedPlans, setSharedPlans] = useState<Array<{ id: number; name: string; schoolYear: number; semester: number; grade: number; itemCount: number; createdByEmail: string; updatedAt: string; canDelete: boolean }>>([]);
+  const [sharedPlans, setSharedPlans] = useState<Array<{ id: number; name: string; schoolYear: number; semester: number; grade: number; subjects: string[]; itemCount: number; createdByEmail: string; updatedAt: string; canDelete: boolean }>>([]);
   const [sharedOpen, setSharedOpen] = useState(false);
+  const [sharedSearch, setSharedSearch] = useState("");
+  const [sharedYear, setSharedYear] = useState("all");
+  const [sharedSemester, setSharedSemester] = useState("all");
+  const [sharedGrade, setSharedGrade] = useState("all");
+  const [sharedSubject, setSharedSubject] = useState("all");
   const columns: Array<[keyof AssessmentPlan, string]> = [
     ["subject", "과목"], ["unit", "단원"], ["goal", "평가목표"], ["domain", "영역"],
     ["type", "평가 유형"], ["perspective", "평가 관점"], ["high", "상"], ["middle", "중"],
@@ -887,6 +892,16 @@ function PlanManager({ plan, onChanged, current }: { plan: AssessmentPlan[]; onC
   const changePlan = (id: number | undefined, key: keyof AssessmentPlan, value: string) => {
     onChanged(plan.map((item) => item.id === id ? { ...item, [key]: value } : item));
   };
+  const sharedYears = [...new Set(sharedPlans.map((item) => item.schoolYear))].sort((a, b) => b - a);
+  const sharedSubjects = [...new Set(sharedPlans.flatMap((item) => item.subjects))].sort((a, b) => a.localeCompare(b, "ko"));
+  const filteredSharedPlans = sharedPlans.filter((item) => {
+    const search = sharedSearch.trim().toLowerCase();
+    return (!search || `${item.name} ${item.subjects.join(" ")}`.toLowerCase().includes(search))
+      && (sharedYear === "all" || item.schoolYear === Number(sharedYear))
+      && (sharedSemester === "all" || item.semester === Number(sharedSemester))
+      && (sharedGrade === "all" || item.grade === Number(sharedGrade))
+      && (sharedSubject === "all" || item.subjects.includes(sharedSubject));
+  });
   return <section>
     <div className="page-heading">
       <div><p className="eyebrow">학급별 평가 기준</p><h1>평가계획 관리</h1><p>직접 입력하거나 Excel·CSV를 검증한 뒤 저장하세요.</p></div>
@@ -903,7 +918,8 @@ function PlanManager({ plan, onChanged, current }: { plan: AssessmentPlan[]; onC
     {sharedOpen && <section className="shared-plan-panel">
       <div className="section-heading"><div><p className="eyebrow">SHARED PLAN LIBRARY</p><h2>공동 평가계획</h2></div><div><button disabled={busy || !plan.length} onClick={() => void publishSharedPlan()}>현재 계획 공유</button><button className="secondary" onClick={() => setSharedOpen(false)}>닫기</button></div></div>
       <p>기록샘을 사용하는 모든 교사가 공유한 계획을 현재 학급에 가져올 수 있습니다. 평가수준이 입력된 학급은 계획을 교체할 수 없습니다.</p>
-      <div className="shared-plan-list">{sharedPlans.length ? sharedPlans.map((shared) => <article key={shared.id}><div><strong>{shared.name}</strong><span>{shared.schoolYear}학년도 {shared.semester}학기 · {shared.grade}학년 · {shared.itemCount}개</span><small>{shared.createdByEmail} · {new Date(shared.updatedAt).toLocaleString("ko-KR")}</small></div><button disabled={busy} onClick={() => void importSharedPlan(shared)}>현재 학급에 적용</button>{shared.canDelete && <button className="danger-text" disabled={busy} onClick={() => void deleteSharedPlan(shared)}>삭제</button>}</article>) : <p className="empty-cell">아직 공유된 평가계획이 없습니다.</p>}</div>
+      <div className="shared-plan-filters"><input aria-label="공동 평가계획 검색" value={sharedSearch} onChange={(event) => setSharedSearch(event.target.value)} placeholder="계획 이름·과목 검색" /><select aria-label="학년도" value={sharedYear} onChange={(event) => setSharedYear(event.target.value)}><option value="all">전체 학년도</option>{sharedYears.map((year) => <option value={year} key={year}>{year}학년도</option>)}</select><select aria-label="학기" value={sharedSemester} onChange={(event) => setSharedSemester(event.target.value)}><option value="all">전체 학기</option><option value="1">1학기</option><option value="2">2학기</option></select><select aria-label="학년" value={sharedGrade} onChange={(event) => setSharedGrade(event.target.value)}><option value="all">전체 학년</option>{[1, 2, 3, 4, 5, 6].map((grade) => <option value={grade} key={grade}>{grade}학년</option>)}</select><select aria-label="과목" value={sharedSubject} onChange={(event) => setSharedSubject(event.target.value)}><option value="all">전체 과목</option>{sharedSubjects.map((subject) => <option value={subject} key={subject}>{subject}</option>)}</select></div>
+      <div className="shared-plan-list">{filteredSharedPlans.length ? filteredSharedPlans.map((shared) => <article key={shared.id}><div><strong>{shared.name}</strong><span>{shared.schoolYear}학년도 {shared.semester}학기 · {shared.grade}학년 · {shared.itemCount}개</span><small>{shared.subjects.join(" · ") || "과목 정보 없음"} · {new Date(shared.updatedAt).toLocaleString("ko-KR")}</small></div><button disabled={busy} onClick={() => void importSharedPlan(shared)}>현재 학급에 적용</button>{shared.canDelete && <button className="danger-text" disabled={busy} onClick={() => void deleteSharedPlan(shared)}>삭제</button>}</article>) : <p className="empty-cell">{sharedPlans.length ? "검색 조건에 맞는 공동 평가계획이 없습니다." : "아직 공유된 평가계획이 없습니다."}</p>}</div>
     </section>}
     <div className="plan-help"><strong>필수 열</strong> 과목 · 단원 · 평가목표 · 영역 · 평가 관점 · 상 · 중 · 하 <span>평가 유형과 유의점은 선택 항목입니다.</span></div>
     <section className="plan-copy">
