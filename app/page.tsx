@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import { recordSimilarityDetails, validateRecord } from "./record-validation";
 
-type View = "dashboard" | "classes" | "students" | "plans" | "assessments" | "comments" | "behavior" | "export" | "settings";
+type View = "dashboard" | "classes" | "students" | "plans" | "assessments" | "comments" | "behavior" | "export" | "pilot" | "settings";
 type Level = "상" | "중" | "하" | "미응시" | "평가 예정" | "-";
 type AssessmentPlan = {
   id?: number;
@@ -1545,6 +1545,79 @@ type PrivacySummary = {
   counts: { students: number; plans: number; levels: number; comments: number; behaviors: number };
 };
 
+type PilotAggregate = {
+  participants: number; responses: number; timeReduction: number; usablePercent: number;
+  satisfaction: number; reusePercent: number;
+  targets: { timeReduction: boolean; usablePercent: boolean; satisfaction: boolean; reusePercent: boolean };
+};
+
+function PilotFeedback() {
+  const [form, setForm] = useState({ beforeMinutes: 180, actualMinutes: 90, usablePercent: 80, satisfaction: 4, reuseIntent: true, feedback: "" });
+  const [aggregate, setAggregate] = useState<PilotAggregate | null>(null);
+  const [latestAt, setLatestAt] = useState("");
+  const [message, setMessage] = useState("");
+  const [busy, setBusy] = useState(false);
+  useEffect(() => {
+    fetch("/api/pilot-feedback").then(async (response) => {
+      const result = await response.json() as { latest?: typeof form & { submittedAt: string }; aggregate?: PilotAggregate; error?: string };
+      if (!response.ok) throw new Error(result.error || "파일럿 결과를 불러오지 못했습니다.");
+      if (result.latest) {
+        setForm(({ ...result.latest, feedback: result.latest!.feedback ?? "" }));
+        setLatestAt(result.latest.submittedAt);
+      }
+      setAggregate(result.aggregate ?? null);
+    }).catch((error: Error) => setMessage(error.message));
+  }, []);
+  const update = <K extends keyof typeof form>(key: K, value: (typeof form)[K]) => setForm((current) => ({ ...current, [key]: value }));
+  const submit = async (event: React.FormEvent) => {
+    event.preventDefault();
+    setBusy(true);
+    setMessage("");
+    try {
+      const response = await fetch("/api/pilot-feedback", {
+        method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(form),
+      });
+      const result = await response.json() as { aggregate?: PilotAggregate; error?: string };
+      if (!response.ok) throw new Error(result.error || "파일럿 결과를 저장하지 못했습니다.");
+      setAggregate(result.aggregate ?? null);
+      setLatestAt(new Date().toISOString());
+      setMessage("파일럿 응답을 저장했습니다. 학생 이름이나 작성 내용은 수집하지 않습니다.");
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : "파일럿 결과를 저장하지 못했습니다.");
+    } finally {
+      setBusy(false);
+    }
+  };
+  const metrics = aggregate ? [
+    { label: "작성 시간 단축", value: `${aggregate.timeReduction}%`, target: "목표 50% 이상", pass: aggregate.targets.timeReduction },
+    { label: "수정 후 사용 가능", value: `${aggregate.usablePercent}%`, target: "목표 80% 이상", pass: aggregate.targets.usablePercent },
+    { label: "교사 만족도", value: `${aggregate.satisfaction} / 5`, target: "목표 4점 이상", pass: aggregate.targets.satisfaction },
+    { label: "재사용 의향", value: `${aggregate.reusePercent}%`, target: "목표 70% 이상", pass: aggregate.targets.reusePercent },
+  ] : [];
+  return <section>
+    <div className="page-heading"><div><p className="eyebrow">TEACHER PILOT</p><h1>교사 파일럿 측정</h1><p>실제 사용 경험을 PRD 성공 지표와 비교합니다. 학생 정보와 생성 문장은 수집하지 않습니다.</p></div></div>
+    {message && <p className="student-message">{message}</p>}
+    <div className="pilot-layout">
+      <form className="pilot-form" onSubmit={(event) => void submit(event)}>
+        <div className="section-heading"><div><p className="eyebrow">MY RESPONSE</p><h2>이번 학급 사용 결과</h2></div>{latestAt && <small>마지막 제출 {new Date(latestAt).toLocaleString("ko-KR")}</small>}</div>
+        <div className="pilot-fields">
+          <label><span>기존 방식 예상 시간(분)</span><input type="number" min="1" max="3000" value={form.beforeMinutes} onChange={(event) => update("beforeMinutes", Number(event.target.value))} required /></label>
+          <label><span>기록샘 실제 소요 시간(분)</span><input type="number" min="1" max="3000" value={form.actualMinutes} onChange={(event) => update("actualMinutes", Number(event.target.value))} required /></label>
+          <label><span>수정 후 사용 가능 문장 비율(%)</span><input type="number" min="0" max="100" value={form.usablePercent} onChange={(event) => update("usablePercent", Number(event.target.value))} required /></label>
+          <label><span>전반적 만족도</span><select value={form.satisfaction} onChange={(event) => update("satisfaction", Number(event.target.value))}>{[1, 2, 3, 4, 5].map((score) => <option key={score} value={score}>{score}점</option>)}</select></label>
+        </div>
+        <label className="pilot-reuse"><input type="checkbox" checked={form.reuseIntent} onChange={(event) => update("reuseIntent", event.target.checked)} /><span>다음 학기에도 기록샘을 사용할 의향이 있습니다.</span></label>
+        <label><span>개선 의견(선택)</span><textarea maxLength={2000} value={form.feedback} onChange={(event) => update("feedback", event.target.value)} placeholder="시간이 오래 걸린 단계, 수정이 필요했던 표현, 원하는 기능 등을 적어 주세요." /></label>
+        <button disabled={busy}>{busy ? "저장 중…" : "파일럿 응답 저장"}</button>
+      </form>
+      <section className="pilot-results">
+        <div className="section-heading"><div><p className="eyebrow">SUCCESS METRICS</p><h2>누적 성공 지표</h2></div></div>
+        {aggregate?.responses ? <><p>교사 {aggregate.participants}명 · 응답 {aggregate.responses}건</p><div className="pilot-metrics">{metrics.map((metric) => <article className={metric.pass ? "pass" : "pending"} key={metric.label}><span>{metric.label}</span><strong>{metric.value}</strong><small>{metric.pass ? "목표 달성" : metric.target}</small></article>)}</div></> : <p className="pilot-empty">아직 실제 파일럿 응답이 없습니다. 첫 응답이 제출되면 목표 달성 여부를 계산합니다.</p>}
+      </section>
+    </div>
+  </section>;
+}
+
 function PrivacySettings() {
   const [summary, setSummary] = useState<PrivacySummary | null>(null);
   const [classConfirmation, setClassConfirmation] = useState("");
@@ -1785,11 +1858,11 @@ export default function Home() {
         <button className="brand" onClick={() => setView("dashboard")}><span>기록</span>샘<i>교사의 기록을 더 가치 있게</i></button>
         <nav>{navItems.map((item) => <button className={view === item.id ? "active" : ""} key={item.id} onClick={() => setView(item.id)}><span>{item.icon}</span>{item.label}</button>)}</nav>
         <div className="nav-divider" />
-        <nav><button className={view === "export" ? "active" : ""} onClick={() => setView("export")}><span>⇧</span>결과 내보내기</button><button className={view === "settings" ? "active" : ""} onClick={() => setView("settings")}><span>⚙</span>개인정보·설정</button></nav>
+        <nav><button className={view === "export" ? "active" : ""} onClick={() => setView("export")}><span>⇧</span>결과 내보내기</button><button className={view === "pilot" ? "active" : ""} onClick={() => setView("pilot")}><span>◈</span>교사 파일럿</button><button className={view === "settings" ? "active" : ""} onClick={() => setView("settings")}><span>⚙</span>개인정보·설정</button></nav>
         <div className="sidebar-bottom"><div className="storage"><span>이번 달 AI 생성</span><strong>{aiUsage.monthly} / {aiUsage.limit}</strong><div><i style={{ width: `${Math.min(100, aiUsage.limit ? (aiUsage.monthly / aiUsage.limit) * 100 : 0)}%` }} /></div></div><div className="profile"><span className="avatar">{currentUser.slice(0, 1)}</span><span><b>{currentUser}</b><small>{classroom?.schoolName ?? "학교 정보 확인 중"}</small></span><form action="/api/auth/logout" method="post"><button type="submit">로그아웃</button></form></div></div>
       </aside>
       <main>
-        <header className="mobile-header"><button className="brand" onClick={() => setView("dashboard")}><span>기록</span>샘</button><select value={view} onChange={(e) => setView(e.target.value as View)}>{navItems.map((item) => <option value={item.id} key={item.id}>{item.label}</option>)}<option value="export">결과 내보내기</option><option value="settings">개인정보·설정</option></select></header>
+        <header className="mobile-header"><button className="brand" onClick={() => setView("dashboard")}><span>기록</span>샘</button><select value={view} onChange={(e) => setView(e.target.value as View)}>{navItems.map((item) => <option value={item.id} key={item.id}>{item.label}</option>)}<option value="export">결과 내보내기</option><option value="pilot">교사 파일럿</option><option value="settings">개인정보·설정</option></select></header>
         <div className="content">
           {view === "dashboard" && <Dashboard move={setView} teacherName={currentUser} classroom={classroom} studentCount={roster.length} completedLevels={completedLevels} totalLevels={totalLevels} commentCount={generatedCommentCount} expectedComments={roster.length * new Set(plan.map((item) => item.subject)).size} behaviorCount={generatedBehaviorCount} />}
           {view === "classes" && <ClassroomManager current={classroom} />}
@@ -1799,6 +1872,7 @@ export default function Home() {
           {view === "comments" && <Comments assessmentDataBySubject={assessmentDataBySubject} plan={plan} roster={roster} />}
           {view === "behavior" && <Behavior roster={roster} />}
           {view === "export" && <ExportResults roster={roster} plan={plan} classroom={classroom} />}
+          {view === "pilot" && <PilotFeedback />}
           {view === "settings" && <PrivacySettings />}
         </div>
       </main>

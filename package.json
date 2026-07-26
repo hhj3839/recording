@@ -25,7 +25,8 @@
     "db:migrate-student-reordering": "node scripts/migrate-student-reordering.mjs",
     "db:migrate-plan-versions": "node scripts/migrate-assessment-plan-versions.mjs",
     "db:migrate-level-statuses": "node scripts/migrate-assessment-level-statuses.mjs",
-    "db:migrate-comment-evidence": "node scripts/migrate-comment-evidence-validation.mjs"
+    "db:migrate-comment-evidence": "node scripts/migrate-comment-evidence-validation.mjs",
+    "db:migrate-pilot-feedback": "node scripts/migrate-pilot-feedback.mjs"
   },
   "dependencies": {
     "@supabase/ssr": "^0.12.3",

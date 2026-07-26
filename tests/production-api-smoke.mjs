@@ -51,7 +51,7 @@ test("production API authentication and read-only data contracts", async () => {
     assert.equal(response.status, 200, `${route} should return 200`);
     return response.json();
   };
-  const [classData, plans, classrooms, commentJob, behaviorJob, privacy, usage] = await Promise.all([
+  const [classData, plans, classrooms, commentJob, behaviorJob, privacy, usage, pilot] = await Promise.all([
     getJson("/api/class-data"),
     getJson("/api/assessment-plan"),
     getJson("/api/classrooms"),
@@ -59,6 +59,7 @@ test("production API authentication and read-only data contracts", async () => {
     getJson("/api/behavior-jobs"),
     getJson("/api/privacy-data"),
     getJson("/api/usage"),
+    getJson("/api/pilot-feedback"),
   ]);
   assert.equal(Array.isArray(classData.students), true);
   assert.equal(Array.isArray(classData.levels), true);
@@ -68,6 +69,7 @@ test("production API authentication and read-only data contracts", async () => {
   assert.equal("job" in behaviorJob, true);
   assert.equal(typeof privacy.counts.students, "number");
   assert.equal(typeof usage.monthly, "number");
+  assert.equal(typeof pilot.aggregate.responses, "number");
 
   const protectedPump = await fetch(`${baseUrl}/api/comment-jobs/pump`, {
     method: "POST", headers: { "Content-Type": "application/json" }, body: "{}",

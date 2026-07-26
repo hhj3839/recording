@@ -45,6 +45,7 @@ const protectedReads = [
   "/api/comment-jobs",
   "/api/behavior-jobs",
   "/api/privacy-data",
+  "/api/pilot-feedback",
   "/api/usage",
 ];
 
