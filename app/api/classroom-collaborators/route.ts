@@ -43,14 +43,20 @@ export async function GET() {
 export async function POST(request: Request) {
   try {
     const { user, classId, organization } = await ownerContext();
-    const body = await request.json().catch(() => ({}));
+    const body = await request.json().catch(() => ({})) as {
+      memberId?: unknown;
+      role?: unknown;
+      canManageStudents?: unknown;
+      subjects?: unknown;
+    };
     const memberId = Number(body.memberId);
     const role = body.role === "homeroom" ? "homeroom" : "subject";
     const canManageStudents = role === "homeroom" && body.canManageStudents === true;
     const plans = await selectRows<{ subject: string }>("assessment_plans", { owner_id: eq(user.id), class_id: eq(classId) });
     const allowedSubjects = new Set(plans.map((item) => item.subject));
-    const subjects = role === "subject" && Array.isArray(body.subjects)
-      ? [...new Set(body.subjects.filter((item): item is string => typeof item === "string" && allowedSubjects.has(item)))].slice(0, 20)
+    const requestedSubjects: unknown[] = Array.isArray(body.subjects) ? body.subjects : [];
+    const subjects = role === "subject"
+      ? [...new Set(requestedSubjects.filter((item): item is string => typeof item === "string" && allowedSubjects.has(item)))].slice(0, 20)
       : [];
     if (role === "subject" && !subjects.length) return Response.json({ error: "교과전담교사의 담당 과목을 한 개 이상 선택해 주세요." }, { status: 400 });
     const member = (await selectRows<SchoolMember>("school_members", {
@@ -70,7 +76,7 @@ export async function POST(request: Request) {
 export async function DELETE(request: Request) {
   try {
     const { classId, organization } = await ownerContext();
-    const body = await request.json().catch(() => ({}));
+    const body = await request.json().catch(() => ({})) as { id?: unknown };
     const id = Number(body.id);
     if (!Number.isInteger(id)) return Response.json({ error: "해제할 협업 권한을 확인해 주세요." }, { status: 400 });
     await supabaseRequest("classroom_collaborators", {
