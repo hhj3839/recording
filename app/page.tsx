@@ -301,7 +301,13 @@ function StudentManager({ roster, onAdded, onChanged, onDeleted, onImported }: {
       });
       const result = await response.json() as { students?: Array<{ id: number; number: number; name: string }>; error?: string };
       if (!response.ok || !result.students) throw new Error(result.error ?? "학생 명단을 저장하지 못했습니다.");
-      const merged = new Map(roster.map((student) => [student.number ?? student.id, student]));
+      const merged = new Map<number, { id: number; number: number; name: string }>(
+        roster.map((student) => [student.number ?? student.id, {
+          id: student.id,
+          number: student.number ?? student.id,
+          name: student.name,
+        }]),
+      );
       result.students.forEach((student) => merged.set(student.number, student));
       onImported([...merged.values()].sort((a, b) => (a.number ?? a.id) - (b.number ?? b.id)));
       setRosterText("");
