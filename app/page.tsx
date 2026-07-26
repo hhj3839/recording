@@ -255,9 +255,8 @@ function ClassroomManager({ current }: { current: ClassroomInfo | null }) {
   </section>;
 }
 
-function StudentManager({ roster, currentClassId, onAdded, onChanged, onDeleted, onImported }: {
+function StudentManager({ roster, onAdded, onChanged, onDeleted, onImported }: {
   roster: AssessmentStudent[];
-  currentClassId?: number;
   onAdded: (student: { id: number; number: number; name: string }) => void;
   onChanged: (student: { id: number; number: number; name: string }) => void;
   onDeleted: (id: number) => void;
@@ -271,8 +270,6 @@ function StudentManager({ roster, currentClassId, onAdded, onChanged, onDeleted,
   const [studentTab, setStudentTab] = useState<"active" | "inactive">("active");
   const [orderedIds, setOrderedIds] = useState<number[]>([]);
   const [orderDirty, setOrderDirty] = useState(false);
-  const [classrooms, setClassrooms] = useState<ClassroomInfo[]>([]);
-  const [copyTargetId, setCopyTargetId] = useState("");
 
   useEffect(() => {
     queueMicrotask(() => {
@@ -288,15 +285,6 @@ function StudentManager({ roster, currentClassId, onAdded, onChanged, onDeleted,
       if (response.ok) setInactiveStudents(result.students ?? []);
     }).catch(() => undefined);
   }, [roster]);
-  useEffect(() => {
-    fetch("/api/classrooms").then(async (response) => {
-      const result = await response.json() as { classrooms?: ClassroomInfo[] };
-      if (!response.ok) return;
-      const targets = (result.classrooms ?? []).filter((item) => item.id !== currentClassId);
-      setClassrooms(targets);
-      setCopyTargetId((current) => current || String(targets[0]?.id ?? ""));
-    }).catch(() => undefined);
-  }, [currentClassId]);
 
   async function addStudentsFromText(event: React.FormEvent) {
     event.preventDefault();
@@ -456,26 +444,6 @@ function StudentManager({ roster, currentClassId, onAdded, onChanged, onDeleted,
       setBusy(false);
     }
   }
-  async function copyRoster() {
-    const target = classrooms.find((item) => String(item.id) === copyTargetId);
-    if (!target) return setMessage("명단을 복사할 대상 학급을 선택해 주세요.");
-    if (!window.confirm(`현재 재학생 ${roster.length}명의 번호와 이름을 ${target.schoolYear}학년도 ${target.grade}학년 ${target.classNumber}반으로 복사할까요?\n\n평가수준·평어·행동특성은 복사하지 않습니다.`)) return;
-    setBusy(true);
-    setMessage("");
-    try {
-      const response = await fetch("/api/students/copy", {
-        method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ targetClassId: Number(copyTargetId) }),
-      });
-      const result = await response.json() as { copied?: number; skipped?: number; error?: string };
-      if (!response.ok) throw new Error(result.error || "학생 명단을 복사하지 못했습니다.");
-      setMessage(`${target.grade}학년 ${target.classNumber}반에 ${result.copied ?? 0}명을 복사했습니다.${result.skipped ? ` 번호 또는 이름이 겹친 ${result.skipped}명은 제외했습니다.` : ""}`);
-    } catch (error) {
-      setMessage(error instanceof Error ? error.message : "학생 명단을 복사하지 못했습니다.");
-    } finally {
-      setBusy(false);
-    }
-  }
-
   return <section>
     <div className="page-heading"><div><p className="eyebrow">CLASS ROSTER</p><h1>학생 관리</h1><p>번호와 이름만 등록하며, 업로드한 파일은 브라우저에서 읽은 뒤 현재 학급에 저장됩니다.</p></div></div>
     <div className="student-tools">
@@ -488,7 +456,6 @@ function StudentManager({ roster, currentClassId, onAdded, onChanged, onDeleted,
         <label className="file-upload-button">{busy ? "업로드 중…" : "Excel·CSV 명단 업로드"}<input type="file" accept=".xlsx,.xls,.csv" onChange={(event) => void uploadRoster(event)} disabled={busy} /></label>
       </div>
     </div>
-    <div className="roster-copy-tools"><div><strong>다른 학급으로 명단 복사</strong><span>번호와 이름만 복사하며 학생 기록은 이동하지 않습니다.</span></div><select value={copyTargetId} onChange={(event) => setCopyTargetId(event.target.value)} disabled={busy || !classrooms.length}><option value="">{classrooms.length ? "대상 학급 선택" : "복사할 다른 학급이 없습니다"}</option>{classrooms.map((item) => <option key={item.id} value={item.id}>{item.schoolYear}학년도 {item.semester}학기 · {item.grade}학년 {item.classNumber}반</option>)}</select><button disabled={busy || !copyTargetId || !roster.length} onClick={() => void copyRoster()}>명단 복사</button></div>
     {message && <p className="student-message" role="status">{message}</p>}
     <div className="student-status-tabs">
       <div><button className={studentTab === "active" ? "active" : ""} onClick={() => setStudentTab("active")}>재학생 {roster.length}</button>
@@ -2003,7 +1970,7 @@ export default function Home() {
         <div className="content">
           {view === "dashboard" && <Dashboard move={setView} teacherName={currentUser} classroom={classroom} studentCount={roster.length} completedLevels={completedLevels} totalLevels={totalLevels} commentCount={generatedCommentCount} expectedComments={roster.length * new Set(plan.map((item) => item.subject)).size} behaviorCount={generatedBehaviorCount} />}
           {view === "classes" && <ClassroomManager current={classroom} />}
-          {view === "students" && <StudentManager roster={roster} currentClassId={classroom?.id} onAdded={mergeStudentIntoState} onChanged={mergeStudentIntoState} onDeleted={(id) => void deleteStudent(id)} onImported={mergeImportedStudents} />}
+          {view === "students" && <StudentManager roster={roster} onAdded={mergeStudentIntoState} onChanged={mergeStudentIntoState} onDeleted={(id) => void deleteStudent(id)} onImported={mergeImportedStudents} />}
           {view === "plans" && <PlanManager plan={plan} onChanged={applyPlanChange} current={classroom} />}
           {view === "assessments" && <Assessments data={assessmentDataBySubject[activeSubject] ?? []} setData={(updater) => setAssessmentDataBySubject((current) => ({ ...current, [activeSubject]: typeof updater === "function" ? updater(current[activeSubject] ?? []) : updater }))} plan={plan} activeSubject={activeSubject} setActiveSubject={setActiveSubject} onDeleteStudent={(id) => void deleteStudent(id)} onSave={saveAssessmentLevels} />}
           {view === "comments" && <Comments assessmentDataBySubject={assessmentDataBySubject} plan={plan} roster={roster} />}

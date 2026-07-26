@@ -87,7 +87,6 @@ test("foreign identifiers cannot mutate or reveal classroom data", async () => {
   const attempts = [
     ["/api/students", "PATCH", { id: foreignId, number: 1, name: "격리검증" }, [404]],
     ["/api/students/status", "POST", { id: foreignId }, [404]],
-    ["/api/students/copy", "POST", { targetClassId: foreignId }, [403]],
     ["/api/assessment-levels", "PUT", { levels: [{ studentId: foreignId, subject: "국어", assessmentIndex: 0, level: "상" }] }, [403]],
     ["/api/generated-comments", "PUT", { studentId: foreignId, subject: "국어", comment: "학습 활동에 성실하게 참여함.", confirmed: false }, [403]],
     ["/api/student-behaviors", "PUT", { studentId: foreignId, characteristic: "검증", behavior: validBehavior, confirmed: false }, [403]],
