@@ -4,7 +4,7 @@ import { getAiUsage, MONTHLY_AI_LIMIT, recordAiUsage } from "../../../ai-usage";
 import { selectMostDiverseComments } from "../../../comment-diversity";
 import { CommentEvidence, GeneratedComment, generateCommentBatch, saveGeneratedComments, signCommentJob, verifyCommentJob } from "../../../comment-generation";
 
-export const maxDuration = 60;
+export const maxDuration = 300;
 const MAX_GENERATION_ATTEMPTS = 3;
 
 type JobRow = {

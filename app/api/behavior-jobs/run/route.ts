@@ -4,7 +4,7 @@ import { getAiUsage, MONTHLY_AI_LIMIT, recordAiUsage } from "../../../ai-usage";
 import { BehaviorInput, GeneratedBehavior, generateBehaviorBatch, saveGeneratedBehaviors } from "../../../behavior-generation";
 import { signCommentJob, verifyCommentJob } from "../../../comment-generation";
 
-export const maxDuration = 60;
+export const maxDuration = 300;
 const MAX_GENERATION_ATTEMPTS = 3;
 type JobRow = {
   id: string; owner_id: string; owner_email: string; class_id: number; status: string; batches: BehaviorInput[][];
