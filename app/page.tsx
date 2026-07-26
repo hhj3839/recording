@@ -1420,7 +1420,7 @@ function Comments({ assessmentDataBySubject, plan, roster }: { assessmentDataByS
 }
 
 function Behavior({ roster }: { roster: AssessmentStudent[] }) {
-  type BehaviorJob = { id: string; status: string; totalItems: number; completedItems: number; failedItems: number; completedAt?: string | null };
+  type BehaviorJob = { id: string; status: string; totalItems: number; completedItems: number; failedItems: number; error?: string; completedAt?: string | null };
   type BehaviorRecord = { characteristic: string; behavior: string; confirmed: boolean; evidenceStatus: "unchecked" | "pass" | "review"; evidenceIssues: string[] };
   const emptyBehaviorRecord = (): BehaviorRecord => ({ characteristic: "", behavior: "", confirmed: false, evidenceStatus: "unchecked", evidenceIssues: [] });
   const [records, setRecords] = useState<Record<number, BehaviorRecord>>({});
@@ -1474,7 +1474,7 @@ function Behavior({ roster }: { roster: AssessmentStudent[] }) {
           setLoading(false);
           setGenerationProgress("");
           await loadBehaviors();
-          if (result.job.failedItems) setError(`${result.job.failedItems}명의 행동특성이 생성되지 않았습니다. 다시 실행해 재시도해 주세요.`);
+          if (result.job.failedItems) setError(result.job.error || `${result.job.failedItems}명의 행동특성이 생성되지 않았습니다. 다시 실행해 재시도해 주세요.`);
           else setError("");
           setLastGeneratedAt(result.job.completedAt || new Date().toISOString());
         }
