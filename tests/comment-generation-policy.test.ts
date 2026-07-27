@@ -6,19 +6,18 @@ import { batchCommentsBySubject, COMMENT_BATCH_SIZE } from "../app/comment-batch
 import { batchBehaviors, BEHAVIOR_BATCH_SIZE } from "../app/behavior-batching.ts";
 
 test("uses GPT-5.4 mini first and Terra only for the final retry", () => {
-  assert.equal(generationModel(0, 3), "gpt-5.4-mini");
-  assert.equal(generationModel(1, 3), "gpt-5.4-mini");
-  assert.equal(generationModel(2, 3), "gpt-5.6-terra");
+  assert.equal(generationModel(0, 2), "gpt-5.4-mini");
+  assert.equal(generationModel(1, 2), "gpt-5.6-terra");
 });
 
-test("batches at most three students without mixing subjects", () => {
+test("batches at most five students without mixing subjects", () => {
   const inputs = [
     ...Array.from({ length: 12 }, (_, index) => ({ subject: "국어", studentId: index + 1 })),
     ...Array.from({ length: 6 }, (_, index) => ({ subject: "수학", studentId: index + 1 })),
   ];
   const batches = batchCommentsBySubject(inputs);
-  assert.equal(COMMENT_BATCH_SIZE, 3);
-  assert.deepEqual(batches.map((batch) => batch.length), [3, 3, 3, 3, 3, 3]);
+  assert.equal(COMMENT_BATCH_SIZE, 5);
+  assert.deepEqual(batches.map((batch) => batch.length), [5, 5, 2, 5, 1]);
   assert.equal(batches.every((batch) => new Set(batch.map((item) => item.subject)).size === 1), true);
 });
 

@@ -6,7 +6,7 @@ import { CommentEvidence, GeneratedComment, generateCommentBatch, saveGeneratedC
 import { generationModel } from "../../../ai-model-policy";
 
 export const maxDuration = 300;
-const MAX_GENERATION_ATTEMPTS = 3;
+const MAX_GENERATION_ATTEMPTS = 2;
 
 type JobRow = {
   id: string;
@@ -90,7 +90,9 @@ export async function POST(request: Request) {
       errorMessage = `월 AI 요청 한도 ${MONTHLY_AI_LIMIT}회를 사용하여 남은 항목의 자동 재시도를 중단했습니다.`;
       break;
     }
-    const groups = attempt === 0 ? [pending] : pending.map((item) => [item]);
+    // Keep failed students together on retry. Splitting them into one request per
+    // student made a 25 × 9 run exceed the monthly quota before it could finish.
+    const groups = [pending];
     const generatedThisAttempt: GeneratedComment[] = [];
     for (const group of groups) {
       const groupUsage = await getAiUsage(job.owner_id);
