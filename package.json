@@ -12,6 +12,7 @@
     "test": "vinext build && node --test tests/rendered-html.test.mjs && node --experimental-strip-types --test tests/record-validation.test.ts tests/comment-generation-policy.test.ts",
     "test:smoke": "node --test tests/production-api-smoke.mjs tests/production-security-smoke.mjs",
     "test:security": "node --test tests/production-security-smoke.mjs",
+    "test:public-smoke": "node --test tests/public-production-smoke.mjs",
     "test:e2e": "playwright test",
     "test:load-comments": "node scripts/load-test-comments.mjs",
     "test:load-comments:preflight": "node scripts/load-test-comments.mjs preflight",
