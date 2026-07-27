@@ -27,7 +27,7 @@ export function validateGeneratedComment(comment: string, expectedSentenceCount:
     .filter(Boolean);
   const lengths = sentences.map((sentence) => Array.from(sentence).length);
   const forbidden = commentForbiddenExpressions.filter((expression) => normalized.includes(expression));
-  const awkwardEndings = sentences.filter((sentence) => /(?:함|하며|하고|감|며|고)함\.$/.test(sentence));
+  const awkwardEndings = sentences.filter((sentence) => /(?:고|며|아|어|감|함)함\.$/.test(sentence));
   return {
     sentences,
     lengths,

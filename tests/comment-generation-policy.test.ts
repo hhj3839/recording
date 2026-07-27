@@ -54,8 +54,10 @@ test("rejects missing areas, invalid length, endings, and forbidden expressions"
 });
 
 test("rejects mechanically duplicated nominal endings", () => {
-  const awkward = "수업에서 작품의 중심 내용을 정확하게 파악하고 중요한 근거를 찾아 발표 활동에 꾸준히 참여함함.";
-  const result = validateGeneratedComment(awkward, 1);
-  assert.equal(result.naturalEndingsOk, false);
-  assert.equal(result.valid, false);
+  for (const ending of ["참여함함.", "표현하고함.", "나타내며함.", "마음을 담아함.", "내용을 익혀 감함."]) {
+    const awkward = `수업에서 작품의 중심 내용을 정확하게 파악하고 중요한 근거를 찾아 발표 활동에 ${ending}`;
+    const result = validateGeneratedComment(awkward, 1);
+    assert.equal(result.naturalEndingsOk, false);
+    assert.equal(result.valid, false);
+  }
 });
