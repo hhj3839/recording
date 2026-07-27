@@ -3,10 +3,12 @@ import { BehaviorVariation } from "./behavior-variation";
 import { archiveBehavior } from "./record-revisions";
 import { validateBehaviorSource, validateRecord } from "./record-validation";
 import { primaryAiModel } from "./ai-model-policy";
+import { AiTokenUsage } from "./ai-usage";
 
 export type BehaviorOptions = { sentenceCount: number; maxBytes: number; emphasis: "balanced" | "strength" | "growth" };
 export type BehaviorInput = { studentId: number; characteristic: string; options?: BehaviorOptions; variation?: BehaviorVariation };
 export type GeneratedBehavior = BehaviorInput & { behavior: string };
+export type BehaviorBatchResult = { behaviors: GeneratedBehavior[]; usage: AiTokenUsage };
 
 function outputText(payload: unknown) {
   if (!payload || typeof payload !== "object") return "";
@@ -60,7 +62,19 @@ export async function generateBehaviorBatch(inputs: BehaviorInput[], avoidBehavi
       : [];
   }) : [];
   if (!behaviors.length) throw new Error("AI 결과가 500~550바이트·음/임 종결·성장·금지어 검수를 통과하지 못했습니다.");
-  return behaviors;
+  const responseUsage = payload && typeof payload === "object"
+    ? (payload as { usage?: { input_tokens?: unknown; output_tokens?: unknown; total_tokens?: unknown; input_tokens_details?: { cached_tokens?: unknown } } }).usage
+    : undefined;
+  return {
+    behaviors,
+    usage: {
+      model,
+      inputTokens: Number(responseUsage?.input_tokens) || 0,
+      cachedInputTokens: Number(responseUsage?.input_tokens_details?.cached_tokens) || 0,
+      outputTokens: Number(responseUsage?.output_tokens) || 0,
+      totalTokens: Number(responseUsage?.total_tokens) || 0,
+    },
+  } satisfies BehaviorBatchResult;
 }
 
 export async function saveGeneratedBehaviors(input: {

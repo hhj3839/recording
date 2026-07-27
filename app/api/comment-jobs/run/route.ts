@@ -108,16 +108,21 @@ export async function POST(request: Request) {
           attempt > 0,
           generationModel(attempt, MAX_GENERATION_ATTEMPTS),
         );
-        generatedThisAttempt.push(...generated);
+        generatedThisAttempt.push(...generated.comments);
+        await recordAiUsage({
+          ownerId: job.owner_id, ownerEmail: job.owner_email, classId: Number(job.class_id),
+          feature: `all-comments-attempt-${attempt + 1}`,
+          ...generated.usage,
+        });
       } catch (error) {
         errorMessage = error instanceof Error ? error.message : "AI 생성 오류";
         nonRetryableFailure = errorMessage.includes("(insufficient_quota)")
           || errorMessage.includes("(invalid_api_key)")
           || errorMessage.includes("(model_not_found)");
-      } finally {
         await recordAiUsage({
           ownerId: job.owner_id, ownerEmail: job.owner_email, classId: Number(job.class_id),
           feature: `all-comments-attempt-${attempt + 1}`,
+          model: generationModel(attempt, MAX_GENERATION_ATTEMPTS),
         });
       }
       if (nonRetryableFailure) break;

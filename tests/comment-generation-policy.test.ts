@@ -4,10 +4,22 @@ import { hasCompleteEvidenceCoverage, validateGeneratedComment } from "../app/co
 import { generationModel } from "../app/ai-model-policy.ts";
 import { batchCommentsBySubject, COMMENT_BATCH_SIZE } from "../app/comment-batching.ts";
 import { batchBehaviors, BEHAVIOR_BATCH_SIZE } from "../app/behavior-batching.ts";
+import { estimateAiCostUsd } from "../app/ai-pricing.ts";
 
-test("uses GPT-5.4 mini first and Terra only for the final retry", () => {
+test("uses the same low-cost model for the initial request and retry", () => {
   assert.equal(generationModel(0, 2), "gpt-5.4-mini");
-  assert.equal(generationModel(1, 2), "gpt-5.6-terra");
+  assert.equal(generationModel(1, 2), "gpt-5.4-mini");
+});
+
+test("estimates token cost with cached input pricing", () => {
+  const cost = estimateAiCostUsd({
+    model: "gpt-5.4-mini",
+    inputTokens: 1_000_000,
+    cachedInputTokens: 500_000,
+    outputTokens: 100_000,
+  });
+  assert.equal(cost, 0.8625);
+  assert.equal(estimateAiCostUsd({ model: "unknown", inputTokens: 100 }), null);
 });
 
 test("batches at most five students without mixing subjects", () => {

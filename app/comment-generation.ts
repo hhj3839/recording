@@ -4,9 +4,11 @@ import { hasCompleteEvidenceCoverage, validateGeneratedComment } from "./comment
 import { CommentVariation } from "./comment-variation";
 import { archiveComment } from "./record-revisions";
 import { primaryAiModel } from "./ai-model-policy";
+import { AiTokenUsage } from "./ai-usage";
 
 export type CommentEvidence = { studentId: number; subject: string; items: string[]; variation?: CommentVariation };
 export type GeneratedComment = { studentId: number; subject: string; comment: string; candidates: string[] };
+export type CommentBatchResult = { comments: GeneratedComment[]; usage: AiTokenUsage };
 const COMMENT_ENDINGS = [
   "참여함.", "표현함.", "설명함.", "정리함.", "수행함.", "실천함.",
   "발표함.", "활용함.", "작성함.", "해결함.", "적용함.", "연주함.",
@@ -208,7 +210,19 @@ export async function generateCommentBatch(evidence: CommentEvidence[], avoidCom
     const detail = diagnostics.slice(0, 3).join(" | ");
     throw new Error(`AI 결과가 영역별 1문장·50~60자·함 종결 검수를 통과하지 못했습니다.${detail ? ` 진단: ${detail}` : ""}`);
   }
-  return comments;
+  const responseUsage = payload && typeof payload === "object"
+    ? (payload as { usage?: { input_tokens?: unknown; output_tokens?: unknown; total_tokens?: unknown; input_tokens_details?: { cached_tokens?: unknown } } }).usage
+    : undefined;
+  return {
+    comments,
+    usage: {
+      model,
+      inputTokens: Number(responseUsage?.input_tokens) || 0,
+      cachedInputTokens: Number(responseUsage?.input_tokens_details?.cached_tokens) || 0,
+      outputTokens: Number(responseUsage?.output_tokens) || 0,
+      totalTokens: Number(responseUsage?.total_tokens) || 0,
+    },
+  } satisfies CommentBatchResult;
 }
 
 export async function saveGeneratedComments(input: {

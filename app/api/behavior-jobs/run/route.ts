@@ -6,7 +6,7 @@ import { signCommentJob, verifyCommentJob } from "../../../comment-generation";
 import { generationModel } from "../../../ai-model-policy";
 
 export const maxDuration = 300;
-const MAX_GENERATION_ATTEMPTS = 3;
+const MAX_GENERATION_ATTEMPTS = 2;
 type JobRow = {
   id: string; owner_id: string; owner_email: string; class_id: number; status: string; batches: BehaviorInput[][];
   current_batch: number; total_batches: number; completed_items: number; failed_items: number; error_message: string; started_at: string | null;
@@ -55,15 +55,21 @@ export async function POST(request: Request) {
     }
     try {
       const generated = await generateBehaviorBatch(pending, avoidBehaviors, generationModel(attempt, MAX_GENERATION_ATTEMPTS));
-      behaviors = [...behaviors, ...generated];
-      const generatedIds = new Set(generated.map((item) => item.studentId));
+      behaviors = [...behaviors, ...generated.behaviors];
+      const generatedIds = new Set(generated.behaviors.map((item) => item.studentId));
       pending = pending.filter((item) => !generatedIds.has(item.studentId));
-    }
-    catch (error) { errorMessage = error instanceof Error ? error.message : "AI 생성 오류"; }
-    finally {
       await recordAiUsage({
         ownerId: job.owner_id, ownerEmail: job.owner_email, classId: Number(job.class_id),
         feature: `all-behaviors-attempt-${attempt + 1}`,
+        ...generated.usage,
+      });
+    }
+    catch (error) {
+      errorMessage = error instanceof Error ? error.message : "AI 생성 오류";
+      await recordAiUsage({
+        ownerId: job.owner_id, ownerEmail: job.owner_email, classId: Number(job.class_id),
+        feature: `all-behaviors-attempt-${attempt + 1}`,
+        model: generationModel(attempt, MAX_GENERATION_ATTEMPTS),
       });
     }
   }

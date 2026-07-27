@@ -115,6 +115,12 @@ create table if not exists ai_usage_events (
   owner_email text not null,
   class_id bigint not null,
   feature text not null,
+  model text,
+  input_tokens bigint not null default 0,
+  cached_input_tokens bigint not null default 0,
+  output_tokens bigint not null default 0,
+  total_tokens bigint not null default 0,
+  estimated_cost_usd numeric(12, 6),
   created_at timestamptz not null default now()
 );
 
