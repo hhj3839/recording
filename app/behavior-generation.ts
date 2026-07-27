@@ -76,7 +76,7 @@ export async function generateBehaviorBatch(inputs: BehaviorInput[], avoidBehavi
       behavior,
       issues,
       bytes: validation.bytes,
-      recoverable: validation.bytes >= 470 && validation.bytes <= 580
+      recoverable: validation.bytes >= 350 && validation.bytes <= 700
         && validation.endingsOk && validation.growthIncluded
         && !validation.forbidden.length && !validation.repeated.length && validation.spellingOk,
     });
