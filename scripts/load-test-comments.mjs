@@ -138,6 +138,8 @@ if (mode === "start" || mode === "subject" || mode === "sample" || mode === "pre
     savedComments: currentComments.length, elapsedSeconds, validComments,
     strictSuccessRate: currentComments.length ? Math.round(validComments / currentComments.length * 10000) / 100 : 0,
     monthlyUsage: usageData.monthly, monthlyLimit: usageData.limit,
+    tokens: usageData.tokens,
+    estimatedCostUsd: usageData.estimatedCostUsd,
     invalidSamples: validations.filter((item) => !item.valid).slice(0, 10),
     error: job.error || "",
     ...(mode === "quality" ? {
