@@ -13,6 +13,7 @@
     "test:smoke": "node --test tests/production-api-smoke.mjs tests/production-security-smoke.mjs",
     "test:security": "node --test tests/production-security-smoke.mjs",
     "test:public-smoke": "node --test tests/public-production-smoke.mjs",
+    "test:supply-chain": "node scripts/check-lockfile-safety.mjs",
     "test:e2e": "playwright test",
     "test:load-comments": "node scripts/load-test-comments.mjs",
     "test:load-comments:preflight": "node scripts/load-test-comments.mjs preflight",

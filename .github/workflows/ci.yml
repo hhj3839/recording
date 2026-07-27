@@ -37,5 +37,8 @@ jobs:
       - name: Lint
         run: pnpm lint
 
+      - name: Check dependency sources and integrity
+        run: pnpm test:supply-chain
+
       - name: Test and build
         run: pnpm test
