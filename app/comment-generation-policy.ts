@@ -98,6 +98,28 @@ export function evidenceGroundingWarnings(comment: string, evidence: string) {
     .map(({ label }) => `평가 근거에 없는 ‘${label}’ 표현 확인 필요`);
 }
 
+export function isCommentLengthReviewIssue(issue: string) {
+  return /^권장 50~60자 범위를 벗어난 \d+자 문장$/.test(issue.trim());
+}
+
+export function commentAreaIssuesForDisplay(status: string, issues: string[]) {
+  const visible = issues.filter((issue) => !isCommentLengthReviewIssue(issue));
+  return status === "needs_review" || visible.length ? visible : [];
+}
+
+export function replaceSelectedCommentText(
+  currentComment: string,
+  replacement: string,
+  selectionStart: number,
+  selectionEnd: number,
+) {
+  if (!Number.isInteger(selectionStart) || !Number.isInteger(selectionEnd)
+    || selectionStart < 0 || selectionEnd <= selectionStart || selectionEnd > currentComment.length) {
+    return null;
+  }
+  return `${currentComment.slice(0, selectionStart)}${replacement}${currentComment.slice(selectionEnd)}`;
+}
+
 export function openingRepetitionRate(comments: string[], prefixLength = 12) {
   const prefixes = comments.map((comment) => Array.from(comment.trim()).slice(0, prefixLength).join("")).filter(Boolean);
   if (prefixes.length < 2) return 0;

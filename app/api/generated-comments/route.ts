@@ -38,6 +38,10 @@ export async function PUT(request: Request) {
     const validation = validateRecord(comment);
     const { user, classId } = await getDataScope();
     await requireOwnedStudentIds([studentId], user.id, classId);
+    const existing = (await selectRows<{ comment: string }>("generated_comments", {
+      owner_id: eq(user.id), class_id: eq(classId), student_id: eq(studentId), subject: eq(subject), limit: 1,
+    }))[0];
+    const contentChanged = (existing?.comment ?? "") !== comment;
     if (confirmed) {
       const peers = await selectRows<{ student_id: number; comment: string }>("generated_comments", {
         owner_id: eq(user.id), class_id: eq(classId), subject: eq(subject),
@@ -45,7 +49,13 @@ export async function PUT(request: Request) {
       const issue = confirmationIssue(comment, studentId, peers.map((item) => ({ studentId: Number(item.student_id), content: item.comment })));
       if (issue) return Response.json(issue, { status: issue.status });
     }
-    await archiveComment({ ownerId: user.id, ownerEmail: user.email, classId, studentId, subject, nextContent: comment, source: confirmed ? "confirmation" : "manual-edit" });
+    if (contentChanged) {
+      await archiveComment({ ownerId: user.id, ownerEmail: user.email, classId, studentId, subject, nextContent: comment, source: confirmed ? "confirmation" : "manual-edit" });
+      await supabaseRequest("generated_comment_parts", {
+        method: "DELETE",
+        query: { owner_id: eq(user.id), class_id: eq(classId), student_id: eq(studentId), subject: eq(subject) },
+      });
+    }
     const updatedAt = new Date().toISOString();
     await upsertRows("generated_comments", [{
       student_id: studentId, subject, comment, confirmed, confirmed_at: confirmed ? updatedAt : null, updated_at: updatedAt, owner_email: user.email, owner_id: user.id, class_id: classId,
