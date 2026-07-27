@@ -67,7 +67,8 @@ export function validateGeneratedCommentPart(comment: string) {
 
 const unsupportedAttitudePatterns = [
   "자신 있게", "적극적으로", "자기주도적으로", "모둠원과 협력", "친구와 협력",
-  "끝까지", "성실하게", "꾸준히 참여",
+  "끝까지", "성실하게", "꾸준히 참여", "의미를 파악", "스스로",
+  "주도적으로", "능동적으로", "논리적으로", "효과적으로", "원활하게",
 ];
 
 export function evidenceGroundingWarnings(comment: string, evidence: string) {

@@ -91,6 +91,24 @@ test("warns about unsupported attitude claims without discarding the sentence", 
     ["평가 근거에 없는 ‘적극적으로’ 표현 확인 필요", "평가 근거에 없는 ‘친구와 협력’ 표현 확인 필요"],
   );
   assert.deepEqual(evidenceGroundingWarnings("자료를 적극적으로 분류함.", "자료를 적극적으로 분류할 수 있다."), []);
+  assert.deepEqual(
+    evidenceGroundingWarnings(
+      "글의 의미를 파악하고 스스로 논리적으로 설명함.",
+      "글에서 중요한 내용을 찾아 설명할 수 있다.",
+    ),
+    [
+      "평가 근거에 없는 ‘의미를 파악’ 표현 확인 필요",
+      "평가 근거에 없는 ‘스스로’ 표현 확인 필요",
+      "평가 근거에 없는 ‘논리적으로’ 표현 확인 필요",
+    ],
+  );
+  assert.deepEqual(
+    evidenceGroundingWarnings(
+      "글의 의미를 파악하고 모둠원과 협력하여 설명함.",
+      "글의 의미를 파악하고 모둠원과 협력하여 설명할 수 있다.",
+    ),
+    [],
+  );
 });
 
 test("measures repeated opening phrases across a class", () => {
