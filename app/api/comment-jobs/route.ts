@@ -1,5 +1,5 @@
 import { waitUntil } from "@vercel/functions";
-import { eq, insertRows, selectRows } from "../../../db/supabase";
+import { eq, gte, insertRows, selectRows } from "../../../db/supabase";
 import { getAiUsage, MONTHLY_AI_LIMIT } from "../../ai-usage";
 import { batchCommentsBySubject } from "../../comment-batching";
 import { CommentEvidence, signCommentJob } from "../../comment-generation";
@@ -17,6 +17,7 @@ type JobRow = {
   completed_items: number;
   failed_items: number;
   error_message: string;
+  batches: CommentEvidence[][];
   created_at: string;
   completed_at: string | null;
 };
@@ -32,6 +33,7 @@ const present = (row: JobRow) => ({
   error: row.error_message,
   createdAt: row.created_at,
   completedAt: row.completed_at,
+  subject: row.batches?.[0]?.[0]?.subject ?? "",
 });
 
 function startRunner(request: Request, jobId: string) {
@@ -56,7 +58,17 @@ export async function GET() {
       order: "created_at.desc",
       limit: 1,
     });
-    return Response.json({ job: jobs[0] ? present(jobs[0]) : null });
+    if (!jobs[0]) return Response.json({ job: null });
+    const job = jobs[0];
+    const successful = await selectRows<{ student_id: number; subject: string }>("generated_comments", {
+      owner_id: eq(user.id),
+      class_id: eq(classId),
+      updated_at: gte(job.created_at),
+    });
+    const successfulKeys = new Set(successful.map((item) => `${item.student_id}|${item.subject}`));
+    const failedStudentIds = [...new Set(job.batches.flat().filter((item) =>
+      !successfulKeys.has(`${item.studentId}|${item.subject}`)).map((item) => item.studentId))];
+    return Response.json({ job: { ...present(job), failedStudentIds } });
   } catch (error) {
     return dataError(error, "교과 평어 생성 상태를 불러오지 못했습니다.");
   }

@@ -904,7 +904,7 @@ function Assessments({ data, setData, plan, activeSubject, setActiveSubject, onD
 }
 
 function Comments({ assessmentDataBySubject, plan, roster }: { assessmentDataBySubject: Record<string, AssessmentStudent[]>; plan: AssessmentPlan[]; roster: AssessmentStudent[] }) {
-  type CommentJob = { id: string; status: string; totalItems: number; completedItems: number; failedItems: number; totalBatches: number; currentBatch: number; error?: string; completedAt?: string | null };
+  type CommentJob = { id: string; status: string; subject: string; totalItems: number; completedItems: number; failedItems: number; failedStudentIds?: number[]; totalBatches: number; currentBatch: number; error?: string; completedAt?: string | null };
   const subjects = [...new Set(plan.map((item) => item.subject))];
   const [selectedSubject, setSelectedSubject] = useState(subjects[0] ?? "국어");
   const [comments, setComments] = useState<Record<string, string>>({});
@@ -912,29 +912,25 @@ function Comments({ assessmentDataBySubject, plan, roster }: { assessmentDataByS
   const [generationProgress, setGenerationProgress] = useState("");
   const [error, setError] = useState("");
   const [copied, setCopied] = useState(false);
-  const [lastGeneratedAt, setLastGeneratedAt] = useState("");
+  const [subjectGeneratedAt, setSubjectGeneratedAt] = useState<Record<string, string>>({});
   const [activeJob, setActiveJob] = useState<CommentJob | null>(null);
   const [evidenceKey, setEvidenceKey] = useState("");
   const [rewriteBusyKey, setRewriteBusyKey] = useState("");
   const [selectedText, setSelectedText] = useState<Record<string, string>>({});
-  useEffect(() => {
-    queueMicrotask(() => setLastGeneratedAt(window.localStorage.getItem("giroksam:last-generated-at") ?? ""));
-  }, []);
-  const loadGeneratedComments = async () => {
+  const loadGeneratedComments = useCallback(async () => {
     try {
       const response = await fetch("/api/generated-comments");
       const result = await response.json() as { comments?: Array<{ studentId: number; subject: string; comment: string; candidates: string[]; confirmed: boolean; updatedAt: string }> };
       if (!response.ok || !result.comments?.length) return;
       setComments(Object.fromEntries(result.comments.map((item) => [`${item.studentId}|${item.subject}`, item.comment])));
-      const latest = result.comments.map((item) => item.updatedAt).sort().at(-1);
-      if (latest) {
-        setLastGeneratedAt(latest);
-        window.localStorage.setItem("giroksam:last-generated-at", latest);
-      }
+      setSubjectGeneratedAt(result.comments.reduce<Record<string, string>>((latest, item) => {
+        if (!latest[item.subject] || latest[item.subject] < item.updatedAt) latest[item.subject] = item.updatedAt;
+        return latest;
+      }, {}));
     } catch {
       // 저장된 결과를 불러오지 못해도 새 생성은 계속 사용할 수 있음.
     }
-  };
+  }, []);
   useEffect(() => {
     queueMicrotask(() => void loadGeneratedComments());
     fetch("/api/comment-jobs").then(async (response) => {
@@ -944,7 +940,7 @@ function Comments({ assessmentDataBySubject, plan, roster }: { assessmentDataByS
         if (["queued", "running"].includes(result.job.status)) setLoading(true);
       }
     }).catch(() => undefined);
-  }, []);
+  }, [loadGeneratedComments]);
   const activeCommentJobId = activeJob?.id;
   const activeCommentJobStatus = activeJob?.status;
   const activeCommentJobCompleted = activeJob?.completedItems ?? 0;
@@ -964,20 +960,19 @@ function Comments({ assessmentDataBySubject, plan, roster }: { assessmentDataByS
           setLoading(false);
           setGenerationProgress("");
           await loadGeneratedComments();
-          if (result.job.failedItems) setError(result.job.error || `${result.job.failedItems}건이 생성되지 않았습니다. AI 평어 생성을 다시 누르면 전체 작업을 재시도합니다.`);
+          if (result.job.failedItems) setError(result.job.error || `${result.job.failedItems}명이 생성되지 않았습니다. 실패 학생만 다시 생성할 수 있습니다.`);
           else setError("");
           const generatedAt = result.job.completedAt || new Date().toISOString();
-          setLastGeneratedAt(generatedAt);
-          window.localStorage.setItem("giroksam:last-generated-at", generatedAt);
+          if (result.job.subject) setSubjectGeneratedAt((current) => ({ ...current, [result.job!.subject]: generatedAt }));
         }
       } catch {
         // 페이지 연결이 잠시 끊겨도 서버 작업은 계속 진행됨.
       }
     }, 3000);
     return () => window.clearInterval(timer);
-  }, [activeCommentJobCompleted, activeCommentJobId, activeCommentJobStatus, activeCommentJobTotal]);
-  const formattedLastGeneratedAt = lastGeneratedAt
-    ? new Intl.DateTimeFormat("ko-KR", { month: "numeric", day: "numeric", hour: "numeric", minute: "2-digit" }).format(new Date(lastGeneratedAt))
+  }, [activeCommentJobCompleted, activeCommentJobId, activeCommentJobStatus, activeCommentJobTotal, loadGeneratedComments]);
+  const formattedLastGeneratedAt = subjectGeneratedAt[selectedSubject]
+    ? new Intl.DateTimeFormat("ko-KR", { month: "numeric", day: "numeric", hour: "numeric", minute: "2-digit" }).format(new Date(subjectGeneratedAt[selectedSubject]))
     : "";
   const copySubjectComments = async () => {
     const text = roster.map((student) => comments[`${student.id}|${selectedSubject}`] ?? "").join("\n");
@@ -989,21 +984,27 @@ function Comments({ assessmentDataBySubject, plan, roster }: { assessmentDataByS
       setError("클립보드 복사 권한을 확인해 주세요.");
     }
   };
-  const generateAllComments = async () => {
+  const generateSubjectComments = async (retryStudentIds?: number[]) => {
     if (!roster.length) return setError("등록된 학생이 없습니다.");
+    const subjectStudents = assessmentDataBySubject[selectedSubject] ?? [];
+    const eligibleIds = subjectStudents
+      .filter((student) => student.assessments.some((level) => ["상", "중", "하"].includes(level)))
+      .map((student) => student.id);
+    const targetIds = retryStudentIds?.length ? retryStudentIds.filter((id) => eligibleIds.includes(id)) : eligibleIds;
+    if (!targetIds.length) return setError(`${selectedSubject}에서 상·중·하 평가수준이 입력된 학생이 없습니다.`);
     setLoading(true);
     setError("");
     setGenerationProgress("작업 등록 중…");
     try {
-      const scores = Object.fromEntries(Object.entries(assessmentDataBySubject).map(([subject, data]) => [
-        subject,
-        data.filter((student) => student.assessments.some((level) => level !== "-"))
+      const scores = {
+        [selectedSubject]: subjectStudents
+          .filter((student) => targetIds.includes(student.id))
           .map((student) => ({ studentId: student.id, levels: student.assessments })),
-      ]));
+      };
       const response = await fetch("/api/comment-jobs", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ scores, selectedStudentIds: roster.map((student) => student.id) }),
+        body: JSON.stringify({ scores, selectedStudentIds: targetIds }),
       });
       const result = await response.json() as { job?: CommentJob; error?: string };
       if (!response.ok || !result.job) throw new Error(result.error || "백그라운드 생성 작업을 시작하지 못했습니다.");
@@ -1011,7 +1012,7 @@ function Comments({ assessmentDataBySubject, plan, roster }: { assessmentDataByS
       setGenerationProgress(`${result.job.completedItems}/${result.job.totalItems}`);
       setCopied(false);
     } catch (reason) {
-      setError(reason instanceof Error ? reason.message : "전 과목 교과 평어를 생성하지 못했습니다.");
+      setError(reason instanceof Error ? reason.message : `${selectedSubject} 교과 평어를 생성하지 못했습니다.`);
       setLoading(false);
       setGenerationProgress("");
     }
@@ -1059,17 +1060,30 @@ function Comments({ assessmentDataBySubject, plan, roster }: { assessmentDataByS
       setRewriteBusyKey("");
     }
   };
+  const eligibleStudentIds = new Set((assessmentDataBySubject[selectedSubject] ?? [])
+    .filter((student) => student.assessments.some((level) => ["상", "중", "하"].includes(level)))
+    .map((student) => student.id));
+  const eligibleCount = eligibleStudentIds.size;
+  const completedCount = roster.filter((student) =>
+    eligibleStudentIds.has(student.id) && Boolean(comments[`${student.id}|${selectedSubject}`])).length;
+  const failedStudentIds = activeJob?.subject === selectedSubject ? activeJob.failedStudentIds ?? [] : [];
+  const selectedSubjectIsGenerating = loading && activeJob?.subject === selectedSubject;
   return (
     <section>
-      <div className="page-heading"><div><p className="eyebrow">AI DRAFT</p><h1>전 과목 교과 평어</h1><p>과목을 선택하면 해당 과목의 학생별 평어를 한 화면에서 확인할 수 있습니다.</p></div><div className="ai-generate-actions">{formattedLastGeneratedAt && <span>마지막 사용 {formattedLastGeneratedAt}</span>}<button onClick={() => void generateAllComments()} disabled={loading}>{loading ? generationProgress || "전 과목 생성 중…" : "✦ AI 평어 생성"}</button></div></div>
+      <div className="page-heading"><div><p className="eyebrow">AI DRAFT</p><h1>교과 평어</h1><p>평가수준 입력을 마친 과목부터 학생별 평어를 생성할 수 있습니다.</p></div></div>
       <div className="review-layout comments-review-layout">
         <div className="review-content">
           <div className="workspace-toolbar comments-toolbar">
             <SubjectNavigator subjects={subjects} activeSubject={selectedSubject} onChange={(subject) => { setSelectedSubject(subject); setCopied(false); }} progress={(subject) => `${roster.filter((student) => comments[`${student.id}|${subject}`]).length}/${roster.length}명`} />
-            <button className="copy-comments" onClick={() => void copySubjectComments()} disabled={!roster.some((student) => comments[`${student.id}|${selectedSubject}`])}>{copied ? "복사됨 ✓" : "평어만 복사하기"}</button>
+            <div className="subject-generation-controls">
+              <div><span>{formattedLastGeneratedAt ? `마지막 생성 ${formattedLastGeneratedAt}` : "생성 기록 없음"}</span><strong>{eligibleCount}명 중 {completedCount}명 생성 완료</strong></div>
+              <button className="subject-generate-button" onClick={() => void generateSubjectComments()} disabled={loading || !eligibleCount}>{selectedSubjectIsGenerating ? generationProgress || `${selectedSubject} 생성 중…` : `✦ ${selectedSubject} AI 평어 생성`}</button>
+              {failedStudentIds.length > 0 && !loading && <button className="retry-failed-button" onClick={() => void generateSubjectComments(failedStudentIds)}>실패 {failedStudentIds.length}명만 다시 생성</button>}
+              <button className="copy-comments" onClick={() => void copySubjectComments()} disabled={!roster.some((student) => comments[`${student.id}|${selectedSubject}`])}>{copied ? "복사됨 ✓" : "평어만 복사하기"}</button>
+            </div>
           </div>
           {error && <p className="generation-error">! {error}</p>}
-          {loading && <div className="comment-loading class-loading"><span>✦</span><p>모든 학생의 전 과목 평어를 생성하고 있어요.</p></div>}
+          {selectedSubjectIsGenerating && <div className="comment-loading class-loading"><span>✦</span><p>{selectedSubject} 평어를 생성하고 있어요. 페이지를 이동해도 계속 진행됩니다.</p></div>}
           <div className="comments-table-wrap">
             <table className="comments-table subject-comments-table">
               <thead><tr><th>번호</th><th>이름</th><th>평어</th><th>검수</th></tr></thead>
