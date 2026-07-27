@@ -54,7 +54,7 @@ test("distributes randomized comment styles across a class batch", () => {
   const variations = createCommentVariations(10);
   assert.equal(variations.length, 10);
   assert.equal(new Set(variations.slice(0, 6).map((item) => item.structure)).size, 6);
-  assert.equal(new Set(variations.slice(0, 4).map((item) => item.opening)).size, 4);
+  assert.equal(new Set(variations.slice(0, 8).map((item) => item.opening)).size, 8);
   assert.equal(variations.every((item) => item.structure && item.opening && item.focusOrder), true);
 });
 
