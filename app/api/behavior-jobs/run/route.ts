@@ -71,6 +71,10 @@ export async function POST(request: Request) {
           if (failure.recoverable && (!previous || Math.abs(failure.bytes - 525) < Math.abs(previous.bytes - 525))) {
             fallbackBehaviors.set(failure.studentId, failure);
           }
+          errorMessage = [
+            errorMessage,
+            `${failure.studentId}번 ${failure.bytes}B: ${failure.issues.join(", ")}`,
+          ].filter(Boolean).join(" ").slice(-1800);
         }
         const generatedIds = new Set(generated.behaviors.map((item) => item.studentId));
         pending = pending
