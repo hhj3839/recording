@@ -142,7 +142,14 @@ export async function generateCommentBatch(evidence: CommentEvidence[], avoidCom
     }),
   });
   const payload = await response.json() as unknown;
-  if (!response.ok) throw new Error("AI 생성 요청을 처리하지 못했습니다.");
+  if (!response.ok) {
+    const upstream = payload && typeof payload === "object"
+      ? (payload as { error?: { code?: unknown; message?: unknown } }).error
+      : undefined;
+    const code = typeof upstream?.code === "string" ? upstream.code : `HTTP ${response.status}`;
+    const message = typeof upstream?.message === "string" ? upstream.message.slice(0, 600) : "";
+    throw new Error(`AI 생성 요청을 처리하지 못했습니다. (${code})${message ? ` ${message}` : ""}`);
+  }
   const raw = extractOutputText(payload).replace(/^```json\s*/i, "").replace(/\s*```$/, "");
   const decoded = JSON.parse(raw) as { results?: unknown };
   const parsed = decoded.results && typeof decoded.results === "object" && !Array.isArray(decoded.results)
