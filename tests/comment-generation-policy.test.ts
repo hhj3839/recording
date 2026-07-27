@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { evidenceGroundingWarnings, hasCompleteEvidenceCoverage, openingRepetitionRate, validateGeneratedComment, validateGeneratedCommentPart } from "../app/comment-generation-policy.ts";
+import { commentAreaIssuesForDisplay, evidenceGroundingWarnings, hasCompleteEvidenceCoverage, openingRepetitionRate, replaceSelectedCommentText, validateGeneratedComment, validateGeneratedCommentPart } from "../app/comment-generation-policy.ts";
 import { behaviorRepairInstruction, behaviorRepairPlan } from "../app/behavior-repair-policy.ts";
 import { generationModel } from "../app/ai-model-policy.ts";
 import { batchCommentsBySubject, COMMENT_BATCH_SIZE } from "../app/comment-batching.ts";
@@ -137,6 +137,35 @@ test("grounds attitude concepts across common Korean spacing and inflection vari
     ),
     ["평가 근거에 없는 ‘자기주도적으로’ 표현 확인 필요"],
   );
+});
+
+test("does not show sentence length as an area review issue", () => {
+  assert.deepEqual(
+    commentAreaIssuesForDisplay("warning", ["권장 50~60자 범위를 벗어난 49자 문장"]),
+    [],
+  );
+  assert.deepEqual(
+    commentAreaIssuesForDisplay("warning", [
+      "권장 50~60자 범위를 벗어난 61자 문장",
+      "평가 근거에 없는 ‘적극적으로’ 표현 확인 필요",
+    ]),
+    ["평가 근거에 없는 ‘적극적으로’ 표현 확인 필요"],
+  );
+  assert.deepEqual(
+    commentAreaIssuesForDisplay("needs_review", ["AI 생성이 완료되지 않아 교사 확인이 필요함"]),
+    ["AI 생성이 완료되지 않아 교사 확인이 필요함"],
+  );
+});
+
+test("replaces the exact selected range even when the same phrase is repeated", () => {
+  const current = "자료를 분류함. 자료를 분류함.";
+  const secondStart = current.lastIndexOf("자료를 분류함.");
+  assert.equal(
+    replaceSelectedCommentText(current, "자료의 특징을 설명함.", secondStart, current.length),
+    "자료를 분류함. 자료의 특징을 설명함.",
+  );
+  assert.equal(replaceSelectedCommentText(current, "교체", -1, 2), null);
+  assert.equal(replaceSelectedCommentText(current, "교체", 3, 3), null);
 });
 
 test("measures repeated opening phrases across a class", () => {

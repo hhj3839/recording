@@ -200,10 +200,7 @@ export async function generateCommentBatch(evidence: CommentEvidence[], avoidCom
           assessmentIndex: evidenceEntry.assessmentIndex,
           evidence: evidenceEntry.text,
           text: row.text,
-          warnings: [
-            ...validateGeneratedCommentPart(row.text).warnings,
-            ...evidenceGroundingWarnings(row.text, evidenceEntry.text),
-          ],
+          warnings: evidenceGroundingWarnings(row.text, evidenceEntry.text),
         });
       }
     }

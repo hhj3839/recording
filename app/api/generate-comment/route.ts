@@ -3,6 +3,7 @@ import { checkAiUsage, MONTHLY_AI_LIMIT, recordAiUsage } from "../../ai-usage";
 import { createCommentVariations } from "../../comment-variation";
 import { eq, selectRows } from "../../../db/supabase";
 import { primaryAiModel } from "../../ai-model-policy";
+import { replaceSelectedCommentText, validateGeneratedComment } from "../../comment-generation-policy";
 
 type Level = "상" | "중" | "하" | "미응시" | "평가 예정" | "-";
 
@@ -87,6 +88,8 @@ export async function POST(request: Request) {
       mode?: unknown;
       currentComment?: unknown;
       selectedText?: unknown;
+      selectionStart?: unknown;
+      selectionEnd?: unknown;
     };
     const uploadedPlan = parsePlan(body.plan);
     const plan = uploadedPlan ?? defaultAssessmentPlan.map((item) => ({
@@ -99,12 +102,19 @@ export async function POST(request: Request) {
     if (!levels.some((level) => ["상", "중", "하"].includes(level))) {
       return Response.json({ error: "평어 생성에 사용할 상·중·하 평가 수준이 없습니다." }, { status: 400 });
     }
-    const mode = ["shorter", "specific", "selection"].includes(String(body.mode)) ? String(body.mode) : "new";
-    const currentComment = typeof body.currentComment === "string" ? body.currentComment.trim().slice(0, 4000) : "";
+    const mode = ["regenerate", "shorter", "specific", "selection"].includes(String(body.mode)) ? String(body.mode) : "new";
+    const currentComment = typeof body.currentComment === "string" ? body.currentComment.slice(0, 4000) : "";
     const selectedText = typeof body.selectedText === "string" ? body.selectedText.trim().slice(0, 2000) : "";
+    const selectionStart = Number(body.selectionStart);
+    const selectionEnd = Number(body.selectionEnd);
     const studentId = Number(body.studentId);
-    if (mode !== "new" && !currentComment) return Response.json({ error: "다시 작성할 기존 평어가 없습니다." }, { status: 400 });
+    if (mode !== "new" && !currentComment.trim()) return Response.json({ error: "다시 작성할 기존 평어가 없습니다." }, { status: 400 });
     if (mode === "selection" && !selectedText) return Response.json({ error: "다시 생성할 문장을 먼저 선택해 주세요." }, { status: 400 });
+    if (mode === "selection"
+      && (!Number.isInteger(selectionStart) || !Number.isInteger(selectionEnd)
+        || currentComment.slice(selectionStart, selectionEnd).trim() !== selectedText)) {
+      return Response.json({ error: "선택한 부분이 현재 평어와 달라졌습니다. 바꿀 부분을 다시 선택해 주세요." }, { status: 400 });
+    }
 
     const apiKey = process.env.OPENAI_API_KEY;
     if (!apiKey) return Response.json({ error: "AI 생성 설정이 아직 완료되지 않았습니다." }, { status: 503 });
@@ -119,7 +129,10 @@ export async function POST(request: Request) {
       .filter(Boolean)
       .join("\n");
 
-    const modeInstruction = mode === "shorter"
+    const activeEvidenceCount = levels.filter((level) => ["상", "중", "하"].includes(level)).length;
+    const modeInstruction = mode === "regenerate"
+      ? `기존 평어 전체를 평가 근거에 맞게 새로 작성해 줘. 평가 영역마다 정확히 1문장씩 총 ${activeEvidenceCount}문장을 작성하고, 각 문장은 50~60자이며 반드시 ‘함.’으로 끝내. 기존 평어의 표현은 복사하지 말고 근거에 없는 행동·태도·과정을 추가하지 마.\n기존 평어: ${currentComment}`
+      : mode === "shorter"
       ? `기존 평어를 평가 근거에서 벗어나지 않게 더 짧고 간결하게 다시 작성해 줘.\n기존 평어: ${currentComment}`
       : mode === "specific"
         ? `기존 평어를 평가 근거에 나타난 단원·영역·수행 기준이 더 구체적으로 드러나게 다시 작성해 줘. 근거에 없는 행동은 추가하지 마.\n기존 평어: ${currentComment}`
@@ -153,7 +166,7 @@ export async function POST(request: Request) {
             role: "system",
             content: [{
               type: "input_text",
-              text: "대한민국 초등학교 교과학습발달상황 작성 전문가로서 입력된 평가계획과 평가 수준만 활용한다. 학생 이름, 성별, 추측한 사실, 비교 표현을 포함하지 않는다. 하 수준도 부정적으로 단정하지 말고 수행 과정과 성장 가능성을 중심으로 쓴다. 지정된 variation의 문장 구조·시작 방식·근거 순서를 따르되 근거에 없는 사실을 만들지 않는다. 피해야 할 기존 평어와 첫 구절, 핵심 동사, 문장 구조가 겹치지 않게 작성한다. 여러 평가 항목을 단순 나열하지 말고 자연스럽게 연결한다. 2~3문장, 약 150~250바이트의 한국어로 작성하고 모든 문장을 '함', '됨', '보임', '돋보임' 같은 명사형 종결어미로 끝낸다. 설명이나 제목 없이 교과 평어 본문만 출력한다.",
+              text: `대한민국 초등학교 교과학습발달상황 작성 전문가로서 입력된 평가계획과 평가 수준만 활용한다. 학생 이름, 성별, 추측한 사실, 비교 표현을 포함하지 않는다. 하 수준도 부정적으로 단정하지 말고 수행 과정과 성장 가능성을 중심으로 쓴다. 지정된 variation의 문장 구조·시작 방식·근거 순서를 따르되 근거에 없는 사실을 만들지 않는다. 피해야 할 기존 평어와 첫 구절, 핵심 동사, 문장 구조가 겹치지 않게 작성한다. 여러 평가 항목을 단순 나열하지 말고 자연스럽게 연결한다. ${mode === "regenerate" ? `평가 영역마다 정확히 1문장씩 총 ${activeEvidenceCount}문장을 작성하고 각 문장은 50~60자이며 ‘함.’으로 끝낸다.` : "2~3문장, 약 150~250바이트의 한국어로 작성하고 모든 문장을 '함', '됨', '보임', '돋보임' 같은 명사형 종결어미로 끝낸다."} 설명이나 제목 없이 교과 평어 본문만 출력한다.`,
             }],
           },
           {
@@ -177,7 +190,13 @@ export async function POST(request: Request) {
 
     const generatedText = extractOutputText(payload);
     if (!generatedText) return Response.json({ error: "AI가 문장을 반환하지 않았습니다. 다시 시도해 주세요." }, { status: 502 });
-    const comment = mode === "selection" ? currentComment.replace(selectedText, generatedText) : generatedText;
+    if (mode === "regenerate" && !validateGeneratedComment(generatedText, activeEvidenceCount).valid) {
+      return Response.json({ error: "새 평어가 영역별 문장 형식 검수를 통과하지 못했습니다. 다시 시도해 주세요." }, { status: 502 });
+    }
+    const comment = mode === "selection"
+      ? replaceSelectedCommentText(currentComment, generatedText, selectionStart, selectionEnd)
+      : generatedText;
+    if (!comment) return Response.json({ error: "선택한 부분을 교체하지 못했습니다. 다시 선택해 주세요." }, { status: 400 });
     await recordAiUsage({ ownerId: user.id, ownerEmail: user.email, classId, feature: "single-comment" });
     return Response.json({ comment });
   } catch (error) {

@@ -5,6 +5,7 @@ import { countBehaviorCharacteristics, recordSimilarityDetails, validateBehavior
 import { parseStudentRosterText } from "./student-roster-parser";
 import { parseAssessmentPlanText } from "./assessment-plan-parser";
 import { assessmentPlanWarnings, validateAssessmentPlanRow } from "./assessment-plan-policy";
+import { commentAreaIssuesForDisplay } from "./comment-generation-policy";
 
 type View = "dashboard" | "classes" | "students" | "plans" | "assessments" | "comments" | "behavior" | "export" | "settings";
 const SHOW_EXPORT_RESULTS = false;
@@ -462,6 +463,7 @@ function PlanManager({ plan, onChanged, current }: { plan: AssessmentPlan[]; onC
   const [errors, setErrors] = useState<string[]>([]);
   const [warnings, setWarnings] = useState<string[]>([]);
   const [message, setMessage] = useState("");
+  const [promptCopied, setPromptCopied] = useState(false);
   const [busy, setBusy] = useState(false);
   const [versions, setVersions] = useState<Array<{ id: number; source: string; label: string; itemCount: number; createdAt: string }>>([]);
   const [versionsOpen, setVersionsOpen] = useState(false);
@@ -734,19 +736,28 @@ function PlanManager({ plan, onChanged, current }: { plan: AssessmentPlan[]; onC
       <div className="shared-plan-list">{filteredSharedPlans.length ? filteredSharedPlans.map((shared) => <article key={shared.id}><div><strong>{shared.name}</strong><span>{shared.schoolYear}학년도 {shared.semester}학기 · {shared.grade}학년 · {shared.itemCount}개</span><small>{shared.subjects.join(" · ") || "과목 정보 없음"} · {new Date(shared.updatedAt).toLocaleString("ko-KR")}</small></div><button className="secondary" disabled={busy} onClick={() => void previewSharedPlan(shared)}>미리보기</button><button disabled={busy} onClick={() => void importSharedPlan(shared)}>현재 학급에 적용</button>{shared.canDelete && <button className="danger-text" disabled={busy} onClick={() => void deleteSharedPlan(shared)}>삭제</button>}</article>) : <p className="empty-cell">{sharedPlans.length ? "검색 조건에 맞는 공동 평가계획이 없습니다." : "아직 공유된 평가계획이 없습니다."}</p>}</div>
     </section>}
     <section className="plan-paste-entry">
-      <div className="section-heading"><div><p className="eyebrow">PASTE TABLE</p><h2>평가계획 표 붙여넣기</h2><p>엑셀이나 한글 표에서 10개 열을 복사하거나 탭으로 구분된 여러 행을 그대로 붙여넣으세요.</p></div><button disabled={busy || !planText.trim()} onClick={interpretPlanText}>표 분석·미리보기</button></div>
+      <div className="section-heading"><div><p className="eyebrow">PASTE TABLE</p><h2>평가계획 표 붙여넣기</h2><p>엑셀이나 한글 표에서 10개 열을 복사하거나 AI로 변환한 결과를 붙여넣으세요.</p></div></div>
       <div className="plan-paste-columns">과목 → 단원 → 평가목표 → 영역 → 평가유형 → 평가관점 → 상 → 중 → 하 → 유의점</div>
-      <details className="plan-gpt-guide">
-        <summary>GPT로 과정중심평가 계획을 붙여넣기 형식으로 바꾸는 방법</summary>
-        <p>아래 프롬프트를 GPT에 붙여넣고 마지막에 원본 평가계획을 추가하세요. 결과는 마크다운 표가 아닌 탭으로 구분된 10개 열이어야 합니다.</p>
-        <button type="button" className="secondary" onClick={() => {
+      <section className="plan-gpt-guide" aria-labelledby="plan-ai-guide-title">
+        <div className="plan-gpt-guide-heading"><div><p className="eyebrow">AI FORMAT HELPER</p><h3 id="plan-ai-guide-title">AI로 평가계획 표 변환하기</h3></div><button type="button" onClick={() => {
           void navigator.clipboard.writeText(assessmentPlanGptPrompt)
-            .then(() => setMessage("GPT 변환 프롬프트를 복사했습니다."))
+            .then(() => {
+              setPromptCopied(true);
+              setMessage("변환 프롬프트를 복사했습니다. ChatGPT에 원본 평가계획과 함께 붙여넣으세요.");
+              window.setTimeout(() => setPromptCopied(false), 2200);
+            })
             .catch(() => setErrors(["프롬프트를 복사하지 못했습니다. 브라우저의 클립보드 권한을 확인해 주세요."]));
-        }}>GPT 변환 프롬프트 복사</button>
-        <pre>{assessmentPlanGptPrompt}</pre>
-      </details>
-      <textarea value={planText} onChange={(event) => setPlanText(event.target.value)} placeholder={"국어\t1. 생생하게 표현해요\t상황에 알맞게 표현할 수 있다.\t듣기·말하기\t구술 평가\t상황에 맞게 표현하는가?\t정확하고 실감 나게 표현할 수 있다.\t알맞게 표현할 수 있다.\t도움을 받아 표현하기 위해 노력한다.\t다양한 표현을 고려한다."} />
+        }}>{promptCopied ? "복사됨 ✓" : "① 변환 프롬프트 복사"}</button></div>
+        <ol className="plan-gpt-steps">
+          <li><b>프롬프트 복사</b><span>위 버튼으로 기록샘의 10열 변환 규칙을 복사합니다.</span></li>
+          <li><b>ChatGPT에서 변환</b><span>복사한 프롬프트 뒤에 원본 과정중심평가 계획을 붙여넣고 실행합니다.</span></li>
+          <li><b>결과 붙여넣기</b><span>마크다운 표가 아닌 탭으로 구분된 결과만 아래에 붙여넣습니다.</span></li>
+        </ol>
+        <details><summary>프롬프트 내용 보기</summary><pre>{assessmentPlanGptPrompt}</pre></details>
+      </section>
+      <label className="plan-paste-label" htmlFor="assessment-plan-paste">③ 변환된 10열 표 붙여넣기</label>
+      <textarea id="assessment-plan-paste" value={planText} onChange={(event) => setPlanText(event.target.value)} placeholder={"국어\t1. 생생하게 표현해요\t상황에 알맞게 표현할 수 있다.\t듣기·말하기\t구술 평가\t상황에 맞게 표현하는가?\t정확하고 실감 나게 표현할 수 있다.\t알맞게 표현할 수 있다.\t도움을 받아 표현하기 위해 노력한다.\t다양한 표현을 고려한다."} />
+      <div className="plan-paste-actions"><button disabled={busy || !planText.trim()} onClick={interpretPlanText}>표 분석·미리보기</button></div>
     </section>
     {message && <p className="student-message">{message}</p>}
     {!!errors.length && <div className="plan-errors"><strong>확인이 필요합니다.</strong>{errors.slice(0, 8).map((error) => <p key={error}>• {error}</p>)}</div>}
@@ -927,6 +938,7 @@ function Assessments({ data, setData, plan, activeSubject, setActiveSubject, onD
 
 function Comments({ assessmentDataBySubject, plan, roster }: { assessmentDataBySubject: Record<string, AssessmentStudent[]>; plan: AssessmentPlan[]; roster: AssessmentStudent[] }) {
   type CommentJob = { id: string; status: string; subject: string; totalItems: number; completedItems: number; failedItems: number; totalBatches: number; currentBatch: number; error?: string; completedAt?: string | null };
+  type CommentSelection = { text: string; start: number; end: number };
   const subjects = [...new Set(plan.map((item) => item.subject))];
   const [selectedSubject, setSelectedSubject] = useState(subjects[0] ?? "국어");
   const [comments, setComments] = useState<Record<string, string>>({});
@@ -934,12 +946,13 @@ function Comments({ assessmentDataBySubject, plan, roster }: { assessmentDataByS
   const [loading, setLoading] = useState(false);
   const [generationProgress, setGenerationProgress] = useState("");
   const [error, setError] = useState("");
+  const [notice, setNotice] = useState("");
   const [copied, setCopied] = useState(false);
   const [subjectGeneratedAt, setSubjectGeneratedAt] = useState<Record<string, string>>({});
   const [activeJob, setActiveJob] = useState<CommentJob | null>(null);
   const [evidenceKey, setEvidenceKey] = useState("");
   const [rewriteBusyKey, setRewriteBusyKey] = useState("");
-  const [selectedText, setSelectedText] = useState<Record<string, string>>({});
+  const [selectedText, setSelectedText] = useState<Record<string, CommentSelection>>({});
   const loadGeneratedComments = useCallback(async () => {
     try {
       const response = await fetch("/api/generated-comments");
@@ -1082,13 +1095,16 @@ function Comments({ assessmentDataBySubject, plan, roster }: { assessmentDataByS
       setError("수정한 평어를 저장하지 못했습니다. 잠시 후 다시 시도해 주세요.");
     }
   };
-  const rewriteComment = async (studentId: number, subject: string, mode: "shorter" | "specific" | "selection") => {
+  const rewriteComment = async (studentId: number, subject: string, mode: "regenerate" | "shorter" | "specific" | "selection") => {
     const key = `${studentId}|${subject}`;
     const subjectPlan = plan.filter((item) => item.subject === subject);
     const assessment = assessmentDataBySubject[subject]?.find((item) => item.id === studentId);
     if (!assessment) return;
+    if (mode === "regenerate" && !window.confirm(`${roster.find((student) => student.id === studentId)?.name ?? "이 학생"}의 ${subject} 평어 전체를 다시 생성할까요?\n\n현재 평어는 이전 버전으로 보관되고 새 결과로 교체됩니다. AI 호출 1회가 사용됩니다.`)) return;
+    const selection = selectedText[key];
     setRewriteBusyKey(`${key}|${mode}`);
     setError("");
+    setNotice("");
     try {
       const response = await fetch("/api/generate-comment", {
         method: "POST",
@@ -1099,13 +1115,22 @@ function Comments({ assessmentDataBySubject, plan, roster }: { assessmentDataByS
           plan: subjectPlan,
           mode,
           currentComment: comments[key] ?? "",
-          selectedText: selectedText[key] ?? "",
+          selectedText: selection?.text ?? "",
+          selectionStart: selection?.start,
+          selectionEnd: selection?.end,
         }),
       });
       const result = await response.json() as { comment?: string; error?: string };
       if (!response.ok || !result.comment) throw new Error(result.error || "평어를 다시 작성하지 못했습니다.");
       setComments((current) => ({ ...current, [key]: result.comment! }));
       await saveComment(studentId, subject, result.comment);
+      setCommentParts((current) => current.filter((part) => part.studentId !== studentId || part.subject !== subject));
+      if (mode === "selection") {
+        setSelectedText((current) => { const next = { ...current }; delete next[key]; return next; });
+        setNotice("선택한 부분을 평가 근거에 맞게 변경했습니다.");
+      } else if (mode === "regenerate") {
+        setNotice(`${roster.find((student) => student.id === studentId)?.name ?? "학생"}의 ${subject} 평어를 다시 생성했습니다.`);
+      }
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : "평어를 다시 작성하지 못했습니다.");
     } finally {
@@ -1134,6 +1159,7 @@ function Comments({ assessmentDataBySubject, plan, roster }: { assessmentDataByS
             </div>
           </div>
           {error && <p className="generation-error">! {error}</p>}
+          {notice && <p className="student-message" role="status">{notice}</p>}
           {selectedSubjectIsGenerating && <div className="comment-loading class-loading"><span>✦</span><p>{selectedSubject} 평어를 생성하고 있어요. 페이지를 이동해도 계속 진행됩니다.</p></div>}
           <div className="comments-table-wrap">
             <table className="comments-table subject-comments-table">
@@ -1148,7 +1174,9 @@ function Comments({ assessmentDataBySubject, plan, roster }: { assessmentDataByS
                 })).filter((item) => ["상", "중", "하"].includes(item.level));
                 const validation = validateRecord(text);
                 const areaStatuses = commentParts.filter((part) => part.studentId === student.id && part.subject === selectedSubject);
-                const areaIssues = areaStatuses.filter((part) => part.status === "needs_review" || part.status === "warning");
+                const areaIssues = areaStatuses
+                  .map((part) => ({ ...part, visibleIssues: commentAreaIssuesForDisplay(part.status, part.issues) }))
+                  .filter((part) => part.status === "needs_review" || part.visibleIssues.length > 0);
                 const comparisons = roster.filter((other) => other.id !== student.id).map((other) => ({
                   student: other,
                   ...recordSimilarityDetails(text, comments[`${other.id}|${selectedSubject}`] ?? ""),
@@ -1158,14 +1186,30 @@ function Comments({ assessmentDataBySubject, plan, roster }: { assessmentDataByS
                 return <tr id={`comment-${student.id}`} key={student.id}>
                   <td>{student.number ?? student.id}</td>
                   <td><strong>{student.name}</strong><small>{text ? `${new TextEncoder().encode(text).length}B` : hasLevel ? "생성 대기" : "수준 미입력"}</small></td>
-                  <td><textarea value={text} onSelect={(event) => { const target = event.currentTarget; setSelectedText((current) => ({ ...current, [key]: target.value.slice(target.selectionStart, target.selectionEnd) })); }} onChange={(event) => { setComments((current) => ({ ...current, [key]: event.target.value })); setCopied(false); }} onBlur={(event) => void saveComment(student.id, selectedSubject, event.target.value)} placeholder={hasLevel ? "AI 평어 생성 버튼을 누르면 결과가 표시됩니다." : "상·중·하 평가 수준이 입력되지 않았습니다."} />
+                  <td><textarea value={text} onSelect={(event) => {
+                    const target = event.currentTarget;
+                    const selection = target.value.slice(target.selectionStart, target.selectionEnd);
+                    setSelectedText((current) => {
+                      const next = { ...current };
+                      if (selection.trim()) next[key] = { text: selection.trim(), start: target.selectionStart, end: target.selectionEnd };
+                      else delete next[key];
+                      return next;
+                    });
+                  }} onChange={(event) => {
+                    setComments((current) => ({ ...current, [key]: event.target.value }));
+                    setSelectedText((current) => { const next = { ...current }; delete next[key]; return next; });
+                    setCopied(false);
+                  }} onBlur={(event) => void saveComment(student.id, selectedSubject, event.target.value)} placeholder={hasLevel ? "AI 평어 생성 버튼을 누르면 결과가 표시됩니다." : "상·중·하 평가 수준이 입력되지 않았습니다."} />
                     {areaIssues.length > 0 && <div className="comment-area-issues">{areaIssues.map((part) => {
                       const domain = plan.filter((item) => item.subject === selectedSubject)[part.assessmentIndex]?.domain || `${part.assessmentIndex + 1}번째`;
-                      return <span className={part.status === "needs_review" ? "fail" : "warning"} key={`${part.assessmentIndex}-${part.status}`}>
-                        <span title={part.issues.join(" · ")}>{domain} 영역 확인 필요</span>
-                      </span>;
+                      const reasons = part.visibleIssues.length ? part.visibleIssues : ["AI 생성이 완료되지 않아 교사 확인이 필요합니다."];
+                      return <article className={part.status === "needs_review" ? "fail" : "warning"} key={`${part.assessmentIndex}-${part.status}`}>
+                        <strong>{domain} 영역 · {part.status === "needs_review" ? "생성 미완료" : "근거 확인 권장"}</strong>
+                        {reasons.map((issue) => <span key={issue}>{issue}</span>)}
+                      </article>;
                     })}</div>}
-                    <div className="comment-row-actions"><button disabled={!text || !!rewriteBusyKey} onMouseDown={(event) => event.preventDefault()} onClick={() => void rewriteComment(student.id, selectedSubject, "shorter")}>짧게</button><button disabled={!text || !!rewriteBusyKey} onMouseDown={(event) => event.preventDefault()} onClick={() => void rewriteComment(student.id, selectedSubject, "specific")}>구체적으로</button><button disabled={!selectedText[key] || !!rewriteBusyKey} onMouseDown={(event) => event.preventDefault()} onClick={() => void rewriteComment(student.id, selectedSubject, "selection")}>{rewriteBusyKey === `${key}|selection` ? "생성 중…" : "선택 문장 재생성"}</button><button className="evidence-button" onMouseDown={(event) => event.preventDefault()} onClick={() => setEvidenceKey((current) => current === key ? "" : key)}>생성 근거 {evidenceKey === key ? "닫기" : "보기"}</button></div>
+                    {selectedText[key] && <small className="comment-selection-hint">“{selectedText[key].text.slice(0, 36)}{selectedText[key].text.length > 36 ? "…" : ""}” 선택됨</small>}
+                    <div className="comment-row-actions"><button className="regenerate-button" disabled={!text || !!rewriteBusyKey} onMouseDown={(event) => event.preventDefault()} onClick={() => void rewriteComment(student.id, selectedSubject, "regenerate")}>{rewriteBusyKey === `${key}|regenerate` ? "생성 중…" : "다시 생성"}</button><button disabled={!text || !!rewriteBusyKey} onMouseDown={(event) => event.preventDefault()} onClick={() => void rewriteComment(student.id, selectedSubject, "shorter")}>짧게</button><button disabled={!text || !!rewriteBusyKey} onMouseDown={(event) => event.preventDefault()} onClick={() => void rewriteComment(student.id, selectedSubject, "specific")}>구체적으로</button><button disabled={!selectedText[key] || !!rewriteBusyKey} title={selectedText[key] ? "선택한 부분만 평가 근거에 맞게 바꿉니다." : "평어에서 바꿀 문장이나 표현을 먼저 선택하세요."} onMouseDown={(event) => event.preventDefault()} onClick={() => void rewriteComment(student.id, selectedSubject, "selection")}>{rewriteBusyKey === `${key}|selection` ? "변경 중…" : "선택한 부분 바꾸기"}</button><button className="evidence-button" onMouseDown={(event) => event.preventDefault()} onClick={() => setEvidenceKey((current) => current === key ? "" : key)}>생성 근거 {evidenceKey === key ? "닫기" : "보기"}</button></div>
                     {evidenceKey === key && <div className="comment-evidence">{evidence.length ? evidence.map((item, evidenceIndex) => <article key={`${item.unit}-${evidenceIndex}`}><strong>{item.unit} · {item.domain} · {item.level}</strong><span>{item.level === "상" ? item.high : item.level === "중" ? item.middle : item.low}</span></article>) : <p>평어 생성에 사용된 상·중·하 평가 근거가 없습니다.</p>}</div>}
                   </td>
                   <td className="validation-cell"><div><span className={validation.endingsOk ? "pass" : "fail"}>종결 {validation.endingsOk ? "정상" : "확인"}</span><span className={!validation.forbidden.length ? "pass" : "fail"}>금지어 {!validation.forbidden.length ? "없음" : "확인"}</span><span className={validation.spellingOk ? "pass" : "fail"} title={validation.spellingIssues.join("\n")}>맞춤법 {validation.spellingOk ? "정상" : `${validation.spellingIssues.length}건`}</span><span className={!similarStudents.length ? "pass" : "fail"}>최대 중복 {closest?.score ? `${Math.round(closest.score * 100)}%` : "0%"}</span></div>{closest?.score > 0 && <div className="similarity-detail"><strong>{closest.student.name} 학생과 {Math.round(closest.score * 100)}%</strong>{closest.overlaps.length > 0 && <span>겹치는 표현: {closest.overlaps.join(" · ")}</span>}</div>}{!validation.spellingOk && <ul className="spelling-issues">{validation.spellingIssues.map((issue, issueIndex) => <li key={issueIndex}>{issue}</li>)}</ul>}</td>
