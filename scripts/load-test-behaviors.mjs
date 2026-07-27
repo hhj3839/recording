@@ -79,13 +79,16 @@ if (["preflight", "seed", "sample", "full"].includes(mode)) {
   ]);
   const behaviorByStudent = new Map(behaviorData.behaviors.map((item) => [item.studentId, item]));
   if (mode === "seed") {
-    const templates = [
+    const baseTemplates = [
       "학습 태도: 수업에 성실히 참여하며 궁금한 내용을 질문함 · 교우관계: 친구의 말을 경청하고 갈등을 대화로 해결함 · 책임감: 맡은 역할을 끝까지 수행함 · 생활 습관: 준비물을 스스로 점검함 · 성장 모습: 발표에 꾸준히 참여하는 모습이 향상됨",
       "학습 태도: 과제 해결 방법을 스스로 탐색함 · 교우관계: 모둠원의 의견을 존중하며 협력함 · 책임감: 공동 과제를 계획대로 수행함 · 자기관리: 학습 시간과 준비물을 관리함 · 성장 모습: 자신의 생각을 구체적으로 설명하는 힘이 성장함",
       "학습 태도: 학습 내용을 차분히 정리하고 복습함 · 교우관계: 도움이 필요한 친구를 살피고 배려함 · 의사소통: 상대의 말을 듣고 알맞게 응답함 · 생활 습관: 교실 규칙을 꾸준히 실천함 · 성장 모습: 모둠 활동에서 의견을 적극적으로 제시하게 됨",
       "학습 태도: 새로운 문제에 끈기 있게 도전함 · 교우관계: 친구들과 역할을 공정하게 나누어 협력함 · 책임감: 시작한 활동을 마무리함 · 자기관리: 주변을 정리하고 할 일을 점검함 · 성장 모습: 피드백을 반영하여 과제 완성도가 향상됨",
       "학습 태도: 관찰한 내용을 자세히 기록하고 질문함 · 교우관계: 다른 의견을 존중하며 공통점을 찾음 · 책임감: 학급에서 맡은 일을 꾸준히 실천함 · 표현: 생각을 다양한 방법으로 나타냄 · 성장 모습: 여러 사람 앞에서 말하는 자신감이 점차 성장함",
     ];
+    const emphases = ["꾸준함", "배려심", "책임감", "협력", "자기관리"];
+    const templates = Array.from({ length: 25 }, (_, index) =>
+      `${baseTemplates[index % baseTemplates.length]} · 특별히 강조할 점: ${emphases[Math.floor(index / baseTemplates.length) % emphases.length]}`);
     const selected = classData.students.slice(0, templates.length);
     for (let index = 0; index < selected.length; index += 1) {
       await request("/api/student-behaviors", {
