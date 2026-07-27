@@ -22,6 +22,8 @@
 4. CI 또는 Vercel이 실패하면 해당 커밋을 운영 완료로 기록하지 않음.
 5. 운영 데이터가 필요한 스모크·E2E·AI 검사는 자동 배포와 분리하고 명시적으로 승인된 경우에만 실행함.
 
+유료 교과 부하 검사는 규모별로 `RUN_COMMENT_5_TEST=YES`, `RUN_COMMENT_25_TEST=YES`, `RUN_FULL_225_TEST=YES` 확인값을 요구함. 행동특성 데이터 입력·유료 검사는 각각 `SEED_BEHAVIOR_TEST_DATA=YES`, `RUN_BEHAVIOR_5_TEST=YES`, `RUN_BEHAVIOR_25_TEST=YES`를 요구함. 임시 학급 생성·삭제가 포함된 운영 E2E는 `E2E_ALLOW_PRODUCTION_WRITES=YES`가 없으면 전체 건너뛰며, 실제 AI 구간은 추가로 `E2E_RUN_AI=1`이 있어야 실행함.
+
 GitHub `main` 브랜치는 관리자에게도 `build-and-test`와 `Vercel` 상태 성공을 필수로 요구함. 병합 전 최신 `main` 기준 검사를 다시 통과해야 하며, 해결되지 않은 PR 대화가 있으면 병합하지 않음. 강제 푸시와 브랜치 삭제는 차단함. 현재 소수 운영 방침에 따라 별도 승인 인원 수는 요구하지 않되, 변경은 브랜치와 PR을 통해 병합함.
 
 GitHub Actions는 외부 Action을 전체 40자 커밋 SHA로 고정해야 실행되도록 저장소 수준에서 강제함. 워크플로 내부 자동 검사도 같은 정책을 확인하므로, 새 Action을 추가할 때는 공식 릴리스 태그가 가리키는 커밋 SHA를 확인하고 같은 줄 주석에 릴리스 버전을 기록함.
