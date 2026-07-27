@@ -135,7 +135,7 @@ test("checks behavior byte length and growth expression", () => {
 });
 
 test("accepts natural Korean nominal endings for behavior records", () => {
-  const sentence = "수업에 성실히 참여함. 친구를 배려하는 태도가 돋보임. 맡은 역할을 꾸준히 실천하여 책임감이 향상됨.";
+  const sentence = "수업에 성실히 참여함. 친구에게 도움을 줌. 맡은 일에 책임을 다함. 준비물을 서로 나눔.";
   const repeated = sentence.repeat(5);
   const result = validateRecord(repeated, true);
   assert.equal(result.endingsOk, true);

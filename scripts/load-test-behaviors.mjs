@@ -42,10 +42,16 @@ function validateBehavior(text) {
   const normalized = String(text || "").trim();
   const bytes = new TextEncoder().encode(normalized).length;
   const sentences = normalized.split(/(?<=[.!?])\s+|\n+/).map((item) => item.trim()).filter(Boolean);
+  const nominalEnding = (sentence) => {
+    const last = sentence.trim().replace(/[.!?]+$/, "").at(-1);
+    if (!last) return false;
+    const code = last.charCodeAt(0);
+    return code >= 0xac00 && code <= 0xd7a3 && (code - 0xac00) % 28 === 16;
+  };
   return {
     bytes,
-    strict: bytes >= 500 && bytes <= 550 && sentences.length > 0 && sentences.every((sentence) => /(음|임|함|됨|보임|돋보임|있음|나타남|기대됨)[.!?]?$/.test(sentence)),
-    reviewable: bytes >= 470 && bytes <= 580 && sentences.length > 0 && sentences.every((sentence) => /(음|임|함|됨|보임|돋보임|있음|나타남|기대됨)[.!?]?$/.test(sentence)),
+    strict: bytes >= 500 && bytes <= 550 && sentences.length > 0 && sentences.every(nominalEnding),
+    reviewable: bytes >= 470 && bytes <= 580 && sentences.length > 0 && sentences.every(nominalEnding),
   };
 }
 

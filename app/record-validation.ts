@@ -18,7 +18,13 @@ const sensitiveInputPatterns: Array<{ pattern: RegExp; label: string }> = [
   { pattern: /(어머니|아버지|부모님?|보호자).{0,12}(직업|근무|소득|재산|경제)/, label: "가정·보호자 정보" },
 ];
 const sentenceEnd = /(음|임|함|됨|보임|돋보임|있음|나타남|기대됨)[.!?]?$/;
-const behaviorSentenceEnd = /(음|임|함|됨|보임|돋보임|있음|나타남|기대됨)[.!?]?$/;
+function hasNominalMieumEnding(sentence: string) {
+  const normalized = sentence.trim().replace(/[.!?]+$/, "");
+  const last = normalized.at(-1);
+  if (!last) return false;
+  const code = last.charCodeAt(0);
+  return code >= 0xac00 && code <= 0xd7a3 && (code - 0xac00) % 28 === 16;
+}
 const spellingRules: Array<{ pattern: RegExp; message: string }> = [
   { pattern: /[^\S\r\n]{2,}/, message: "띄어쓰기가 두 칸 이상 연속된 부분이 있음" },
   { pattern: /\s+[,.!?]/, message: "문장부호 앞에 불필요한 공백이 있음" },
@@ -54,7 +60,7 @@ export function validateRecord(text: string, behavior = false): ValidationResult
   });
   const repeated = [...counts.entries()].filter(([, count]) => count > 1).map(([sentence]) => sentence.slice(0, 30));
   const endingsOk = !!sentences.length && sentences.every((sentence) =>
-    (behavior ? behaviorSentenceEnd : sentenceEnd).test(sentence));
+    behavior ? hasNominalMieumEnding(sentence) : sentenceEnd.test(sentence));
   const lengthOk = behavior ? bytes >= 500 && bytes <= 550 : bytes > 0 && bytes <= 1500;
   const growthIncluded = !behavior || /(성장|변화|발전|향상|노력|기르|익히|꾸준|가능성|나아)/.test(normalized);
   const spellingIssues = spellingRules.filter((rule) => rule.pattern.test(normalized)).map((rule) => rule.message);

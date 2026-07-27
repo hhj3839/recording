@@ -6,7 +6,7 @@ import { signCommentJob, verifyCommentJob } from "../../../comment-generation";
 import { generationModel } from "../../../ai-model-policy";
 
 export const maxDuration = 300;
-const MAX_GENERATION_ATTEMPTS = 2;
+const MAX_GENERATION_ATTEMPTS = 3;
 type JobRow = {
   id: string; owner_id: string; owner_email: string; class_id: number; status: string; batches: BehaviorInput[][];
   current_batch: number; total_batches: number; completed_items: number; failed_items: number; error_message: string; started_at: string | null;
