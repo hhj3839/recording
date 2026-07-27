@@ -27,17 +27,21 @@ export function validateGeneratedComment(comment: string, expectedSentenceCount:
     .filter(Boolean);
   const lengths = sentences.map((sentence) => Array.from(sentence).length);
   const forbidden = commentForbiddenExpressions.filter((expression) => normalized.includes(expression));
+  const awkwardEndings = sentences.filter((sentence) => /(?:함|하며|하고|감|며|고)함\.$/.test(sentence));
   return {
     sentences,
     lengths,
     sentenceCountOk: expectedSentenceCount > 0 && sentences.length === expectedSentenceCount,
     lengthsOk: lengths.length > 0 && lengths.every((length) => length >= 50 && length <= 60),
     endingsOk: sentences.length > 0 && sentences.every((sentence) => sentence.endsWith("함.")),
+    naturalEndingsOk: awkwardEndings.length === 0,
+    awkwardEndings,
     forbidden,
     valid: expectedSentenceCount > 0
       && sentences.length === expectedSentenceCount
       && lengths.every((length) => length >= 50 && length <= 60)
       && sentences.every((sentence) => sentence.endsWith("함."))
+      && awkwardEndings.length === 0
       && forbidden.length === 0,
   };
 }

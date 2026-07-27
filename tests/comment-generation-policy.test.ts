@@ -52,3 +52,10 @@ test("rejects missing areas, invalid length, endings, and forbidden expressions"
   const forbidden = "학습 내용의 이해가 부족함. 학습 활동에 참여하여 배운 내용을 꾸준하게 연습하고 적용하는 태도를 형성함.";
   assert.equal(validateGeneratedComment(forbidden, 2).valid, false);
 });
+
+test("rejects mechanically duplicated nominal endings", () => {
+  const awkward = "수업에서 작품의 중심 내용을 정확하게 파악하고 중요한 근거를 찾아 발표 활동에 꾸준히 참여함함.";
+  const result = validateGeneratedComment(awkward, 1);
+  assert.equal(result.naturalEndingsOk, false);
+  assert.equal(result.valid, false);
+});
