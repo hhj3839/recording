@@ -2,6 +2,7 @@ import { waitUntil } from "@vercel/functions";
 import { eq, selectRows, updateRows } from "../../../../db/supabase";
 import { getAiUsage, MONTHLY_AI_LIMIT, recordAiUsage } from "../../../ai-usage";
 import { BehaviorFailure, BehaviorInput, GeneratedBehavior, generateBehaviorBatch, saveGeneratedBehaviors } from "../../../behavior-generation";
+import { behaviorRepairInstruction } from "../../../behavior-repair-policy";
 import { signCommentJob, verifyCommentJob } from "../../../comment-generation";
 import { generationModel } from "../../../ai-model-policy";
 
@@ -91,7 +92,7 @@ export async function POST(request: Request) {
             const failure = generated.failures.find((candidate) => candidate.studentId === item.studentId);
             return failure ? {
               ...item,
-              repairHint: `${failure.issues.join(" · ")} · 목표 515~535바이트`,
+              repairHint: `${failure.issues.join(" · ")} · ${behaviorRepairInstruction(failure.bytes)}`,
               previousBehavior: failure.behavior,
             } : item;
           });

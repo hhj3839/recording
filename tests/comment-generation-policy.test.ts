@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { evidenceGroundingWarnings, hasCompleteEvidenceCoverage, openingRepetitionRate, validateGeneratedComment, validateGeneratedCommentPart } from "../app/comment-generation-policy.ts";
+import { behaviorRepairInstruction } from "../app/behavior-repair-policy.ts";
 import { generationModel } from "../app/ai-model-policy.ts";
 import { batchCommentsBySubject, COMMENT_BATCH_SIZE } from "../app/comment-batching.ts";
 import { batchBehaviors, BEHAVIOR_BATCH_SIZE } from "../app/behavior-batching.ts";
@@ -107,4 +108,9 @@ test("keeps behavior repair context serializable for minimal revision", () => {
   const restored = JSON.parse(JSON.stringify(repair));
   assert.equal(restored.previousBehavior, repair.previousBehavior);
   assert.match(restored.repairHint, /515~535/);
+});
+
+test("turns behavior byte gaps into concrete Korean syllable repair instructions", () => {
+  assert.match(behaviorRepairInstruction(495), /약 10음절.*30바이트.*추가/);
+  assert.match(behaviorRepairInstruction(589), /약 21음절.*64바이트.*삭제/);
 });
