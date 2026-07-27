@@ -817,9 +817,9 @@ function Assessments({ data, setData, plan, activeSubject, setActiveSubject, onD
   activeSubject: string;
   setActiveSubject: (subject: string) => void;
   onDeleteStudent: (id: number) => void;
-  onSave: () => Promise<void>;
+  onSave: () => Promise<string>;
 }) {
-  const [saved, setSaved] = useState(false);
+  const [lastSavedAt, setLastSavedAt] = useState<Date | null>(null);
   const [saving, setSaving] = useState(false);
   const [dirty, setDirty] = useState(false);
   const [bulkLevel, setBulkLevel] = useState<Level>("중");
@@ -831,7 +831,6 @@ function Assessments({ data, setData, plan, activeSubject, setActiveSubject, onD
 
   const changeSubject = (subject: string) => {
     setActiveSubject(subject);
-    setSaved(false);
     setMessage("");
   };
   const cycle = (row: number, col: number) => {
@@ -840,14 +839,13 @@ function Assessments({ data, setData, plan, activeSubject, setActiveSubject, onD
       ...student,
       assessments: student.assessments.map((level, c) => c !== col ? level : order[(order.indexOf(level) + 1) % order.length]),
     }));
-    setSaved(false);
     setDirty(true);
   };
   const save = useCallback(async () => {
     setSaving(true);
     try {
-      await onSave();
-      setSaved(true);
+      const updatedAt = await onSave();
+      setLastSavedAt(new Date(updatedAt));
       setDirty(false);
       setMessage("변경사항을 저장했습니다.");
     } finally {
@@ -870,14 +868,12 @@ function Assessments({ data, setData, plan, activeSubject, setActiveSubject, onD
       }),
     })));
     setDirty(true);
-    setSaved(false);
     setMessage(`${changed}개의 미입력 칸에 '${bulkLevel}'을 적용했습니다.`);
   };
   const clearAll = () => {
     if (!window.confirm(`${activeSubject}의 현재 화면 평가수준을 모두 미입력으로 바꿀까요?`)) return;
     setData((current) => current.map((student) => ({ ...student, assessments: student.assessments.map(() => "-") })));
     setDirty(true);
-    setSaved(false);
     setMessage(`${activeSubject} 평가수준을 모두 초기화했습니다.`);
   };
   const pasteLevels = async () => {
@@ -901,7 +897,6 @@ function Assessments({ data, setData, plan, activeSubject, setActiveSubject, onD
         assessments: student.assessments.map((level, columnIndex) => usable[rowIndex]?.[columnIndex] ?? level),
       })));
       setDirty(true);
-      setSaved(false);
       setMessage(`${usable.length}명 × ${visiblePlan.length}개 평가수준을 붙여넣었습니다.`);
     } catch (error) {
       setMessage(error instanceof Error ? error.message : "클립보드 내용을 붙여넣지 못했습니다.");
@@ -911,7 +906,7 @@ function Assessments({ data, setData, plan, activeSubject, setActiveSubject, onD
     <section>
       <div className="page-heading">
         <div><p className="eyebrow">{activeSubject} · 1학기</p><h1>평가 수준 입력</h1><p>셀을 눌러 학생별 성취 수준을 빠르게 입력하세요.</p></div>
-        <div className="heading-actions"><span className={`autosave-state ${saving ? "saving" : dirty ? "dirty" : "saved"}`}>{saving ? "자동 저장 중…" : dirty ? "저장 대기 중" : saved ? "자동 저장됨" : "변경 시 자동 저장"}</span><button onClick={() => void save()} disabled={saving || !dirty}>{saving ? "저장 중…" : "저장"}</button></div>
+        <div className="heading-actions"><span className={`autosave-state ${saving ? "saving" : dirty ? "dirty" : lastSavedAt ? "saved" : "idle"}`}>{saving ? "저장 중…" : dirty ? "저장 대기 중" : lastSavedAt ? `마지막 저장 ${lastSavedAt.toLocaleTimeString("ko-KR", { hour: "numeric", minute: "2-digit" })}` : "마지막 저장 기록 없음"}</span><button onClick={() => void save()} disabled={saving || !dirty}>{saving ? "저장 중…" : "저장"}</button></div>
       </div>
       <div className="workspace-toolbar assessment-workspace-toolbar">
         <SubjectNavigator subjects={subjects} activeSubject={activeSubject} onChange={changeSubject} progress={(subject) => subject === activeSubject ? `${completedCount}/${expectedCount}` : `${plan.filter((item) => item.subject === subject).length}개 영역`} />
@@ -1154,8 +1149,8 @@ function Comments({ assessmentDataBySubject, plan, roster }: { assessmentDataByS
             <div className="subject-generation-controls">
               <div><span>{formattedLastGeneratedAt ? `마지막 생성 ${formattedLastGeneratedAt}` : "생성 기록 없음"}</span><strong>{eligibleCount}명 중 {completedCount}명 생성 완료</strong></div>
               <button className="subject-generate-button" onClick={() => void generateSubjectComments()} disabled={loading || !eligibleCount}>{selectedSubjectIsGenerating ? generationProgress || `${selectedSubject} 생성 중…` : `✦ ${selectedSubject} AI 평어 생성`}</button>
-              <button className="danger-text" onClick={() => void clearSubjectComments()} disabled={loading || !completedCount}>{selectedSubject} 평어 초기화</button>
               <button className="copy-comments" onClick={() => void copySubjectComments()} disabled={!roster.some((student) => comments[`${student.id}|${selectedSubject}`])}>{copied ? "복사됨 ✓" : "평어만 복사하기"}</button>
+              <button className="subject-reset-button" title="학생 명단·평가계획·평가수준은 유지하고 현재 과목의 생성된 평어만 초기화합니다." onClick={() => void clearSubjectComments()} disabled={loading || !completedCount}><span aria-hidden="true">↺</span>{selectedSubject} 결과 초기화</button>
             </div>
           </div>
           {error && <p className="generation-error">! {error}</p>}
@@ -1209,7 +1204,7 @@ function Comments({ assessmentDataBySubject, plan, roster }: { assessmentDataByS
                       </article>;
                     })}</div>}
                     {selectedText[key] && <small className="comment-selection-hint">“{selectedText[key].text.slice(0, 36)}{selectedText[key].text.length > 36 ? "…" : ""}” 선택됨</small>}
-                    <div className="comment-row-actions"><button className="regenerate-button" disabled={!text || !!rewriteBusyKey} onMouseDown={(event) => event.preventDefault()} onClick={() => void rewriteComment(student.id, selectedSubject, "regenerate")}>{rewriteBusyKey === `${key}|regenerate` ? "생성 중…" : "다시 생성"}</button><button disabled={!text || !!rewriteBusyKey} onMouseDown={(event) => event.preventDefault()} onClick={() => void rewriteComment(student.id, selectedSubject, "shorter")}>짧게</button><button disabled={!text || !!rewriteBusyKey} onMouseDown={(event) => event.preventDefault()} onClick={() => void rewriteComment(student.id, selectedSubject, "specific")}>구체적으로</button><button disabled={!selectedText[key] || !!rewriteBusyKey} title={selectedText[key] ? "선택한 부분만 평가 근거에 맞게 바꿉니다." : "평어에서 바꿀 문장이나 표현을 먼저 선택하세요."} onMouseDown={(event) => event.preventDefault()} onClick={() => void rewriteComment(student.id, selectedSubject, "selection")}>{rewriteBusyKey === `${key}|selection` ? "변경 중…" : "선택한 부분 바꾸기"}</button><button className="evidence-button" onMouseDown={(event) => event.preventDefault()} onClick={() => setEvidenceKey((current) => current === key ? "" : key)}>생성 근거 {evidenceKey === key ? "닫기" : "보기"}</button></div>
+                    <div className="comment-row-actions"><button className="regenerate-button" disabled={!text || !!rewriteBusyKey} onMouseDown={(event) => event.preventDefault()} onClick={() => void rewriteComment(student.id, selectedSubject, "regenerate")}>{rewriteBusyKey === `${key}|regenerate` ? "생성 중…" : "다시 생성"}</button><button disabled={!selectedText[key] || !!rewriteBusyKey} title={selectedText[key] ? "선택한 부분만 평가 근거에 맞게 바꿉니다." : "평어에서 바꿀 문장이나 표현을 먼저 선택하세요."} onMouseDown={(event) => event.preventDefault()} onClick={() => void rewriteComment(student.id, selectedSubject, "selection")}>{rewriteBusyKey === `${key}|selection` ? "변경 중…" : "선택한 부분 바꾸기"}</button><button className="evidence-button" onMouseDown={(event) => event.preventDefault()} onClick={() => setEvidenceKey((current) => current === key ? "" : key)}>생성 근거 {evidenceKey === key ? "닫기" : "보기"}</button></div>
                     {evidenceKey === key && <div className="comment-evidence">{evidence.length ? evidence.map((item, evidenceIndex) => <article key={`${item.unit}-${evidenceIndex}`}><strong>{item.unit} · {item.domain} · {item.level}</strong><span>{item.level === "상" ? item.high : item.level === "중" ? item.middle : item.low}</span></article>) : <p>평어 생성에 사용된 상·중·하 평가 근거가 없습니다.</p>}</div>}
                   </td>
                   <td className="validation-cell"><div><span className={validation.endingsOk ? "pass" : "fail"}>종결 {validation.endingsOk ? "정상" : "확인"}</span><span className={!validation.forbidden.length ? "pass" : "fail"}>금지어 {!validation.forbidden.length ? "없음" : "확인"}</span><span className={validation.spellingOk ? "pass" : "fail"} title={validation.spellingIssues.join("\n")}>맞춤법 {validation.spellingOk ? "정상" : `${validation.spellingIssues.length}건`}</span><span className={!similarStudents.length ? "pass" : "fail"}>최대 중복 {closest?.score ? `${Math.round(closest.score * 100)}%` : "0%"}</span></div>{closest?.score > 0 && <div className="similarity-detail"><strong>{closest.student.name} 학생과 {Math.round(closest.score * 100)}%</strong>{closest.overlaps.length > 0 && <span>겹치는 표현: {closest.overlaps.join(" · ")}</span>}</div>}{!validation.spellingOk && <ul className="spelling-issues">{validation.spellingIssues.map((issue, issueIndex) => <li key={issueIndex}>{issue}</li>)}</ul>}</td>
@@ -1419,7 +1414,7 @@ function Behavior({ roster }: { roster: AssessmentStudent[] }) {
         <div className="ai-generate-actions">{formattedLastGeneratedAt && <span>마지막 사용 {formattedLastGeneratedAt}</span>}<button onClick={() => void generateAll()} disabled={loading || blockedSourceCount > 0}>{loading ? generationProgress || "전체 생성 중…" : blockedSourceCount ? `입력 확인 ${blockedSourceCount}명` : "✦ AI 행특 생성"}</button><button className="danger-text" onClick={() => void clearBehaviors()} disabled={loading || !roster.some((student) => records[student.id]?.behavior.trim())}>행동특성 초기화</button></div>
       </div>
       <div className="review-content behavior-table-content">
-        <div className="workspace-toolbar behavior-table-toolbar"><span><strong>생성 대상 {eligibleStudentIds.length}/{roster.length}명</strong> · 특성을 입력한 학생은 자동 포함 · 500~550B 자동 작성</span><div><button className="reference-open-button" onClick={() => setReferenceOpen((current) => !current)}>{referenceOpen ? "참고자료 닫기" : "참고자료 열기"}</button><button className="copy-comments" onClick={() => void copyBehaviors()} disabled={!roster.some((student) => records[student.id]?.behavior)}>{copied ? "복사됨 ✓" : "행동특성만 복사하기"}</button></div></div>
+        <div className="workspace-toolbar behavior-table-toolbar"><div className="behavior-generation-summary"><span className="behavior-target-count"><small>생성 대상</small><strong>{eligibleStudentIds.length}/{roster.length}명</strong></span><span className="behavior-auto-rule"><i aria-hidden="true">✓</i>특성을 4개 이상 입력한 학생 자동 포함</span><span className="behavior-byte-target">권장 길이 500~550B</span></div><div className="behavior-toolbar-actions"><button className="reference-open-button" onClick={() => setReferenceOpen((current) => !current)}>{referenceOpen ? "참고자료 닫기" : "참고자료 열기"}</button><button className="copy-comments" onClick={() => void copyBehaviors()} disabled={!roster.some((student) => records[student.id]?.behavior)}>{copied ? "복사됨 ✓" : "행동특성만 복사하기"}</button></div></div>
         {error && <p className="generation-error">! {error}</p>}
         {loading && <div className="comment-loading class-loading"><span>✦</span><p>입력된 모든 학생의 행동특성을 생성하고 있어요.</p></div>}
         <div className={`behavior-work-area ${referenceOpen ? "with-reference" : ""}`}>
@@ -1879,6 +1874,8 @@ export default function Home() {
       window.alert(result.error || "평가수준을 저장하지 못했습니다.");
       throw new Error("Assessment level save failed");
     }
+    const result = await response.json() as { updatedAt?: string };
+    return result.updatedAt ?? new Date().toISOString();
   };
   const applyPlanChange = (nextPlan: AssessmentPlan[]) => {
     setPlan(nextPlan);
