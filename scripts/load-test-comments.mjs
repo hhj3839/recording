@@ -3,8 +3,14 @@ import path from "node:path";
 
 const baseUrl = (process.env.LOAD_TEST_BASE_URL || "https://giroksam-recording.vercel.app").replace(/\/$/, "");
 const mode = process.argv[2] || "status";
-if (mode === "start" && process.env.RUN_FULL_225_TEST !== "YES") {
-  throw new Error("225건 전체 검사는 5명·25명 게이트 통과 후 RUN_FULL_225_TEST=YES로 명시적으로 승인해야 합니다.");
+const paidModeApprovals = {
+  sample: ["RUN_COMMENT_5_TEST", "5명 실제 AI 검사"],
+  subject: ["RUN_COMMENT_25_TEST", "25명·1과목 실제 AI 검사"],
+  start: ["RUN_FULL_225_TEST", "225건 전체 실제 AI 검사"],
+};
+const paidModeApproval = paidModeApprovals[mode];
+if (paidModeApproval && process.env[paidModeApproval[0]] !== "YES") {
+  throw new Error(`${paidModeApproval[1]}는 ${paidModeApproval[0]}=YES로 명시적으로 승인해야 합니다.`);
 }
 const commentBatchSize = 5;
 const commentForbiddenExpressions = ["부족함", "미흡함", "못함", "어려워함", "이해하지 못함", "소극적임", "불성실함"];

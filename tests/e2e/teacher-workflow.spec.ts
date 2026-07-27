@@ -2,6 +2,11 @@ import { expect, test, type Page } from "@playwright/test";
 import { readFile, readdir } from "node:fs/promises";
 import path from "node:path";
 
+test.skip(
+  process.env.E2E_ALLOW_PRODUCTION_WRITES !== "YES",
+  "학급 생성·삭제가 포함된 운영 E2E는 E2E_ALLOW_PRODUCTION_WRITES=YES로 명시적으로 승인해야 합니다.",
+);
+
 async function credentials() {
   if (process.env.E2E_EMAIL && process.env.E2E_PASSWORD) {
     return { email: process.env.E2E_EMAIL, password: process.env.E2E_PASSWORD };
