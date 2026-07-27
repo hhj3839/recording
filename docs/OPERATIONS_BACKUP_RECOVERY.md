@@ -28,8 +28,9 @@ Vercel Production 배포 성공 이벤트 뒤에는 GitHub Actions `Production h
 
 - CI의 `Check dependency sources and integrity` 단계는 직접 Git·URL·로컬 파일 의존성을 차단하고 모든 레지스트리 패키지에 SHA-512 무결성 값이 있는지 오프라인으로 검사함.
 - 외부 감사 서비스에 비공개 저장소의 의존성 목록을 전송하지 않음.
-- GitHub Dependabot alerts는 현재 저장소에서 비활성화 상태이므로 운영자가 저장소 보안 설정에서 활성화 여부를 결정해야 함.
-- Dependabot 또는 별도 취약점 감사가 활성화되기 전에는 알려진 최신 취약점 탐지까지 완료된 것으로 기록하지 않음.
+- GitHub Dependabot alerts는 2026-07-27 활성화했으며 활성화 직후 열린 경고는 0건이었음.
+- 자동 보안 수정과 자동 의존성 업데이트 PR은 활성화하지 않음.
+- Dependabot 경고 수는 배포 전과 매월 확인하고, 새 경고가 있으면 영향 범위와 수정 버전을 검토한 뒤 잠금파일을 의도적으로 갱신함.
 
 ## 장애 발생 시
 
