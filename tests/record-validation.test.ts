@@ -130,8 +130,15 @@ test("checks behavior byte length and growth expression", () => {
   assert.equal(result.bytes >= 500 && result.bytes <= 550, true);
   assert.equal(result.growthIncluded, true);
   assert.equal(result.valid, true);
-  const looseEnding = validateRecord(text.replace(/돋보임\.$/, "생활함."), true);
+  const looseEnding = validateRecord(text.replace(/돋보임\.$/, "생활한다."), true);
   assert.equal(looseEnding.endingsOk, false);
+});
+
+test("accepts natural Korean nominal endings for behavior records", () => {
+  const sentence = "수업에 성실히 참여함. 친구를 배려하는 태도가 돋보임. 맡은 역할을 꾸준히 실천하여 책임감이 향상됨.";
+  const repeated = sentence.repeat(5);
+  const result = validateRecord(repeated, true);
+  assert.equal(result.endingsOk, true);
 });
 
 test("measures similar records without using student identity", () => {

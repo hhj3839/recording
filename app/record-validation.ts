@@ -18,7 +18,7 @@ const sensitiveInputPatterns: Array<{ pattern: RegExp; label: string }> = [
   { pattern: /(어머니|아버지|부모님?|보호자).{0,12}(직업|근무|소득|재산|경제)/, label: "가정·보호자 정보" },
 ];
 const sentenceEnd = /(음|임|함|됨|보임|돋보임|있음|나타남|기대됨)[.!?]?$/;
-const behaviorSentenceEnd = /(음|임)[.!?]?$/;
+const behaviorSentenceEnd = /(음|임|함|됨|보임|돋보임|있음|나타남|기대됨)[.!?]?$/;
 const spellingRules: Array<{ pattern: RegExp; message: string }> = [
   { pattern: /[^\S\r\n]{2,}/, message: "띄어쓰기가 두 칸 이상 연속된 부분이 있음" },
   { pattern: /\s+[,.!?]/, message: "문장부호 앞에 불필요한 공백이 있음" },

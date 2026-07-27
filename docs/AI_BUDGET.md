@@ -27,3 +27,4 @@ GPT-5.4 mini의 공개 가격은 입력 100만 토큰당 USD 0.75, 캐시 입력
 - 파일럿 종료 후 실제 교사당 비용을 바탕으로 월 예산과 호출 한도를 다시 산정함.
 - OpenAI Platform의 프로젝트 월 예산·알림 설정은 서비스 운영자가 대시보드에서 별도로 적용해야 함.
 - 225건 전체 부하 검사는 5명·25명 게이트 통과 후 `RUN_FULL_225_TEST=YES`를 명시한 경우에만 실행함.
+- 행동특성 실제 검사는 `pnpm test:load-behaviors:preflight`로 비용 없이 준비 상태를 확인한 뒤 `RUN_BEHAVIOR_5_TEST=YES` 5명 게이트를 먼저 실행함. 25명 검사는 5명 통과 후 `RUN_BEHAVIOR_25_TEST=YES`일 때만 실행함.
