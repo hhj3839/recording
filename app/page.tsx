@@ -1074,7 +1074,7 @@ function Comments({ assessmentDataBySubject, plan, roster }: { assessmentDataByS
       <div className="review-layout comments-review-layout">
         <div className="review-content">
           <div className="workspace-toolbar comments-toolbar">
-            <SubjectNavigator subjects={subjects} activeSubject={selectedSubject} onChange={(subject) => { setSelectedSubject(subject); setCopied(false); }} progress={(subject) => `${roster.filter((student) => comments[`${student.id}|${subject}`]).length}/${roster.length}명`} />
+            <SubjectNavigator subjects={subjects} activeSubject={selectedSubject} onChange={(subject) => { setSelectedSubject(subject); setCopied(false); }} />
             <div className="subject-generation-controls">
               <div><span>{formattedLastGeneratedAt ? `마지막 생성 ${formattedLastGeneratedAt}` : "생성 기록 없음"}</span><strong>{eligibleCount}명 중 {completedCount}명 생성 완료</strong></div>
               <button className="subject-generate-button" onClick={() => void generateSubjectComments()} disabled={loading || !eligibleCount}>{selectedSubjectIsGenerating ? generationProgress || `${selectedSubject} 생성 중…` : `✦ ${selectedSubject} AI 평어 생성`}</button>
