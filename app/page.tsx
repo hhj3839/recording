@@ -904,7 +904,7 @@ function Assessments({ data, setData, plan, activeSubject, setActiveSubject, onD
 }
 
 function Comments({ assessmentDataBySubject, plan, roster }: { assessmentDataBySubject: Record<string, AssessmentStudent[]>; plan: AssessmentPlan[]; roster: AssessmentStudent[] }) {
-  type CommentJob = { id: string; status: string; subject: string; totalItems: number; completedItems: number; failedItems: number; failedStudentIds?: number[]; totalBatches: number; currentBatch: number; error?: string; completedAt?: string | null };
+  type CommentJob = { id: string; status: string; subject: string; totalItems: number; completedItems: number; failedItems: number; totalBatches: number; currentBatch: number; error?: string; completedAt?: string | null };
   const subjects = [...new Set(plan.map((item) => item.subject))];
   const [selectedSubject, setSelectedSubject] = useState(subjects[0] ?? "국어");
   const [comments, setComments] = useState<Record<string, string>>({});
@@ -960,7 +960,7 @@ function Comments({ assessmentDataBySubject, plan, roster }: { assessmentDataByS
           setLoading(false);
           setGenerationProgress("");
           await loadGeneratedComments();
-          if (result.job.failedItems) setError(result.job.error || `${result.job.failedItems}명이 생성되지 않았습니다. 실패 학생만 다시 생성할 수 있습니다.`);
+          if (result.job.failedItems) setError(result.job.error || `${result.job.failedItems}명이 생성되지 않았습니다. 과목 AI 평어 생성을 다시 실행해 주세요.`);
           else setError("");
           const generatedAt = result.job.completedAt || new Date().toISOString();
           if (result.job.subject) setSubjectGeneratedAt((current) => ({ ...current, [result.job!.subject]: generatedAt }));
@@ -1066,7 +1066,6 @@ function Comments({ assessmentDataBySubject, plan, roster }: { assessmentDataByS
   const eligibleCount = eligibleStudentIds.size;
   const completedCount = roster.filter((student) =>
     eligibleStudentIds.has(student.id) && Boolean(comments[`${student.id}|${selectedSubject}`])).length;
-  const failedStudentIds = activeJob?.subject === selectedSubject ? activeJob.failedStudentIds ?? [] : [];
   const selectedSubjectIsGenerating = loading && activeJob?.subject === selectedSubject;
   return (
     <section>
@@ -1078,7 +1077,6 @@ function Comments({ assessmentDataBySubject, plan, roster }: { assessmentDataByS
             <div className="subject-generation-controls">
               <div><span>{formattedLastGeneratedAt ? `마지막 생성 ${formattedLastGeneratedAt}` : "생성 기록 없음"}</span><strong>{eligibleCount}명 중 {completedCount}명 생성 완료</strong></div>
               <button className="subject-generate-button" onClick={() => void generateSubjectComments()} disabled={loading || !eligibleCount}>{selectedSubjectIsGenerating ? generationProgress || `${selectedSubject} 생성 중…` : `✦ ${selectedSubject} AI 평어 생성`}</button>
-              {failedStudentIds.length > 0 && !loading && <button className="retry-failed-button" onClick={() => void generateSubjectComments(failedStudentIds)}>실패 {failedStudentIds.length}명만 다시 생성</button>}
               <button className="copy-comments" onClick={() => void copySubjectComments()} disabled={!roster.some((student) => comments[`${student.id}|${selectedSubject}`])}>{copied ? "복사됨 ✓" : "평어만 복사하기"}</button>
             </div>
           </div>

@@ -1,5 +1,5 @@
 import { waitUntil } from "@vercel/functions";
-import { eq, gte, insertRows, selectRows } from "../../../db/supabase";
+import { eq, insertRows, selectRows } from "../../../db/supabase";
 import { getAiUsage, MONTHLY_AI_LIMIT } from "../../ai-usage";
 import { batchCommentsBySubject } from "../../comment-batching";
 import { CommentEvidence, signCommentJob } from "../../comment-generation";
@@ -58,17 +58,7 @@ export async function GET() {
       order: "created_at.desc",
       limit: 1,
     });
-    if (!jobs[0]) return Response.json({ job: null });
-    const job = jobs[0];
-    const successful = await selectRows<{ student_id: number; subject: string }>("generated_comments", {
-      owner_id: eq(user.id),
-      class_id: eq(classId),
-      updated_at: gte(job.created_at),
-    });
-    const successfulKeys = new Set(successful.map((item) => `${item.student_id}|${item.subject}`));
-    const failedStudentIds = [...new Set(job.batches.flat().filter((item) =>
-      !successfulKeys.has(`${item.studentId}|${item.subject}`)).map((item) => item.studentId))];
-    return Response.json({ job: { ...present(job), failedStudentIds } });
+    return Response.json({ job: jobs[0] ? present(jobs[0]) : null });
   } catch (error) {
     return dataError(error, "교과 평어 생성 상태를 불러오지 못했습니다.");
   }
