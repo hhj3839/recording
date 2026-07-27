@@ -1,7 +1,7 @@
 import { waitUntil } from "@vercel/functions";
 import { eq, selectRows, updateRows } from "../../../../db/supabase";
 import { getAiUsage, MONTHLY_AI_LIMIT, recordAiUsage } from "../../../ai-usage";
-import { BehaviorInput, GeneratedBehavior, generateBehaviorBatch, saveGeneratedBehaviors } from "../../../behavior-generation";
+import { BehaviorFailure, BehaviorInput, GeneratedBehavior, generateBehaviorBatch, saveGeneratedBehaviors } from "../../../behavior-generation";
 import { signCommentJob, verifyCommentJob } from "../../../comment-generation";
 import { generationModel } from "../../../ai-model-policy";
 
@@ -37,6 +37,7 @@ export async function POST(request: Request) {
     status: "running", started_at: job.started_at ?? new Date().toISOString(), updated_at: new Date().toISOString(),
   });
   let behaviors: GeneratedBehavior[] = [];
+  const fallbackBehaviors = new Map<number, BehaviorFailure>();
   let errorMessage = "";
   let pending = batch;
   const batchStudentIds = new Set(batch.map((item) => item.studentId));
@@ -54,15 +55,36 @@ export async function POST(request: Request) {
       break;
     }
     try {
-      const generated = await generateBehaviorBatch(pending, avoidBehaviors, generationModel(attempt, MAX_GENERATION_ATTEMPTS));
-      behaviors = [...behaviors, ...generated.behaviors];
-      const generatedIds = new Set(generated.behaviors.map((item) => item.studentId));
-      pending = pending.filter((item) => !generatedIds.has(item.studentId));
-      await recordAiUsage({
-        ownerId: job.owner_id, ownerEmail: job.owner_email, classId: Number(job.class_id),
-        feature: `all-behaviors-attempt-${attempt + 1}`,
-        ...generated.usage,
-      });
+      const groups = attempt === 0 ? [pending] : pending.map((item) => [item]);
+      for (const group of groups) {
+        const generated = await generateBehaviorBatch(group, avoidBehaviors, generationModel(attempt, MAX_GENERATION_ATTEMPTS));
+        const known = new Set(behaviors.map((item) => item.studentId));
+        const newBehaviors = generated.behaviors.filter((item) => !known.has(item.studentId));
+        behaviors = [...behaviors, ...newBehaviors];
+        if (newBehaviors.length) {
+          await saveGeneratedBehaviors({
+            ownerId: job.owner_id, ownerEmail: job.owner_email, classId: Number(job.class_id), behaviors: newBehaviors,
+          });
+        }
+        for (const failure of generated.failures) {
+          const previous = fallbackBehaviors.get(failure.studentId);
+          if (failure.recoverable && (!previous || Math.abs(failure.bytes - 525) < Math.abs(previous.bytes - 525))) {
+            fallbackBehaviors.set(failure.studentId, failure);
+          }
+        }
+        const generatedIds = new Set(generated.behaviors.map((item) => item.studentId));
+        pending = pending
+          .filter((item) => !generatedIds.has(item.studentId))
+          .map((item) => {
+            const failure = generated.failures.find((candidate) => candidate.studentId === item.studentId);
+            return failure ? { ...item, repairHint: failure.issues.join(" · ") } : item;
+          });
+        await recordAiUsage({
+          ownerId: job.owner_id, ownerEmail: job.owner_email, classId: Number(job.class_id),
+          feature: `all-behaviors-attempt-${attempt + 1}`,
+          ...generated.usage,
+        });
+      }
     }
     catch (error) {
       errorMessage = error instanceof Error ? error.message : "AI 생성 오류";
@@ -77,8 +99,18 @@ export async function POST(request: Request) {
   if (cancelledBeforeSave) {
     return Response.json({ ok: true, terminal: true, cancelled: true });
   }
-  if (behaviors.length) {
-    await saveGeneratedBehaviors({ ownerId: job.owner_id, ownerEmail: job.owner_email, classId: Number(job.class_id), behaviors });
+  const completedIds = new Set(behaviors.map((item) => item.studentId));
+  const recoverable = pending.flatMap((item) => {
+    const fallback = fallbackBehaviors.get(item.studentId);
+    return fallback && !completedIds.has(item.studentId)
+      ? [{ ...item, behavior: fallback.behavior }]
+      : [];
+  });
+  if (recoverable.length) {
+    behaviors = [...behaviors, ...recoverable];
+    await saveGeneratedBehaviors({
+      ownerId: job.owner_id, ownerEmail: job.owner_email, classId: Number(job.class_id), behaviors: recoverable,
+    });
   }
   const returned = new Set(behaviors.map((item) => item.studentId));
   const failedInBatch = batch.filter((item) => !returned.has(item.studentId)).length;
