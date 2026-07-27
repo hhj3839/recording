@@ -32,6 +32,13 @@ Vercel Production 배포 성공 이벤트 뒤에는 GitHub Actions `Production h
 - 자동 보안 수정과 자동 의존성 업데이트 PR은 활성화하지 않음.
 - Dependabot 경고 수는 배포 전과 매월 확인하고, 새 경고가 있으면 영향 범위와 수정 버전을 검토한 뒤 잠금파일을 의도적으로 갱신함.
 
+## 비밀정보 유출 방지
+
+- GitHub Secret scanning과 Push Protection이 모두 활성화되어 있음.
+- CI의 `Check tracked files for secrets`는 추적 파일에서 OpenAI·GitHub·Google·AWS 토큰, 개인키, 실제 서비스 키 환경변수 할당 패턴을 오프라인으로 검사함.
+- 검사 실패 시 비밀값은 로그에 출력하지 않고 파일명과 유형만 표시함.
+- `.env.local`과 로컬 자격증명은 Git에 추가하지 않으며 GitHub Actions에도 운영 키를 등록하지 않음.
+
 ## 장애 발생 시
 
 1. 신규 AI 생성과 평가계획 초기화를 중단함.

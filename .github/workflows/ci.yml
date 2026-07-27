@@ -40,5 +40,8 @@ jobs:
       - name: Check dependency sources and integrity
         run: pnpm test:supply-chain
 
+      - name: Check tracked files for secrets
+        run: pnpm test:secrets
+
       - name: Test and build
         run: pnpm test
