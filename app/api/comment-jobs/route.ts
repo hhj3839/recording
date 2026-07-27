@@ -1,5 +1,5 @@
 import { waitUntil } from "@vercel/functions";
-import { eq, insertRows, selectRows } from "../../../db/supabase";
+import { eq, insertRows, selectRows, supabaseRequest } from "../../../db/supabase";
 import { getAiUsage, MONTHLY_AI_LIMIT } from "../../ai-usage";
 import { batchCommentsBySubject } from "../../comment-batching";
 import { CommentEvidence, signCommentJob } from "../../comment-generation";
@@ -66,7 +66,7 @@ export async function GET() {
 
 export async function POST(request: Request) {
   try {
-    const body = await request.json() as { scores?: unknown; selectedStudentIds?: unknown };
+    const body = await request.json() as { scores?: unknown; selectedStudentIds?: unknown; overwriteExisting?: unknown };
     if (!body.scores || typeof body.scores !== "object" || Array.isArray(body.scores)) {
       return Response.json({ error: "평가 수준을 다시 확인해 주세요." }, { status: 400 });
     }
@@ -87,7 +87,6 @@ export async function POST(request: Request) {
       startRunner(request, active[0].id);
       return Response.json({ job: present(active[0]), alreadyRunning: true }, { status: 202 });
     }
-
     const planRows = await selectRows<Record<string, string | number>>("assessment_plans", {
       owner_id: eq(user.id), class_id: eq(classId), order: "sort_order.asc",
     });
@@ -123,6 +122,18 @@ export async function POST(request: Request) {
     const usage = await getAiUsage(user.id);
     if (usage.monthly + batches.length > MONTHLY_AI_LIMIT) {
       return Response.json({ error: `이번 작업에는 AI 요청 ${batches.length}회가 필요하지만 이번 달 잔여 한도는 ${Math.max(0, MONTHLY_AI_LIMIT - usage.monthly)}회입니다.` }, { status: 429 });
+    }
+    if (body.overwriteExisting === true) {
+      const selected = `in.(${selectedStudentIds.join(",")})`;
+      const selectedSubjects = Object.keys(body.scores as Record<string, unknown>);
+      if (selectedSubjects.length !== 1) return Response.json({ error: "전체 재생성은 한 과목씩 실행해 주세요." }, { status: 400 });
+      const subject = selectedSubjects[0];
+      await supabaseRequest("generated_comment_parts", {
+        method: "DELETE", query: { owner_id: eq(user.id), class_id: eq(classId), subject: eq(subject), student_id: selected },
+      });
+      await supabaseRequest("generated_comments", {
+        method: "DELETE", query: { owner_id: eq(user.id), class_id: eq(classId), subject: eq(subject), student_id: selected },
+      });
     }
 
     const rows = await insertRows<JobRow>("generation_jobs", [{

@@ -177,6 +177,8 @@ test("worker and destructive APIs reject forged authorization", async () => {
     ["/api/comment-jobs/run", {}, { jobId: "00000000-0000-0000-0000-000000000000", signature: "forged" }, 403],
     ["/api/privacy-data", { Cookie: cookie }, { scope: "class", confirmation: "잘못된문구" }, 400],
     ["/api/classrooms", { Cookie: cookie }, { id: 2_147_483_647, confirmation: "잘못된문구" }, 400],
+    ["/api/generated-comments", { Cookie: cookie }, { subject: "국어", confirmation: "잘못된문구" }, 400],
+    ["/api/student-behaviors", { Cookie: cookie }, { scope: "results", confirmation: "잘못된문구" }, 400],
   ];
   for (const [route, extraHeaders, body, expected] of attempts) {
     const response = await fetch(`${baseUrl}${route}`, {

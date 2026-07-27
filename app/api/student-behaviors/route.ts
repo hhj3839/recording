@@ -1,4 +1,4 @@
-import { eq, selectRows, upsertRows } from "../../../db/supabase";
+import { eq, selectRows, supabaseRequest, updateRows, upsertRows } from "../../../db/supabase";
 import { confirmationIssue } from "../../record-confirmation";
 import { dataError, getDataScope, requireOwnedStudentIds } from "../../data-scope";
 import { validateRecord } from "../../record-validation";
@@ -44,5 +44,28 @@ export async function PUT(request: Request) {
     return Response.json({ ok: true, confirmed, validation, updatedAt });
   } catch (error) {
     return dataError(error, "행동특성 내용을 저장하지 못했습니다.");
+  }
+}
+
+export async function DELETE(request: Request) {
+  try {
+    const body = await request.json().catch(() => ({})) as { scope?: unknown; confirmation?: unknown };
+    const scope = body.scope === "all" ? "all" : "results";
+    if (body.confirmation !== "행동특성초기화") {
+      return Response.json({ error: "확인 문구가 올바르지 않습니다." }, { status: 400 });
+    }
+    const { user, classId } = await getDataScope();
+    if (scope === "all") {
+      await supabaseRequest("student_behaviors", {
+        method: "DELETE", query: { owner_id: eq(user.id), class_id: eq(classId) },
+      });
+    } else {
+      await updateRows("student_behaviors", { owner_id: eq(user.id), class_id: eq(classId) }, {
+        behavior: "", confirmed: false, confirmed_at: null, updated_at: new Date().toISOString(),
+      });
+    }
+    return Response.json({ ok: true, scope });
+  } catch (error) {
+    return dataError(error, "행동특성을 초기화하지 못했습니다.");
   }
 }

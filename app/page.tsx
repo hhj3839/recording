@@ -43,6 +43,20 @@ const behaviorReferences = [
   { category: "자기관리·생활", strengths: ["규칙을 잘 준수함", "시간을 계획적으로 관리함", "주변을 깨끗하게 정리함", "건강한 생활 습관을 실천함"], growth: ["정리정돈 습관을 형성해 가고 있음", "규칙을 스스로 지키려는 노력이 필요함", "계획한 일을 스스로 실천하는 힘을 기르는 중임"] },
 ];
 
+const assessmentPlanGptPrompt = `다음 과정중심평가 계획을 기록샘 평가계획 붙여넣기 형식으로 변환해 줘.
+
+[출력 규칙]
+1. 열 순서는 과목 / 단원 / 평가목표 / 영역 / 평가유형 / 평가관점 / 상 / 중 / 하 / 평가상의 유의점이다.
+2. 각 열은 탭(Tab)으로 구분하고 평가 항목 한 개당 한 줄로 출력한다.
+3. 첫 줄에 열 제목을 포함한다.
+4. 마크다운 표, 코드 블록, 번호, 설명, 따옴표를 쓰지 않는다.
+5. 원문에 없는 내용을 만들지 않고 확인할 수 없는 항목은 빈칸으로 둔다.
+6. 셀 내부에서 줄바꿈하지 않고 여러 내용은 “ / ”로 구분한다.
+7. 상·중·하 평가기준을 구분해 넣고 모든 행이 정확히 10개 열인지 확인한다.
+
+[변환할 과정중심평가 계획]
+여기에 평가계획 원문을 붙여넣으세요.`;
+
 const navItems: { id: View; label: string; icon: string }[] = [
   { id: "dashboard", label: "대시보드", icon: "⌂" },
   { id: "classes", label: "학급 관리", icon: "▣" },
@@ -722,6 +736,16 @@ function PlanManager({ plan, onChanged, current }: { plan: AssessmentPlan[]; onC
     <section className="plan-paste-entry">
       <div className="section-heading"><div><p className="eyebrow">PASTE TABLE</p><h2>평가계획 표 붙여넣기</h2><p>엑셀이나 한글 표에서 10개 열을 복사하거나 탭으로 구분된 여러 행을 그대로 붙여넣으세요.</p></div><button disabled={busy || !planText.trim()} onClick={interpretPlanText}>표 분석·미리보기</button></div>
       <div className="plan-paste-columns">과목 → 단원 → 평가목표 → 영역 → 평가유형 → 평가관점 → 상 → 중 → 하 → 유의점</div>
+      <details className="plan-gpt-guide">
+        <summary>GPT로 과정중심평가 계획을 붙여넣기 형식으로 바꾸는 방법</summary>
+        <p>아래 프롬프트를 GPT에 붙여넣고 마지막에 원본 평가계획을 추가하세요. 결과는 마크다운 표가 아닌 탭으로 구분된 10개 열이어야 합니다.</p>
+        <button type="button" className="secondary" onClick={() => {
+          void navigator.clipboard.writeText(assessmentPlanGptPrompt)
+            .then(() => setMessage("GPT 변환 프롬프트를 복사했습니다."))
+            .catch(() => setErrors(["프롬프트를 복사하지 못했습니다. 브라우저의 클립보드 권한을 확인해 주세요."]));
+        }}>GPT 변환 프롬프트 복사</button>
+        <pre>{assessmentPlanGptPrompt}</pre>
+      </details>
       <textarea value={planText} onChange={(event) => setPlanText(event.target.value)} placeholder={"국어\t1. 생생하게 표현해요\t상황에 알맞게 표현할 수 있다.\t듣기·말하기\t구술 평가\t상황에 맞게 표현하는가?\t정확하고 실감 나게 표현할 수 있다.\t알맞게 표현할 수 있다.\t도움을 받아 표현하기 위해 노력한다.\t다양한 표현을 고려한다."} />
     </section>
     {message && <p className="student-message">{message}</p>}
@@ -925,9 +949,8 @@ function Comments({ assessmentDataBySubject, plan, roster }: { assessmentDataByS
       };
       if (!response.ok) return;
       setCommentParts(result.parts ?? []);
-      if (!result.comments?.length) return;
-      setComments(Object.fromEntries(result.comments.map((item) => [`${item.studentId}|${item.subject}`, item.comment])));
-      setSubjectGeneratedAt(result.comments.reduce<Record<string, string>>((latest, item) => {
+      setComments(Object.fromEntries((result.comments ?? []).map((item) => [`${item.studentId}|${item.subject}`, item.comment])));
+      setSubjectGeneratedAt((result.comments ?? []).reduce<Record<string, string>>((latest, item) => {
         if (!latest[item.subject] || latest[item.subject] < item.updatedAt) latest[item.subject] = item.updatedAt;
         return latest;
       }, {}));
@@ -994,7 +1017,17 @@ function Comments({ assessmentDataBySubject, plan, roster }: { assessmentDataByS
     const eligibleIds = subjectStudents
       .filter((student) => student.assessments.some((level) => ["상", "중", "하"].includes(level)))
       .map((student) => student.id);
-    const targetIds = retryStudentIds?.length ? retryStudentIds.filter((id) => eligibleIds.includes(id)) : eligibleIds;
+    let targetIds = retryStudentIds?.length ? retryStudentIds.filter((id) => eligibleIds.includes(id)) : eligibleIds;
+    let overwriteExisting = false;
+    if (!retryStudentIds?.length) {
+      const filledIds = eligibleIds.filter((id) => Boolean(comments[`${id}|${selectedSubject}`]?.trim()));
+      if (filledIds.length) {
+        if (window.confirm(`${selectedSubject} 평어가 ${filledIds.length}명에게 이미 있습니다.\n\n확인: 비어 있는 학생만 생성\n취소: 다른 선택 보기`)) {
+          targetIds = eligibleIds.filter((id) => !filledIds.includes(id));
+        } else if (window.confirm(`기존 ${filledIds.length}명의 평어도 덮어쓰고 ${eligibleIds.length}명 전체를 다시 생성할까요?\n교사가 수정한 내용도 바뀝니다.`)) overwriteExisting = true;
+        else return;
+      }
+    }
     if (!targetIds.length) return setError(`${selectedSubject}에서 상·중·하 평가수준이 입력된 학생이 없습니다.`);
     setLoading(true);
     setError("");
@@ -1008,7 +1041,7 @@ function Comments({ assessmentDataBySubject, plan, roster }: { assessmentDataByS
       const response = await fetch("/api/comment-jobs", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ scores, selectedStudentIds: targetIds }),
+        body: JSON.stringify({ scores, selectedStudentIds: targetIds, overwriteExisting }),
       });
       const result = await response.json() as { job?: CommentJob; error?: string };
       if (!response.ok || !result.job) throw new Error(result.error || "백그라운드 생성 작업을 시작하지 못했습니다.");
@@ -1020,6 +1053,21 @@ function Comments({ assessmentDataBySubject, plan, roster }: { assessmentDataByS
       setLoading(false);
       setGenerationProgress("");
     }
+  };
+  const clearSubjectComments = async () => {
+    const count = roster.filter((student) => comments[`${student.id}|${selectedSubject}`]?.trim()).length;
+    if (!count) return;
+    if (!window.confirm(`${selectedSubject} 평어 ${count}건을 초기화할까요?\n학생 명단·평가계획·평가수준은 유지됩니다.`)) return;
+    const response = await fetch("/api/generated-comments", {
+      method: "DELETE", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ subject: selectedSubject, confirmation: "평어초기화" }),
+    });
+    const result = await response.json() as { error?: string };
+    if (!response.ok) return setError(result.error || "교과 평어를 초기화하지 못했습니다.");
+    setComments((current) => Object.fromEntries(Object.entries(current).filter(([key]) => !key.endsWith(`|${selectedSubject}`))));
+    setCommentParts((current) => current.filter((part) => part.subject !== selectedSubject));
+    setSubjectGeneratedAt((current) => { const next = { ...current }; delete next[selectedSubject]; return next; });
+    setError("");
   };
   const saveComment = async (studentId: number, subject: string, comment: string) => {
     try {
@@ -1081,6 +1129,7 @@ function Comments({ assessmentDataBySubject, plan, roster }: { assessmentDataByS
             <div className="subject-generation-controls">
               <div><span>{formattedLastGeneratedAt ? `마지막 생성 ${formattedLastGeneratedAt}` : "생성 기록 없음"}</span><strong>{eligibleCount}명 중 {completedCount}명 생성 완료</strong></div>
               <button className="subject-generate-button" onClick={() => void generateSubjectComments()} disabled={loading || !eligibleCount}>{selectedSubjectIsGenerating ? generationProgress || `${selectedSubject} 생성 중…` : `✦ ${selectedSubject} AI 평어 생성`}</button>
+              <button className="danger-text" onClick={() => void clearSubjectComments()} disabled={loading || !completedCount}>{selectedSubject} 평어 초기화</button>
               <button className="copy-comments" onClick={() => void copySubjectComments()} disabled={!roster.some((student) => comments[`${student.id}|${selectedSubject}`])}>{copied ? "복사됨 ✓" : "평어만 복사하기"}</button>
             </div>
           </div>
@@ -1113,7 +1162,7 @@ function Comments({ assessmentDataBySubject, plan, roster }: { assessmentDataByS
                     {areaIssues.length > 0 && <div className="comment-area-issues">{areaIssues.map((part) => {
                       const domain = plan.filter((item) => item.subject === selectedSubject)[part.assessmentIndex]?.domain || `${part.assessmentIndex + 1}번째`;
                       return <span className={part.status === "needs_review" ? "fail" : "warning"} key={`${part.assessmentIndex}-${part.status}`}>
-                        {domain} 영역 {part.status === "needs_review" ? "확인 필요" : part.issues.join(" · ")}
+                        <span title={part.issues.join(" · ")}>{domain} 영역 확인 필요</span>
                       </span>;
                     })}</div>}
                     <div className="comment-row-actions"><button disabled={!text || !!rewriteBusyKey} onMouseDown={(event) => event.preventDefault()} onClick={() => void rewriteComment(student.id, selectedSubject, "shorter")}>짧게</button><button disabled={!text || !!rewriteBusyKey} onMouseDown={(event) => event.preventDefault()} onClick={() => void rewriteComment(student.id, selectedSubject, "specific")}>구체적으로</button><button disabled={!selectedText[key] || !!rewriteBusyKey} onMouseDown={(event) => event.preventDefault()} onClick={() => void rewriteComment(student.id, selectedSubject, "selection")}>{rewriteBusyKey === `${key}|selection` ? "생성 중…" : "선택 문장 재생성"}</button><button className="evidence-button" onMouseDown={(event) => event.preventDefault()} onClick={() => setEvidenceKey((current) => current === key ? "" : key)}>생성 근거 {evidenceKey === key ? "닫기" : "보기"}</button></div>
@@ -1207,8 +1256,17 @@ function Behavior({ roster }: { roster: AssessmentStudent[] }) {
     setError("");
   };
   const generateAll = async () => {
-    const inputs = roster.map((student) => ({ studentId: student.id, characteristic: records[student.id]?.characteristic ?? "" })).filter((item) => item.characteristic.trim());
+    let inputs = roster.map((student) => ({ studentId: student.id, characteristic: records[student.id]?.characteristic ?? "" })).filter((item) => item.characteristic.trim());
     if (!inputs.length) return setError("한 명 이상의 특성을 입력해 주세요.");
+    const filledIds = inputs.filter((item) => records[item.studentId]?.behavior.trim()).map((item) => item.studentId);
+    if (filledIds.length) {
+      if (window.confirm(`행동특성이 ${filledIds.length}명에게 이미 있습니다.\n\n확인: 비어 있는 학생만 생성\n취소: 다른 선택 보기`)) {
+        inputs = inputs.filter((item) => !filledIds.includes(item.studentId));
+        if (!inputs.length) return setError("특성이 입력된 모든 학생의 행동특성이 이미 작성되어 있습니다.");
+      } else if (!window.confirm(`기존 ${filledIds.length}명의 행동특성도 덮어쓰고 ${inputs.length}명 전체를 다시 생성할까요?\n교사가 수정한 내용도 바뀝니다.`)) {
+        return;
+      }
+    }
     const insufficient = inputs.filter((item) => countBehaviorCharacteristics(item.characteristic) < 4);
     if (insufficient.length) {
       const numbers = insufficient.map((item) => roster.find((student) => student.id === item.studentId)?.number ?? item.studentId);
@@ -1237,6 +1295,24 @@ function Behavior({ roster }: { roster: AssessmentStudent[] }) {
       setLoading(false);
       setGenerationProgress("");
     }
+  };
+  const clearBehaviors = async () => {
+    const filledCount = roster.filter((student) => records[student.id]?.behavior.trim()).length;
+    if (!filledCount) return;
+    if (!window.confirm(`행동특성 생성 결과 ${filledCount}건을 초기화할까요?\n학생별로 입력한 특성은 유지됩니다.`)) return;
+    const removeSources = window.confirm("학생 특성 입력 내용도 함께 삭제할까요?\n\n확인: 특성과 결과 모두 삭제\n취소: 생성 결과만 삭제");
+    const response = await fetch("/api/student-behaviors", {
+      method: "DELETE", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ scope: removeSources ? "all" : "results", confirmation: "행동특성초기화" }),
+    });
+    const result = await response.json() as { error?: string };
+    if (!response.ok) return setError(result.error || "행동특성을 초기화하지 못했습니다.");
+    setRecords((current) => Object.fromEntries(roster.map((student) => [
+      student.id,
+      removeSources ? emptyBehaviorRecord() : { characteristic: current[student.id]?.characteristic ?? "", behavior: "" },
+    ])));
+    setLastGeneratedAt("");
+    setError("");
   };
   const copyBehaviors = async () => {
     try {
@@ -1296,7 +1372,7 @@ function Behavior({ roster }: { roster: AssessmentStudent[] }) {
     <section>
       <div className="page-heading">
         <div><p className="eyebrow">GROWTH NOTE</p><h1>행동특성 작성</h1><p>학생별 특성을 입력하고 한 번에 행동특성을 생성하세요.</p></div>
-        <div className="ai-generate-actions">{formattedLastGeneratedAt && <span>마지막 사용 {formattedLastGeneratedAt}</span>}<button onClick={() => void generateAll()} disabled={loading || blockedSourceCount > 0}>{loading ? generationProgress || "전체 생성 중…" : blockedSourceCount ? `입력 확인 ${blockedSourceCount}명` : "✦ AI 행특 생성"}</button></div>
+        <div className="ai-generate-actions">{formattedLastGeneratedAt && <span>마지막 사용 {formattedLastGeneratedAt}</span>}<button onClick={() => void generateAll()} disabled={loading || blockedSourceCount > 0}>{loading ? generationProgress || "전체 생성 중…" : blockedSourceCount ? `입력 확인 ${blockedSourceCount}명` : "✦ AI 행특 생성"}</button><button className="danger-text" onClick={() => void clearBehaviors()} disabled={loading || !roster.some((student) => records[student.id]?.behavior.trim())}>행동특성 초기화</button></div>
       </div>
       <div className="review-content behavior-table-content">
         <div className="workspace-toolbar behavior-table-toolbar"><span><strong>생성 대상 {eligibleStudentIds.length}/{roster.length}명</strong> · 특성을 입력한 학생은 자동 포함 · 500~550B 자동 작성</span><div><button className="reference-open-button" onClick={() => setReferenceOpen((current) => !current)}>{referenceOpen ? "참고자료 닫기" : "참고자료 열기"}</button><button className="copy-comments" onClick={() => void copyBehaviors()} disabled={!roster.some((student) => records[student.id]?.behavior)}>{copied ? "복사됨 ✓" : "행동특성만 복사하기"}</button></div></div>

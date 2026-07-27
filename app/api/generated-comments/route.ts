@@ -1,4 +1,4 @@
-import { eq, selectRows, upsertRows } from "../../../db/supabase";
+import { eq, selectRows, supabaseRequest, upsertRows } from "../../../db/supabase";
 import { confirmationIssue } from "../../record-confirmation";
 import { dataError, getDataScope, requireOwnedStudentIds } from "../../data-scope";
 import { validateRecord } from "../../record-validation";
@@ -53,5 +53,25 @@ export async function PUT(request: Request) {
     return Response.json({ ok: true, confirmed, validation, updatedAt });
   } catch (error) {
     return dataError(error, "수정한 평어를 저장하지 못했습니다.");
+  }
+}
+
+export async function DELETE(request: Request) {
+  try {
+    const body = await request.json().catch(() => ({})) as { subject?: unknown; confirmation?: unknown };
+    const subject = typeof body.subject === "string" ? body.subject.trim() : "";
+    if (!subject || body.confirmation !== "평어초기화") {
+      return Response.json({ error: "과목 또는 확인 문구가 올바르지 않습니다." }, { status: 400 });
+    }
+    const { user, classId } = await getDataScope();
+    await supabaseRequest("generated_comment_parts", {
+      method: "DELETE", query: { owner_id: eq(user.id), class_id: eq(classId), subject: eq(subject) },
+    });
+    await supabaseRequest("generated_comments", {
+      method: "DELETE", query: { owner_id: eq(user.id), class_id: eq(classId), subject: eq(subject) },
+    });
+    return Response.json({ ok: true, subject });
+  } catch (error) {
+    return dataError(error, "교과 평어를 초기화하지 못했습니다.");
   }
 }
