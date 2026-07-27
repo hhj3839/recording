@@ -9,6 +9,7 @@ import { parseAssessmentPlanText } from "../app/assessment-plan-parser.ts";
 import { isStrongPassword } from "../app/password-policy.ts";
 import { validateSignupProfile } from "../app/signup-policy.ts";
 import { assessmentPlanWarnings, validateAssessmentPlanRow } from "../app/assessment-plan-policy.ts";
+import { CLASS_DATA_TABLES } from "../app/class-data-tables.ts";
 
 test("requires the same strong password policy for signup and password changes", () => {
   assert.equal(isStrongPassword("shortA1"), false);
@@ -27,6 +28,22 @@ test("requires complete and valid teacher classroom metadata at signup", () => {
   assert.match(validateSignupProfile({ ...valid, semester: 3 }), /학기/);
   assert.match(validateSignupProfile({ ...valid, grade: 7 }), /학년/);
   assert.match(validateSignupProfile({ ...valid, classNumber: 0 }), /반/);
+});
+
+test("uses one complete table list for classroom and privacy deletion", () => {
+  assert.deepEqual(CLASS_DATA_TABLES, [
+    "assessment_levels",
+    "generated_comment_parts",
+    "generated_comments",
+    "student_behaviors",
+    "record_revisions",
+    "generation_jobs",
+    "assessment_plan_versions",
+    "pilot_feedback",
+    "assessment_plans",
+    "students",
+    "ai_usage_events",
+  ]);
 });
 
 test("parses pasted student numbers and names separated by tabs or spaces", () => {

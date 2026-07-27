@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { eq, selectRows, supabaseRequest, upsertRows } from "../../../db/supabase";
 import { ACTIVE_CLASS_COOKIE, AuthenticationRequiredError, dataError } from "../../data-scope";
 import { getAuthUser } from "../../supabase-auth";
+import { CLASS_DATA_TABLES } from "../../class-data-tables";
 
 type ClassroomRow = {
   id: number;
@@ -12,8 +13,6 @@ type ClassroomRow = {
   class_number: number;
   created_at: string;
 };
-
-const classTables = ["assessment_levels", "generated_comment_parts", "generated_comments", "student_behaviors", "record_revisions", "generation_jobs", "assessment_plan_versions", "pilot_feedback", "assessment_plans", "students", "ai_usage_events"] as const;
 
 const present = (row: ClassroomRow) => ({
   id: Number(row.id),
@@ -113,7 +112,7 @@ export async function DELETE(request: Request) {
       return Response.json({ error: "사용할 학급이 하나는 필요합니다. 새 학급을 추가한 뒤 이 학급을 삭제해 주세요." }, { status: 409 });
     }
 
-    for (const table of classTables) {
+    for (const table of CLASS_DATA_TABLES) {
       await supabaseRequest(table, {
         method: "DELETE",
         query: { owner_id: eq(user.id), class_id: eq(id) },

@@ -2,8 +2,7 @@ import { NextResponse } from "next/server";
 import { eq, selectRows, supabaseRequest } from "../../../db/supabase";
 import { dataError, getDataScope } from "../../data-scope";
 import { ACCESS_COOKIE, REFRESH_COOKIE } from "../../supabase-auth";
-
-const classTables = ["assessment_levels", "generated_comment_parts", "generated_comments", "student_behaviors", "record_revisions", "generation_jobs", "assessment_plan_versions", "pilot_feedback", "assessment_plans", "students", "ai_usage_events"] as const;
+import { CLASS_DATA_TABLES } from "../../class-data-tables";
 
 export async function GET() {
   try {
@@ -52,7 +51,7 @@ export async function DELETE(request: Request) {
 
     const { user, classId } = await getDataScope();
     if (scope === "class") {
-      for (const table of classTables) {
+      for (const table of CLASS_DATA_TABLES) {
         await supabaseRequest(table, {
           method: "DELETE",
           query: { owner_id: eq(user.id), class_id: eq(classId) },
