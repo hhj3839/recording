@@ -96,3 +96,15 @@ test("measures repeated opening phrases across a class", () => {
   assert.equal(openingRepetitionRate(["자료의 특징을 살펴봄.", "자료의 특징을 살펴봄.", "배운 원리를 적용함."]), 1 / 3);
   assert.equal(openingRepetitionRate(["한 문장뿐임."]), 0);
 });
+
+test("keeps behavior repair context serializable for minimal revision", () => {
+  const repair = {
+    studentId: 1,
+    characteristic: "책임감: 맡은 역할을 끝까지 수행함",
+    repairHint: "현재 495바이트 · 목표 515~535바이트",
+    previousBehavior: "맡은 역할을 책임감 있게 수행함.",
+  };
+  const restored = JSON.parse(JSON.stringify(repair));
+  assert.equal(restored.previousBehavior, repair.previousBehavior);
+  assert.match(restored.repairHint, /515~535/);
+});

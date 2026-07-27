@@ -89,7 +89,11 @@ export async function POST(request: Request) {
           .filter((item) => !generatedIds.has(item.studentId))
           .map((item) => {
             const failure = generated.failures.find((candidate) => candidate.studentId === item.studentId);
-            return failure ? { ...item, repairHint: failure.issues.join(" · ") } : item;
+            return failure ? {
+              ...item,
+              repairHint: `${failure.issues.join(" · ")} · 목표 515~535바이트`,
+              previousBehavior: failure.behavior,
+            } : item;
           });
         await recordAiUsage({
           ownerId: job.owner_id, ownerEmail: job.owner_email, classId: Number(job.class_id),
