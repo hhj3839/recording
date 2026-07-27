@@ -1,6 +1,7 @@
 import { eq, selectRows, supabaseRequest, updateRows, upsertRows } from "../../../db/supabase";
 import { dataError, getDataScope } from "../../data-scope";
 import { snapshotAssessmentPlan } from "../../assessment-plan-versions";
+import { validateAssessmentPlanRow } from "../../assessment-plan-policy";
 
 type PlanInput = {
   id?: unknown;
@@ -33,10 +34,11 @@ const fields = (item: PlanInput) => ({
 });
 const validate = (item: PlanInput) => {
   const row = fields(item);
-  const required = [row.subject, row.unit, row.goal, row.domain, row.perspective, row.high, row.middle, row.low];
-  if (required.some((value) => !value)) return "과목, 단원, 평가목표, 영역, 평가관점, 상·중·하 기준은 필수입니다.";
-  if (new Set([row.high, row.middle, row.low]).size < 3) return "상·중·하 평가 기준은 서로 달라야 합니다.";
-  return "";
+  return validateAssessmentPlanRow({
+    subject: row.subject, unit: row.unit, goal: row.goal, domain: row.domain,
+    type: row.assessment_type, perspective: row.perspective,
+    high: row.high, middle: row.middle, low: row.low, caution: row.caution,
+  });
 };
 const present = (row: Record<string, unknown>) => ({
   id: Number(row.id),

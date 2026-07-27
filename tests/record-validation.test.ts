@@ -8,6 +8,7 @@ import { parseStudentRosterText } from "../app/student-roster-parser.ts";
 import { parseAssessmentPlanText } from "../app/assessment-plan-parser.ts";
 import { isStrongPassword } from "../app/password-policy.ts";
 import { validateSignupProfile } from "../app/signup-policy.ts";
+import { assessmentPlanWarnings, validateAssessmentPlanRow } from "../app/assessment-plan-policy.ts";
 
 test("requires the same strong password policy for signup and password changes", () => {
   assert.equal(isStrongPassword("shortA1"), false);
@@ -47,6 +48,18 @@ test("parses ten-column assessment plans pasted from a table", () => {
   assert.equal(result.plans[0].subject, "국어");
   assert.equal(result.plans[1].caution, "");
   assert.match(parseAssessmentPlanText("국어\t1단원").error, /10개 열/);
+});
+
+test("validates assessment plan limits and warns about unusual labels", () => {
+  const valid = {
+    subject: "국어", unit: "1단원", goal: "알맞게 표현할 수 있다.", domain: "듣기·말하기",
+    type: "구술", perspective: "상황에 맞게 표현하는가?", high: "정확하게 표현한다.",
+    middle: "알맞게 표현한다.", low: "도움을 받아 표현한다.", caution: "",
+  };
+  assert.equal(validateAssessmentPlanRow(valid), "");
+  assert.match(validateAssessmentPlanRow({ ...valid, subject: "가".repeat(31) }), /30자/);
+  assert.equal(assessmentPlanWarnings({ ...valid, subject: "우리학교교과" }).length, 1);
+  assert.equal(assessmentPlanWarnings({ ...valid, goal: valid.perspective }).length, 1);
 });
 import { confirmationIssue } from "../app/record-confirmation.ts";
 

@@ -64,3 +64,20 @@ export function validateGeneratedCommentPart(comment: string) {
       && strict.forbidden.length === 0,
   };
 }
+
+const unsupportedAttitudePatterns = [
+  "자신 있게", "적극적으로", "자기주도적으로", "모둠원과 협력", "친구와 협력",
+  "끝까지", "성실하게", "꾸준히 참여",
+];
+
+export function evidenceGroundingWarnings(comment: string, evidence: string) {
+  return unsupportedAttitudePatterns
+    .filter((expression) => comment.includes(expression) && !evidence.includes(expression))
+    .map((expression) => `평가 근거에 없는 ‘${expression}’ 표현 확인 필요`);
+}
+
+export function openingRepetitionRate(comments: string[], prefixLength = 12) {
+  const prefixes = comments.map((comment) => Array.from(comment.trim()).slice(0, prefixLength).join("")).filter(Boolean);
+  if (prefixes.length < 2) return 0;
+  return (prefixes.length - new Set(prefixes).size) / prefixes.length;
+}

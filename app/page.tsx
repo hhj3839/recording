@@ -4,6 +4,7 @@ import { useCallback, useEffect, useState } from "react";
 import { countBehaviorCharacteristics, recordSimilarityDetails, validateBehaviorSource, validateRecord } from "./record-validation";
 import { parseStudentRosterText } from "./student-roster-parser";
 import { parseAssessmentPlanText } from "./assessment-plan-parser";
+import { assessmentPlanWarnings, validateAssessmentPlanRow } from "./assessment-plan-policy";
 
 type View = "dashboard" | "classes" | "students" | "plans" | "assessments" | "comments" | "behavior" | "export" | "settings";
 const SHOW_EXPORT_RESULTS = false;
@@ -467,9 +468,8 @@ function PlanManager({ plan, onChanged, current }: { plan: AssessmentPlan[]; onC
     const found: string[] = [];
     const keys = new Set<string>();
     rows.forEach((row, index) => {
-      const required = [row.subject, row.unit, row.goal, row.domain, row.perspective, row.high, row.middle, row.low];
-      if (required.some((value) => !value.trim())) found.push(`${index + 2}행: 필수 항목이 비어 있습니다.`);
-      if (new Set([row.high.trim(), row.middle.trim(), row.low.trim()]).size < 3) found.push(`${index + 2}행: 상·중·하 기준은 서로 달라야 합니다.`);
+      const issue = validateAssessmentPlanRow(row);
+      if (issue) found.push(`${index + 2}행: ${issue}`);
       const key = `${row.subject.trim()}|${row.unit.trim()}|${row.goal.trim()}`;
       if (keys.has(key)) found.push(`${index + 2}행: 과목·단원·평가목표가 중복됩니다.`);
       keys.add(key);
@@ -478,11 +478,9 @@ function PlanManager({ plan, onChanged, current }: { plan: AssessmentPlan[]; onC
   };
   const validateWarnings = (rows: AssessmentPlan[]) => {
     const found: string[] = [];
-    const standardSubjects = new Set(["국어", "수학", "사회", "과학", "도덕", "체육", "음악", "미술", "영어", "실과", "통합교과", "창의적 체험활동"]);
     const savedKeys = new Set(plan.map((row) => `${row.subject.trim()}|${row.unit.trim()}|${row.goal.trim()}`));
     rows.forEach((row, index) => {
-      if (row.subject && !standardSubjects.has(row.subject.trim())) found.push(`${index + 2}행: ‘${row.subject}’은 표준 과목명인지 확인해 주세요.`);
-      if (Object.values(row).some((value) => typeof value === "string" && value.length > 1000)) found.push(`${index + 2}행: 1,000자가 넘는 항목이 있습니다.`);
+      found.push(...assessmentPlanWarnings(row).map((warning) => `${index + 2}행: ${warning}`));
       if (savedKeys.has(`${row.subject.trim()}|${row.unit.trim()}|${row.goal.trim()}`)) found.push(`${index + 2}행: 이미 저장된 평가계획과 같아 기존 내용을 갱신합니다.`);
     });
     return found;

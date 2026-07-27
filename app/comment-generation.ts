@@ -1,6 +1,6 @@
 import { createHmac, timingSafeEqual } from "node:crypto";
 import { upsertRows } from "../db/supabase";
-import { hasCompleteEvidenceCoverage, validateGeneratedComment, validateGeneratedCommentPart } from "./comment-generation-policy";
+import { evidenceGroundingWarnings, hasCompleteEvidenceCoverage, validateGeneratedComment, validateGeneratedCommentPart } from "./comment-generation-policy";
 import { CommentVariation } from "./comment-variation";
 import { archiveComment } from "./record-revisions";
 import { primaryAiModel } from "./ai-model-policy";
@@ -200,7 +200,10 @@ export async function generateCommentBatch(evidence: CommentEvidence[], avoidCom
           assessmentIndex: evidenceEntry.assessmentIndex,
           evidence: evidenceEntry.text,
           text: row.text,
-          warnings: validateGeneratedCommentPart(row.text).warnings,
+          warnings: [
+            ...validateGeneratedCommentPart(row.text).warnings,
+            ...evidenceGroundingWarnings(row.text, evidenceEntry.text),
+          ],
         });
       }
     }
