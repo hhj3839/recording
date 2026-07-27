@@ -73,6 +73,7 @@ export async function POST(request: Request) {
   if (!claimed[0]) return Response.json({ ok: true, terminal: false, busy: true });
 
   let comments: GeneratedComment[] = [];
+  const generatedParts = new Map<string, string>();
   let errorMessage = "";
   let pending = batch;
   let nonRetryableFailure = false;
@@ -94,7 +95,6 @@ export async function POST(request: Request) {
     // Keep failed students together on retry. Splitting them into one request per
     // student made a 25 × 9 run exceed the monthly quota before it could finish.
     const groups = [pending];
-    const generatedThisAttempt: GeneratedComment[] = [];
     for (const group of groups) {
       const groupUsage = await getAiUsage(job.owner_id);
       if (groupUsage.monthly >= MONTHLY_AI_LIMIT) {
@@ -104,11 +104,13 @@ export async function POST(request: Request) {
       try {
         const generated = await generateCommentBatch(
           group,
-          [...avoidComments, ...comments.map((item) => item.comment)],
+          [...avoidComments, ...generatedParts.values()],
           attempt > 0,
           generationModel(attempt, MAX_GENERATION_ATTEMPTS),
         );
-        generatedThisAttempt.push(...generated.comments);
+        for (const part of generated.parts) {
+          generatedParts.set(`${part.studentId}|${part.subject}|${part.evidence}`, part.text);
+        }
         await recordAiUsage({
           ownerId: job.owner_id, ownerEmail: job.owner_email, classId: Number(job.class_id),
           feature: `all-comments-attempt-${attempt + 1}`,
@@ -127,11 +129,20 @@ export async function POST(request: Request) {
       }
       if (nonRetryableFailure) break;
     }
-    comments = [...comments, ...generatedThisAttempt];
-    const generatedKeys = new Set(generatedThisAttempt.map((item) => `${item.studentId}|${item.subject}`));
-    pending = pending.filter((item) => !generatedKeys.has(`${item.studentId}|${item.subject}`));
+    pending = batch.flatMap((item) => {
+      const missingItems = item.items.filter((evidenceItem) =>
+        !generatedParts.has(`${item.studentId}|${item.subject}|${evidenceItem}`));
+      return missingItems.length ? [{ ...item, items: missingItems }] : [];
+    });
     if (nonRetryableFailure) break;
   }
+  comments = batch.flatMap((item) => {
+    const sentences = item.items.map((evidenceItem) =>
+      generatedParts.get(`${item.studentId}|${item.subject}|${evidenceItem}`) ?? "");
+    return sentences.every(Boolean)
+      ? [{ studentId: item.studentId, subject: item.subject, comment: sentences.join(" "), candidates: [sentences.join(" ")] }]
+      : [];
+  });
   comments = selectMostDiverseComments(comments, avoidComments)
     .map((item) => ({ ...item, candidates: item.candidates.slice(0, 1) }));
   const cancelledBeforeSave = (await selectRows<{ status: string }>("generation_jobs", { id: eq(jobId), limit: 1 }))[0]?.status === "cancelled";
