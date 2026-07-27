@@ -10,6 +10,7 @@ const MAX_GENERATION_ATTEMPTS = 2;
 type JobRow = {
   id: string; owner_id: string; owner_email: string; class_id: number; status: string; batches: BehaviorInput[][];
   current_batch: number; total_batches: number; completed_items: number; failed_items: number; error_message: string; started_at: string | null;
+  updated_at: string;
 };
 function queueNext(request: Request, jobId: string) {
   waitUntil(fetch(new URL("/api/behavior-jobs/run", request.url), {
@@ -25,6 +26,10 @@ export async function POST(request: Request) {
   if (!jobId || !verifyCommentJob(jobId, signature)) return Response.json({ error: "허용되지 않은 작업 요청입니다." }, { status: 403 });
   const job = (await selectRows<JobRow>("generation_jobs", { id: eq(jobId), job_type: eq("behaviors"), limit: 1 }))[0];
   if (!job || !["queued", "running"].includes(job.status)) return Response.json({ ok: true, terminal: true });
+  const lockAge = Date.now() - Date.parse(job.updated_at);
+  if (job.status === "running" && lockAge < 360_000) {
+    return Response.json({ ok: true, terminal: false, busy: true });
+  }
   const batchIndex = Number(job.current_batch);
   const batch = job.batches[batchIndex];
   if (!batch?.length) {
@@ -33,9 +38,12 @@ export async function POST(request: Request) {
     });
     return Response.json({ ok: true, terminal: true });
   }
-  await updateRows("generation_jobs", { id: eq(jobId) }, {
+  const claimed = await updateRows<JobRow>("generation_jobs", {
+    id: eq(jobId), status: eq(job.status), updated_at: eq(job.updated_at),
+  }, {
     status: "running", started_at: job.started_at ?? new Date().toISOString(), updated_at: new Date().toISOString(),
   });
+  if (!claimed[0]) return Response.json({ ok: true, terminal: false, busy: true });
   let behaviors: GeneratedBehavior[] = [];
   const fallbackBehaviors = new Map<number, BehaviorFailure>();
   let errorMessage = "";
@@ -119,7 +127,7 @@ export async function POST(request: Request) {
   const returned = new Set(behaviors.map((item) => item.studentId));
   const failedInBatch = batch.filter((item) => !returned.has(item.studentId)).length;
   if (failedInBatch) {
-    const detail = `행동특성 배치 ${batchIndex + 1}: ${failedInBatch}명이 ${MAX_GENERATION_ATTEMPTS}회 생성 후에도 500~550바이트·음/임 종결 검수를 통과하지 못했습니다.`;
+    const detail = `행동특성 배치 ${batchIndex + 1}: ${failedInBatch}명이 ${MAX_GENERATION_ATTEMPTS}회 생성 후에도 검수를 통과하지 못했습니다. 저장된 다른 학생 결과는 유지됩니다.`;
     errorMessage = [job.error_message, errorMessage, detail].filter(Boolean).join(" ").slice(-1800);
   }
   const nextBatch = batchIndex + 1;
