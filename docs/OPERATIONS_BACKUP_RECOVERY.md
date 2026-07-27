@@ -11,6 +11,16 @@
 - 개인정보가 포함된 백업을 공개 저장소, 메신저 또는 일반 공유 폴더에 올리지 않음.
 - 환경 변수와 Supabase 키를 백업 파일에 평문으로 포함하지 않음.
 - 배포 후 GitHub `main`과 Vercel Production의 커밋 SHA가 같은지 확인함.
+- GitHub `main` 푸시와 Pull Request에서 CI의 `Lint`, `Test and build`가 모두 통과했는지 확인함.
+- CI는 운영 계정, Supabase 서비스 키, OpenAI API 키를 사용하지 않으며 운영 스모크·E2E·부하 검사를 자동 실행하지 않음.
+
+## GitHub·Vercel 배포 확인
+
+1. GitHub Actions `CI`가 성공했는지 확인함.
+2. 같은 커밋의 Vercel 상태가 `Deployment has completed`인지 확인함.
+3. `https://giroksam-recording.vercel.app/`가 로그인 화면으로 정상 응답하는지 확인함.
+4. CI 또는 Vercel이 실패하면 해당 커밋을 운영 완료로 기록하지 않음.
+5. 운영 데이터가 필요한 스모크·E2E·AI 검사는 자동 배포와 분리하고 명시적으로 승인된 경우에만 실행함.
 
 ## 장애 발생 시
 
