@@ -146,3 +146,4 @@
 - 관리자 강제 적용과 승인 인원 의무는 현재 소수 운영 흐름을 유지하기 위해 활성화하지 않음.
 - GitHub Actions의 checkout·Node·pnpm 설정을 Node.js 24 기반 최신 패치 버전으로 고정하여 Node.js 20 폐기 경고와 가변 메이저 태그 위험을 제거함.
 - 외부 GitHub Action을 검증된 릴리스의 전체 40자 커밋 SHA로 고정하고, 태그나 브랜치 참조가 다시 추가되면 CI가 실패하는 자동 검사를 추가함.
+- GitHub 저장소의 `Require actions to be pinned to a full-length commit SHA` 정책도 활성화하여 워크플로 검사 우회를 저장소 설정에서 이중 차단함.
