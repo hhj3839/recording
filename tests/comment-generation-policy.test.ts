@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { evidenceGroundingWarnings, hasCompleteEvidenceCoverage, openingRepetitionRate, validateGeneratedComment, validateGeneratedCommentPart } from "../app/comment-generation-policy.ts";
-import { behaviorRepairInstruction } from "../app/behavior-repair-policy.ts";
+import { behaviorRepairInstruction, behaviorRepairPlan } from "../app/behavior-repair-policy.ts";
 import { generationModel } from "../app/ai-model-policy.ts";
 import { batchCommentsBySubject, COMMENT_BATCH_SIZE } from "../app/comment-batching.ts";
 import { batchBehaviors, BEHAVIOR_BATCH_SIZE } from "../app/behavior-batching.ts";
@@ -111,6 +111,13 @@ test("keeps behavior repair context serializable for minimal revision", () => {
 });
 
 test("turns behavior byte gaps into concrete Korean syllable repair instructions", () => {
-  assert.match(behaviorRepairInstruction(495), /약 10음절.*30바이트.*추가/);
-  assert.match(behaviorRepairInstruction(589), /약 21음절.*64바이트.*삭제/);
+  assert.deepEqual(behaviorRepairPlan(495), {
+    bytes: 495, targetBytes: 510, byteDelta: 15, syllables: 5, direction: "add",
+  });
+  assert.deepEqual(behaviorRepairPlan(589), {
+    bytes: 589, targetBytes: 540, byteDelta: -49, syllables: 16, direction: "remove",
+  });
+  assert.match(behaviorRepairInstruction(495), /약 5음절.*15바이트.*추가.*510바이트/);
+  assert.match(behaviorRepairInstruction(589), /약 16음절.*49바이트.*삭제.*540바이트/);
+  assert.match(behaviorRepairInstruction(525), /기준을 충족.*바꾸지 않음/);
 });
