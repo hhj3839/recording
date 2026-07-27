@@ -75,6 +75,7 @@ export async function POST(request: Request) {
   let comments: GeneratedComment[] = [];
   let errorMessage = "";
   let pending = batch;
+  let nonRetryableFailure = false;
   const subject = batch[0]?.subject ?? "";
   const batchStudentIds = new Set(batch.map((item) => item.studentId));
   const existingComments = subject ? await selectRows<{ student_id: number; comment: string }>("generated_comments", {
@@ -110,16 +111,21 @@ export async function POST(request: Request) {
         generatedThisAttempt.push(...generated);
       } catch (error) {
         errorMessage = error instanceof Error ? error.message : "AI 생성 오류";
+        nonRetryableFailure = errorMessage.includes("(insufficient_quota)")
+          || errorMessage.includes("(invalid_api_key)")
+          || errorMessage.includes("(model_not_found)");
       } finally {
         await recordAiUsage({
           ownerId: job.owner_id, ownerEmail: job.owner_email, classId: Number(job.class_id),
           feature: `all-comments-attempt-${attempt + 1}`,
         });
       }
+      if (nonRetryableFailure) break;
     }
     comments = [...comments, ...generatedThisAttempt];
     const generatedKeys = new Set(generatedThisAttempt.map((item) => `${item.studentId}|${item.subject}`));
     pending = pending.filter((item) => !generatedKeys.has(`${item.studentId}|${item.subject}`));
+    if (nonRetryableFailure) break;
   }
   comments = selectMostDiverseComments(comments, avoidComments)
     .map((item) => ({ ...item, candidates: item.candidates.slice(0, 1) }));
@@ -139,7 +145,7 @@ export async function POST(request: Request) {
   const returned = new Set(comments.map((item) => `${item.studentId}|${item.subject}`));
   const failedInBatch = batch.filter((item) => !returned.has(`${item.studentId}|${item.subject}`)).length;
   if (failedInBatch) {
-    const detail = `${subject} 배치 ${batchIndex + 1}: ${failedInBatch}건이 ${MAX_GENERATION_ATTEMPTS}회 생성 후에도 영역별 1문장·50~60자·함 종결 검수를 통과하지 못했습니다.`;
+    const detail = `${subject} 배치 ${batchIndex + 1}: ${failedInBatch}건이 자동 생성 후에도 영역별 1문장·50~60자·함 종결 검수를 통과하지 못했습니다.`;
     errorMessage = [job.error_message, errorMessage, detail].filter(Boolean).join(" ").slice(-1800);
   }
   const nextBatch = batchIndex + 1;
