@@ -2,11 +2,11 @@ import { waitUntil } from "@vercel/functions";
 import { eq, selectRows, updateRows } from "../../../../db/supabase";
 import { getAiUsage, MONTHLY_AI_LIMIT, recordAiUsage } from "../../../ai-usage";
 import { selectMostDiverseComments } from "../../../comment-diversity";
-import { CommentEvidence, GeneratedComment, generateCommentBatch, saveGeneratedComments, signCommentJob, verifyCommentJob } from "../../../comment-generation";
+import { CommentEvidence, GeneratedComment, GeneratedCommentPart, generateCommentBatch, saveGeneratedCommentParts, saveGeneratedComments, signCommentJob, verifyCommentJob } from "../../../comment-generation";
 import { generationModel } from "../../../ai-model-policy";
 
 export const maxDuration = 300;
-const MAX_GENERATION_ATTEMPTS = 2;
+const MAX_GENERATION_ATTEMPTS = 3;
 
 type JobRow = {
   id: string;
@@ -73,12 +73,33 @@ export async function POST(request: Request) {
   if (!claimed[0]) return Response.json({ ok: true, terminal: false, busy: true });
 
   let comments: GeneratedComment[] = [];
-  const generatedParts = new Map<string, string>();
+  const generatedParts = new Map<string, GeneratedCommentPart>();
   let errorMessage = "";
   let pending = batch;
   let nonRetryableFailure = false;
   const subject = batch[0]?.subject ?? "";
   const batchStudentIds = new Set(batch.map((item) => item.studentId));
+  const savedParts = subject ? await selectRows<{
+    student_id: number; subject: string; assessment_index: number; evidence: string; sentence: string; status: string; issues: string[];
+  }>("generated_comment_parts", {
+    owner_id: eq(job.owner_id), class_id: eq(job.class_id), subject: eq(subject),
+  }) : [];
+  for (const saved of savedParts) {
+    if (!batchStudentIds.has(Number(saved.student_id)) || !["complete", "warning"].includes(saved.status) || !saved.sentence) continue;
+    const expected = batch.find((item) => item.studentId === Number(saved.student_id))
+      ?.items.find((item) => item.assessmentIndex === Number(saved.assessment_index));
+    if (!expected || expected.text !== saved.evidence) continue;
+    generatedParts.set(`${saved.student_id}|${saved.subject}|${saved.assessment_index}`, {
+      studentId: Number(saved.student_id), subject: saved.subject,
+      assessmentIndex: Number(saved.assessment_index), evidence: saved.evidence,
+      text: saved.sentence, warnings: Array.isArray(saved.issues) ? saved.issues : [],
+    });
+  }
+  pending = batch.flatMap((item) => {
+    const missingItems = item.items.filter((evidenceItem) =>
+      !generatedParts.has(`${item.studentId}|${item.subject}|${evidenceItem.assessmentIndex}`));
+    return missingItems.length ? [{ ...item, items: missingItems }] : [];
+  });
   const existingComments = subject ? await selectRows<{ student_id: number; comment: string }>("generated_comments", {
     owner_id: eq(job.owner_id), class_id: eq(job.class_id), subject: eq(subject),
   }) : [];
@@ -92,9 +113,9 @@ export async function POST(request: Request) {
       errorMessage = `월 AI 요청 한도 ${MONTHLY_AI_LIMIT}회를 사용하여 남은 항목의 자동 재시도를 중단했습니다.`;
       break;
     }
-    // Keep failed students together on retry. Splitting them into one request per
-    // student made a 25 × 9 run exceed the monthly quota before it could finish.
-    const groups = [pending];
+    const groups = attempt === 0
+      ? [pending]
+      : pending.flatMap((item) => item.items.map((evidenceItem) => [{ ...item, items: [evidenceItem] }]));
     for (const group of groups) {
       const groupUsage = await getAiUsage(job.owner_id);
       if (groupUsage.monthly >= MONTHLY_AI_LIMIT) {
@@ -104,13 +125,19 @@ export async function POST(request: Request) {
       try {
         const generated = await generateCommentBatch(
           group,
-          [...avoidComments, ...generatedParts.values()],
+          [...avoidComments, ...[...generatedParts.values()].map((item) => item.text)],
           attempt > 0,
           generationModel(attempt, MAX_GENERATION_ATTEMPTS),
         );
         for (const part of generated.parts) {
-          generatedParts.set(`${part.studentId}|${part.subject}|${part.evidence}`, part.text);
+          generatedParts.set(`${part.studentId}|${part.subject}|${part.assessmentIndex}`, part);
         }
+        await saveGeneratedCommentParts({
+          ownerId: job.owner_id,
+          ownerEmail: job.owner_email,
+          classId: Number(job.class_id),
+          parts: generated.parts.map((part) => ({ ...part, attempts: attempt + 1 })),
+        });
         await recordAiUsage({
           ownerId: job.owner_id, ownerEmail: job.owner_email, classId: Number(job.class_id),
           feature: `all-comments-attempt-${attempt + 1}`,
@@ -131,16 +158,17 @@ export async function POST(request: Request) {
     }
     pending = batch.flatMap((item) => {
       const missingItems = item.items.filter((evidenceItem) =>
-        !generatedParts.has(`${item.studentId}|${item.subject}|${evidenceItem}`));
+        !generatedParts.has(`${item.studentId}|${item.subject}|${evidenceItem.assessmentIndex}`));
       return missingItems.length ? [{ ...item, items: missingItems }] : [];
     });
     if (nonRetryableFailure) break;
   }
   comments = batch.flatMap((item) => {
     const sentences = item.items.map((evidenceItem) =>
-      generatedParts.get(`${item.studentId}|${item.subject}|${evidenceItem}`) ?? "");
-    return sentences.every(Boolean)
-      ? [{ studentId: item.studentId, subject: item.subject, comment: sentences.join(" "), candidates: [sentences.join(" ")] }]
+      generatedParts.get(`${item.studentId}|${item.subject}|${evidenceItem.assessmentIndex}`)?.text ?? "");
+    const available = sentences.filter(Boolean);
+    return available.length
+      ? [{ studentId: item.studentId, subject: item.subject, comment: available.join(" "), candidates: [available.join(" ")] }]
       : [];
   });
   comments = selectMostDiverseComments(comments, avoidComments)
@@ -148,6 +176,28 @@ export async function POST(request: Request) {
   const cancelledBeforeSave = (await selectRows<{ status: string }>("generation_jobs", { id: eq(jobId), limit: 1 }))[0]?.status === "cancelled";
   if (cancelledBeforeSave) {
     return Response.json({ ok: true, terminal: true, cancelled: true });
+  }
+  const unresolvedParts = batch.flatMap((item) => item.items.flatMap((evidenceItem) => {
+    const key = `${item.studentId}|${item.subject}|${evidenceItem.assessmentIndex}`;
+    return generatedParts.has(key) ? [] : [{
+      studentId: item.studentId,
+      subject: item.subject,
+      assessmentIndex: evidenceItem.assessmentIndex,
+      evidence: evidenceItem.text,
+      text: "",
+      warnings: [],
+      attempts: MAX_GENERATION_ATTEMPTS,
+      status: "needs_review" as const,
+      issues: ["AI 생성이 완료되지 않아 교사 확인이 필요함"],
+    }];
+  }));
+  if (unresolvedParts.length) {
+    await saveGeneratedCommentParts({
+      ownerId: job.owner_id,
+      ownerEmail: job.owner_email,
+      classId: Number(job.class_id),
+      parts: unresolvedParts,
+    });
   }
   if (comments.length) {
     await saveGeneratedComments({
@@ -158,15 +208,15 @@ export async function POST(request: Request) {
     });
   }
 
-  const returned = new Set(comments.map((item) => `${item.studentId}|${item.subject}`));
-  const failedInBatch = batch.filter((item) => !returned.has(`${item.studentId}|${item.subject}`)).length;
+  const failedInBatch = batch.filter((item) => item.items.some((evidenceItem) =>
+    !generatedParts.has(`${item.studentId}|${item.subject}|${evidenceItem.assessmentIndex}`))).length;
   if (failedInBatch) {
-    const detail = `${subject} 배치 ${batchIndex + 1}: ${failedInBatch}건이 자동 생성 후에도 영역별 1문장·50~60자·함 종결 검수를 통과하지 못했습니다.`;
+    const detail = `${subject} 배치 ${batchIndex + 1}: ${failedInBatch}명의 일부 영역이 3회 생성 후에도 검수를 통과하지 못해 확인 필요로 표시했습니다. 성공한 영역은 저장되었습니다.`;
     errorMessage = [job.error_message, errorMessage, detail].filter(Boolean).join(" ").slice(-1800);
   }
   const nextBatch = batchIndex + 1;
   const failedItems = Number(job.failed_items) + failedInBatch;
-  const completedItems = Number(job.completed_items) + comments.length;
+  const completedItems = Number(job.completed_items) + batch.length - failedInBatch;
   const terminal = nextBatch >= Number(job.total_batches);
   const latestStatus = (await selectRows<{ status: string }>("generation_jobs", { id: eq(jobId), limit: 1 }))[0]?.status;
   if (latestStatus === "cancelled") {

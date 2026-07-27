@@ -45,3 +45,22 @@ export function validateGeneratedComment(comment: string, expectedSentenceCount:
       && forbidden.length === 0,
   };
 }
+
+export function validateGeneratedCommentPart(comment: string) {
+  const strict = validateGeneratedComment(comment, 1);
+  const length = strict.lengths[0] ?? 0;
+  const acceptedLength = length >= 48 && length <= 62;
+  const warnings = [
+    ...(acceptedLength && !strict.lengthsOk ? [`권장 50~60자 범위를 벗어난 ${length}자 문장`] : []),
+  ];
+  return {
+    ...strict,
+    acceptedLength,
+    warnings,
+    valid: strict.sentenceCountOk
+      && acceptedLength
+      && strict.endingsOk
+      && strict.naturalEndingsOk
+      && strict.forbidden.length === 0,
+  };
+}

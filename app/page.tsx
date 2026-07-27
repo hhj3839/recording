@@ -908,6 +908,7 @@ function Comments({ assessmentDataBySubject, plan, roster }: { assessmentDataByS
   const subjects = [...new Set(plan.map((item) => item.subject))];
   const [selectedSubject, setSelectedSubject] = useState(subjects[0] ?? "국어");
   const [comments, setComments] = useState<Record<string, string>>({});
+  const [commentParts, setCommentParts] = useState<Array<{ studentId: number; subject: string; assessmentIndex: number; sentence: string; status: string; issues: string[] }>>([]);
   const [loading, setLoading] = useState(false);
   const [generationProgress, setGenerationProgress] = useState("");
   const [error, setError] = useState("");
@@ -920,8 +921,13 @@ function Comments({ assessmentDataBySubject, plan, roster }: { assessmentDataByS
   const loadGeneratedComments = useCallback(async () => {
     try {
       const response = await fetch("/api/generated-comments");
-      const result = await response.json() as { comments?: Array<{ studentId: number; subject: string; comment: string; candidates: string[]; confirmed: boolean; updatedAt: string }> };
-      if (!response.ok || !result.comments?.length) return;
+      const result = await response.json() as {
+        comments?: Array<{ studentId: number; subject: string; comment: string; candidates: string[]; confirmed: boolean; updatedAt: string }>;
+        parts?: Array<{ studentId: number; subject: string; assessmentIndex: number; sentence: string; status: string; issues: string[] }>;
+      };
+      if (!response.ok) return;
+      setCommentParts(result.parts ?? []);
+      if (!result.comments?.length) return;
       setComments(Object.fromEntries(result.comments.map((item) => [`${item.studentId}|${item.subject}`, item.comment])));
       setSubjectGeneratedAt(result.comments.reduce<Record<string, string>>((latest, item) => {
         if (!latest[item.subject] || latest[item.subject] < item.updatedAt) latest[item.subject] = item.updatedAt;
@@ -1094,6 +1100,8 @@ function Comments({ assessmentDataBySubject, plan, roster }: { assessmentDataByS
                   ...item, level: assessment?.assessments[planIndex] ?? "-",
                 })).filter((item) => ["상", "중", "하"].includes(item.level));
                 const validation = validateRecord(text);
+                const areaStatuses = commentParts.filter((part) => part.studentId === student.id && part.subject === selectedSubject);
+                const areaIssues = areaStatuses.filter((part) => part.status === "needs_review" || part.status === "warning");
                 const comparisons = roster.filter((other) => other.id !== student.id).map((other) => ({
                   student: other,
                   ...recordSimilarityDetails(text, comments[`${other.id}|${selectedSubject}`] ?? ""),
@@ -1104,6 +1112,12 @@ function Comments({ assessmentDataBySubject, plan, roster }: { assessmentDataByS
                   <td>{student.number ?? student.id}</td>
                   <td><strong>{student.name}</strong><small>{text ? `${new TextEncoder().encode(text).length}B` : hasLevel ? "생성 대기" : "수준 미입력"}</small></td>
                   <td><textarea value={text} onSelect={(event) => { const target = event.currentTarget; setSelectedText((current) => ({ ...current, [key]: target.value.slice(target.selectionStart, target.selectionEnd) })); }} onChange={(event) => { setComments((current) => ({ ...current, [key]: event.target.value })); setCopied(false); }} onBlur={(event) => void saveComment(student.id, selectedSubject, event.target.value)} placeholder={hasLevel ? "AI 평어 생성 버튼을 누르면 결과가 표시됩니다." : "상·중·하 평가 수준이 입력되지 않았습니다."} />
+                    {areaIssues.length > 0 && <div className="comment-area-issues">{areaIssues.map((part) => {
+                      const domain = plan.filter((item) => item.subject === selectedSubject)[part.assessmentIndex]?.domain || `${part.assessmentIndex + 1}번째`;
+                      return <span className={part.status === "needs_review" ? "fail" : "warning"} key={`${part.assessmentIndex}-${part.status}`}>
+                        {domain} 영역 {part.status === "needs_review" ? "확인 필요" : part.issues.join(" · ")}
+                      </span>;
+                    })}</div>}
                     <div className="comment-row-actions"><button disabled={!text || !!rewriteBusyKey} onMouseDown={(event) => event.preventDefault()} onClick={() => void rewriteComment(student.id, selectedSubject, "shorter")}>짧게</button><button disabled={!text || !!rewriteBusyKey} onMouseDown={(event) => event.preventDefault()} onClick={() => void rewriteComment(student.id, selectedSubject, "specific")}>구체적으로</button><button disabled={!selectedText[key] || !!rewriteBusyKey} onMouseDown={(event) => event.preventDefault()} onClick={() => void rewriteComment(student.id, selectedSubject, "selection")}>{rewriteBusyKey === `${key}|selection` ? "생성 중…" : "선택 문장 재생성"}</button><button className="evidence-button" onMouseDown={(event) => event.preventDefault()} onClick={() => setEvidenceKey((current) => current === key ? "" : key)}>생성 근거 {evidenceKey === key ? "닫기" : "보기"}</button></div>
                     {evidenceKey === key && <div className="comment-evidence">{evidence.length ? evidence.map((item, evidenceIndex) => <article key={`${item.unit}-${evidenceIndex}`}><strong>{item.unit} · {item.domain} · {item.level}</strong><span>{item.level === "상" ? item.high : item.level === "중" ? item.middle : item.low}</span></article>) : <p>평어 생성에 사용된 상·중·하 평가 근거가 없습니다.</p>}</div>}
                   </td>

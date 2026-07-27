@@ -106,7 +106,10 @@ export async function POST(request: Request) {
           const level = student.levels[index];
           if (!["상", "중", "하"].includes(level)) return [];
           const criterion = level === "상" ? item.high : level === "중" ? item.middle : item.low;
-          return [`${item.unit} | ${item.domain} | 목표: ${item.goal} | 관점: ${item.perspective} | 수준: ${level} | 기준: ${criterion}`];
+          return [{
+            assessmentIndex: index,
+            text: `${item.unit} | ${item.domain} | 목표: ${item.goal} | 관점: ${item.perspective} | 수준: ${level} | 기준: ${criterion}`,
+          }];
         });
         if (items.length) evidence.push({ studentId: student.studentId, subject, items });
       }

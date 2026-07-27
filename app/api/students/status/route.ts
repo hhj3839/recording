@@ -47,7 +47,7 @@ export async function DELETE(request: Request) {
       owner_id: eq(user.id), class_id: eq(classId), status: "in.(queued,running)", limit: 1,
     });
     if (activeJobs.length) return Response.json({ error: "AI 생성 작업이 끝난 뒤 학생을 영구 삭제해 주세요." }, { status: 409 });
-    for (const table of ["assessment_levels", "generated_comments", "student_behaviors", "record_revisions"] as const) {
+    for (const table of ["assessment_levels", "generated_comment_parts", "generated_comments", "student_behaviors", "record_revisions"] as const) {
       await supabaseRequest(table, {
         method: "DELETE", query: { owner_id: eq(user.id), class_id: eq(classId), student_id: eq(id) },
       });

@@ -21,6 +21,7 @@
     "db:migrate-confirmation": "node scripts/migrate-confirmation-status.mjs",
     "db:migrate-ai-usage": "node scripts/migrate-ai-usage.mjs",
     "db:migrate-ai-token-usage": "node scripts/migrate-ai-token-usage.mjs",
+    "db:migrate-comment-parts": "node scripts/migrate-generated-comment-parts.mjs",
     "db:migrate-revisions": "node scripts/migrate-record-revisions.mjs",
     "db:migrate-generation-jobs": "node scripts/migrate-generation-jobs.mjs",
     "db:configure-generation-cron": "node scripts/configure-generation-job-cron.mjs",

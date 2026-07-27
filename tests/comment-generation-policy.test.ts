@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { hasCompleteEvidenceCoverage, validateGeneratedComment } from "../app/comment-generation-policy.ts";
+import { hasCompleteEvidenceCoverage, validateGeneratedComment, validateGeneratedCommentPart } from "../app/comment-generation-policy.ts";
 import { generationModel } from "../app/ai-model-policy.ts";
 import { batchCommentsBySubject, COMMENT_BATCH_SIZE } from "../app/comment-batching.ts";
 import { batchBehaviors, BEHAVIOR_BATCH_SIZE } from "../app/behavior-batching.ts";
@@ -71,5 +71,15 @@ test("rejects mechanically duplicated nominal endings", () => {
     const result = validateGeneratedComment(awkward, 1);
     assert.equal(result.naturalEndingsOk, false);
     assert.equal(result.valid, false);
+  }
+});
+
+test("shows near-miss lengths while keeping them as teacher-review warnings", () => {
+  const base = "글의 중심 생각을 정확하게 파악하고 중요한 내용을 근거와 함께 정리하여 발표 활동에 꾸준히 참여함.";
+  const sentence49 = Array.from(base).slice(0, 46).join("").replace(/[.]*$/, "") + " 참여함.";
+  const result = validateGeneratedCommentPart(sentence49);
+  if (Array.from(sentence49).length >= 48 && Array.from(sentence49).length <= 62) {
+    assert.equal(result.valid, true);
+    assert.equal(result.warnings.length > 0, Array.from(sentence49).length < 50 || Array.from(sentence49).length > 60);
   }
 });

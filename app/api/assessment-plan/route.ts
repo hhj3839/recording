@@ -165,6 +165,9 @@ export async function DELETE(request: Request) {
       await supabaseRequest("generated_comments", {
         method: "DELETE", query: { owner_id: eq(user.id), class_id: eq(classId) },
       });
+      await supabaseRequest("generated_comment_parts", {
+        method: "DELETE", query: { owner_id: eq(user.id), class_id: eq(classId) },
+      });
       await supabaseRequest("record_revisions", {
         method: "DELETE", query: { owner_id: eq(user.id), class_id: eq(classId), record_type: eq("comment") },
       });

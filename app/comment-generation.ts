@@ -1,14 +1,15 @@
 import { createHmac, timingSafeEqual } from "node:crypto";
 import { upsertRows } from "../db/supabase";
-import { hasCompleteEvidenceCoverage, validateGeneratedComment } from "./comment-generation-policy";
+import { hasCompleteEvidenceCoverage, validateGeneratedComment, validateGeneratedCommentPart } from "./comment-generation-policy";
 import { CommentVariation } from "./comment-variation";
 import { archiveComment } from "./record-revisions";
 import { primaryAiModel } from "./ai-model-policy";
 import { AiTokenUsage } from "./ai-usage";
 
-export type CommentEvidence = { studentId: number; subject: string; items: string[]; variation?: CommentVariation };
+export type CommentEvidenceItem = { assessmentIndex: number; text: string };
+export type CommentEvidence = { studentId: number; subject: string; items: CommentEvidenceItem[]; variation?: CommentVariation };
 export type GeneratedComment = { studentId: number; subject: string; comment: string; candidates: string[] };
-export type GeneratedCommentPart = { studentId: number; subject: string; evidence: string; text: string };
+export type GeneratedCommentPart = { studentId: number; subject: string; assessmentIndex: number; evidence: string; text: string; warnings: string[] };
 export type CommentBatchResult = { comments: GeneratedComment[]; parts: GeneratedCommentPart[]; usage: AiTokenUsage };
 const COMMENT_ENDINGS = [
   "참여함.", "표현함.", "설명함.", "정리함.", "수행함.", "실천함.",
@@ -26,11 +27,11 @@ function extractOutputText(payload: unknown): string {
 }
 
 function normalizeCandidateLength(candidate: string) {
-  if (validateGeneratedComment(candidate, 1).valid) return candidate;
+  if (validateGeneratedCommentPart(candidate).valid) return candidate;
   const length = Array.from(candidate).length;
   if (length >= 45 && length < 50 && !candidate.startsWith("수업에서 ")) {
     const contextualized = `수업에서 ${candidate}`;
-    if (validateGeneratedComment(contextualized, 1).valid) return contextualized;
+    if (validateGeneratedCommentPart(contextualized).valid) return contextualized;
   }
   if (length > 60 && length <= 75) {
     const optionalModifiers = [
@@ -42,7 +43,7 @@ function normalizeCandidateLength(candidate: string) {
     for (const modifier of optionalModifiers) {
       if (!compacted.includes(modifier)) continue;
       compacted = compacted.replace(modifier, "");
-      if (validateGeneratedComment(compacted, 1).valid) return compacted;
+      if (validateGeneratedCommentPart(compacted).valid) return compacted;
     }
   }
   return "";
@@ -51,14 +52,16 @@ function normalizeCandidateLength(candidate: string) {
 export async function generateCommentBatch(evidence: CommentEvidence[], avoidComments: string[] = [], repair = false, model = primaryAiModel()) {
   const apiKey = process.env.OPENAI_API_KEY;
   if (!apiKey) throw new Error("AI 생성 설정이 아직 완료되지 않았습니다.");
-  const evidenceItems = [...new Set(evidence.flatMap((item) => item.items))];
-  const evidenceDictionary = Object.fromEntries(evidenceItems.map((item, index) => [`e${index + 1}`, item]));
-  const evidenceIds = new Map(evidenceItems.map((item, index) => [item, `e${index + 1}`]));
+  const evidenceItems = evidence.flatMap((item) => item.items.map((entry) => ({
+    ...entry, key: `${item.studentId}|${item.subject}|${entry.assessmentIndex}`,
+  })));
+  const evidenceDictionary = Object.fromEntries(evidenceItems.map((item, index) => [`e${index + 1}`, item.text]));
+  const evidenceIds = new Map(evidenceItems.map((item, index) => [item.key, `e${index + 1}`]));
   const requestEvidence = evidence.map((item) => ({
     studentId: item.studentId,
     subject: item.subject,
     itemIds: [...new Set(item.items
-      .map((evidenceItem) => evidenceIds.get(evidenceItem))
+      .map((evidenceItem) => evidenceIds.get(`${item.studentId}|${item.subject}|${evidenceItem.assessmentIndex}`))
       .filter((id): id is string => Boolean(id)))],
     variation: item.variation,
   }));
@@ -118,7 +121,7 @@ export async function generateCommentBatch(evidence: CommentEvidence[], avoidCom
         },
         {
           role: "user",
-          content: [{ type: "input_text", text: `${repair ? "이전 응답의 후보들이 글자 수 검사를 통과하지 못했다. 세 후보의 길이 차이를 반드시 유지해 줘.\n" : ""}근거 사전과 학생별 근거 ID를 연결하여 각각 교과 평어를 작성해 줘.\n근거 사전: ${JSON.stringify(evidenceDictionary)}\n학생 입력: ${JSON.stringify(requestEvidence)}\n피해야 할 기존 시작 표현: ${JSON.stringify(avoidanceHints)}` }],
+          content: [{ type: "input_text", text: `${repair ? "이전 응답 문장이 검수를 통과하지 못했다. 해당 영역 문장 한 개만 규칙에 맞게 다시 작성해 줘.\n" : ""}근거 사전과 학생별 근거 ID를 연결하여 각각 교과 평어를 작성해 줘.\n근거 사전: ${JSON.stringify(evidenceDictionary)}\n학생 입력: ${JSON.stringify(requestEvidence)}\n피해야 할 기존 시작 표현: ${JSON.stringify(avoidanceHints)}` }],
         },
       ],
       text: {
@@ -166,7 +169,7 @@ export async function generateCommentBatch(evidence: CommentEvidence[], avoidCom
     const subject = typeof item.subject === "string" ? item.subject : "";
     const source = evidence.find((entry) => entry.studentId === studentId && entry.subject === subject);
     const expectedIds = [...new Set(source?.items
-      .map((evidenceItem) => evidenceIds.get(evidenceItem))
+      .map((evidenceItem) => evidenceIds.get(`${studentId}|${subject}|${evidenceItem.assessmentIndex}`))
       .filter((id): id is string => Boolean(id)) ?? [])];
     const sentenceRows = Array.isArray(item.sentences)
       ? item.sentences.flatMap((row) => {
@@ -188,12 +191,22 @@ export async function generateCommentBatch(evidence: CommentEvidence[], avoidCom
       : [];
     const complete = hasCompleteEvidenceCoverage(expectedIds, sentenceRows.map((row) => row.itemId));
     for (const row of sentenceRows) {
-      const evidenceText = evidenceDictionary[row.itemId];
-      if (evidenceText) parts.push({ studentId, subject, evidence: evidenceText, text: row.text });
+      const evidenceEntry = source?.items.find((entry) =>
+        evidenceIds.get(`${studentId}|${subject}|${entry.assessmentIndex}`) === row.itemId);
+      if (evidenceEntry) {
+        parts.push({
+          studentId,
+          subject,
+          assessmentIndex: evidenceEntry.assessmentIndex,
+          evidence: evidenceEntry.text,
+          text: row.text,
+          warnings: validateGeneratedCommentPart(row.text).warnings,
+        });
+      }
     }
     const ordered = expectedIds.map((id) => sentenceRows.find((row) => row.itemId === id)?.text ?? "");
     const sentenceFormatsOk = ordered.length > 0
-      && ordered.every((sentence) => validateGeneratedComment(sentence, 1).valid);
+      && ordered.every((sentence) => validateGeneratedCommentPart(sentence).valid);
     if (!complete || !sentenceFormatsOk) {
       diagnostics.push(JSON.stringify({
         studentId,
@@ -260,6 +273,29 @@ export async function saveGeneratedComments(input: {
     owner_id: input.ownerId,
     class_id: input.classId,
   })), "class_id,student_id,subject");
+}
+
+export async function saveGeneratedCommentParts(input: {
+  ownerId: string;
+  ownerEmail: string;
+  classId: number;
+  parts: Array<GeneratedCommentPart & { attempts: number; status?: "complete" | "warning" | "needs_review"; issues?: string[] }>;
+}) {
+  const updatedAt = new Date().toISOString();
+  await upsertRows("generated_comment_parts", input.parts.map((item) => ({
+    owner_id: input.ownerId,
+    owner_email: input.ownerEmail,
+    class_id: input.classId,
+    student_id: item.studentId,
+    subject: item.subject,
+    assessment_index: item.assessmentIndex,
+    evidence: item.evidence,
+    sentence: item.text,
+    status: item.status ?? (item.warnings.length ? "warning" : "complete"),
+    issues: item.issues ?? item.warnings,
+    attempts: item.attempts,
+    updated_at: updatedAt,
+  })), "class_id,student_id,subject,assessment_index");
 }
 
 const signingKey = () => {
