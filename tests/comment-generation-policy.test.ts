@@ -111,6 +111,34 @@ test("warns about unsupported attitude claims without discarding the sentence", 
   );
 });
 
+test("grounds attitude concepts across common Korean spacing and inflection variants", () => {
+  assert.deepEqual(
+    evidenceGroundingWarnings(
+      "자료를 자발적으로 살피고 친구들과 협동해 효과적으로 분류함.",
+      "자료를 기준에 따라 분류할 수 있다.",
+    ),
+    [
+      "평가 근거에 없는 ‘친구와 협력’ 표현 확인 필요",
+      "평가 근거에 없는 ‘스스로’ 표현 확인 필요",
+      "평가 근거에 없는 ‘효과적으로’ 표현 확인 필요",
+    ],
+  );
+  assert.deepEqual(
+    evidenceGroundingWarnings(
+      "모둠원과 협력해 자료의 의미를 이해하고 적극적인 태도로 설명함.",
+      "모둠 활동에서 협동하여 자료의 의미를 파악하고 적극적으로 설명할 수 있다.",
+    ),
+    [],
+  );
+  assert.deepEqual(
+    evidenceGroundingWarnings(
+      "자료를 자기 주도적으로 정리함.",
+      "자료를 기준에 따라 정리할 수 있다.",
+    ),
+    ["평가 근거에 없는 ‘자기주도적으로’ 표현 확인 필요"],
+  );
+});
+
 test("measures repeated opening phrases across a class", () => {
   assert.equal(openingRepetitionRate(["자료의 특징을 살펴봄.", "자료의 특징을 살펴봄.", "배운 원리를 적용함."]), 1 / 3);
   assert.equal(openingRepetitionRate(["한 문장뿐임."]), 0);

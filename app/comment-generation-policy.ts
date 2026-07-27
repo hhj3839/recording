@@ -65,16 +65,37 @@ export function validateGeneratedCommentPart(comment: string) {
   };
 }
 
-const unsupportedAttitudePatterns = [
-  "자신 있게", "적극적으로", "자기주도적으로", "모둠원과 협력", "친구와 협력",
-  "끝까지", "성실하게", "꾸준히 참여", "의미를 파악", "스스로",
-  "주도적으로", "능동적으로", "논리적으로", "효과적으로", "원활하게",
+const unsupportedAttitudeConcepts = [
+  { label: "자신 있게", pattern: /자신(?:감)?있|자신감을?(?:가지|보이)/ },
+  { label: "적극적으로", pattern: /적극적/ },
+  { label: "자기주도적으로", pattern: /자기주도적/ },
+  { label: "모둠원과 협력", pattern: /모둠(?:원)?.{0,4}(?:협력|협동)/ },
+  { label: "친구와 협력", pattern: /친구.{0,4}(?:협력|협동)/ },
+  { label: "끝까지", pattern: /(?:끝|마지막)까지/ },
+  { label: "성실하게", pattern: /성실/ },
+  { label: "꾸준히 참여", pattern: /(?:꾸준|지속적).{0,4}참여/ },
+  { label: "의미를 파악", pattern: /의미(?:를)?(?:파악|이해)/ },
+  { label: "스스로", pattern: /(?:스스로|자발적)/ },
+  { label: "주도적으로", pattern: /주도적/, exclude: /자기주도적/ },
+  { label: "능동적으로", pattern: /능동적/ },
+  { label: "논리적으로", pattern: /논리적/ },
+  { label: "효과적으로", pattern: /효과적/ },
+  { label: "원활하게", pattern: /원활/ },
 ];
 
+function normalizeGroundingText(text: string) {
+  return text.normalize("NFKC").replace(/[\s·ㆍ,，.。!?！？:：;；'"“”‘’()[\]{}]/g, "");
+}
+
 export function evidenceGroundingWarnings(comment: string, evidence: string) {
-  return unsupportedAttitudePatterns
-    .filter((expression) => comment.includes(expression) && !evidence.includes(expression))
-    .map((expression) => `평가 근거에 없는 ‘${expression}’ 표현 확인 필요`);
+  const normalizedComment = normalizeGroundingText(comment);
+  const normalizedEvidence = normalizeGroundingText(evidence);
+  return unsupportedAttitudeConcepts
+    .filter(({ pattern, exclude }) =>
+      pattern.test(normalizedComment)
+      && !(exclude?.test(normalizedComment))
+      && !pattern.test(normalizedEvidence))
+    .map(({ label }) => `평가 근거에 없는 ‘${label}’ 표현 확인 필요`);
 }
 
 export function openingRepetitionRate(comments: string[], prefixLength = 12) {
