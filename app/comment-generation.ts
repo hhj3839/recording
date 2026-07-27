@@ -59,6 +59,46 @@ export async function generateCommentBatch(evidence: CommentEvidence[], avoidCom
       .filter((id): id is string => Boolean(id)))],
     variation: item.variation,
   }));
+  const resultSlotNames = evidence.map((_, index) => `result${index + 1}`);
+  const resultSlotSchemas = Object.fromEntries(evidence.map((item, index) => {
+    const itemIds = requestEvidence[index].itemIds;
+    return [resultSlotNames[index], {
+      type: "object",
+      additionalProperties: false,
+      required: ["studentId", "subject", "sentences"],
+      properties: {
+        studentId: { type: "integer", enum: [item.studentId] },
+        subject: { type: "string", enum: [item.subject] },
+        sentences: {
+          type: "array",
+          minItems: itemIds.length,
+          maxItems: itemIds.length,
+          items: {
+            type: "object",
+            additionalProperties: false,
+            required: ["itemId", "candidates"],
+            properties: {
+              itemId: { type: "string", enum: itemIds },
+              candidates: {
+                type: "array",
+                minItems: 2,
+                maxItems: 2,
+                items: {
+                  type: "object",
+                  additionalProperties: false,
+                  required: ["body", "ending"],
+                  properties: {
+                    body: { type: "string" },
+                    ending: { type: "string", enum: COMMENT_ENDINGS },
+                  },
+                },
+              },
+            },
+          },
+        },
+      },
+    }];
+  }));
   const avoidanceHints = [...new Set(avoidComments.map((item) => item.split(/[.!?]/)[0]?.trim().slice(0, 90)).filter(Boolean))].slice(0, 20);
   const response = await fetch("https://api.openai.com/v1/responses", {
     method: "POST",
@@ -71,7 +111,7 @@ export async function generateCommentBatch(evidence: CommentEvidence[], avoidCom
       input: [
         {
           role: "system",
-          content: [{ type: "input_text", text: "당신은 초등학교 담임교사의 학생평가 작성 전문가이며 학교생활기록부 교과학습발달상황에 사용할 교과 평어를 작성한다. 학생 입력의 itemIds에 연결된 각 평가 영역마다 해당 수준에 맞는 문장을 정확히 1개씩 작성한다. 영역 수와 문장 수는 반드시 같아야 하며 입력된 영역명·수준·평가기준만 사용하고 없는 영역·수준·사실을 만들지 않는다. 각 문장은 평가기준을 그대로 복사하지 말고 실제 관찰 가능한 행동 중심으로 자연스럽게 바꾸어 쓴다. 성취기준과 평가요소, 수업·평가 활동의 수행 내용, 수행 결과와 학습 태도가 구체적으로 드러나게 작성한다. 일반적인 칭찬을 피하고 모든 문장을 긍정적·발전적 관점으로 작성한다. 상 수준은 안정적인 수행과 정확성·적극성·자기주도성이, 중 수준은 대부분의 성취기준 수행과 꾸준한 참여·적절한 적용이, 하 수준은 활동 참여와 배운 내용을 익혀 가는 과정·교사의 도움을 받아 수행하는 모습·성장 가능성이 드러나게 작성한다. 부족함, 미흡함, 못함, 어려워함, 이해하지 못함, 소극적임, 불성실함을 쓰지 않는다. 각 itemId마다 의미는 같고 표현과 길이가 다른 candidates를 정확히 2개 작성한다. 각 후보는 body와 ending으로 나눈다. body는 마침표와 마지막 서술어 없이 작성하고, 선택한 ending을 한 칸 띄워 붙였을 때 문법적으로 자연스러운 완성 문장이 되어야 한다. 예: body가 ‘인물의 상황에 맞는 표정과 몸짓을 활용해 대화를 실감 나게’이면 ending은 ‘표현함.’을 선택한다. 첫 완성 문장은 50~55자, 둘째는 56~60자로 작성한다. 연결형 뒤에 함을 억지로 덧붙이지 않는다. variation의 구조·시작 방식·근거 순서를 활용하며 같은 묶음 학생 및 avoidComments와 표현을 겹치지 않게 한다. 제목·번호·설명·따옴표·상중하 표시는 쓰지 않는다. 모든 입력 학생을 빠짐없이 한 번씩 작성하며 results 원소 수는 학생 입력 수와 반드시 같아야 한다. 각 원소는 studentId, subject, sentences 필드를 가지며 sentences는 입력 itemIds와 같은 순서의 {itemId, candidates} 배열이다. candidates는 정확히 2개이며 각 후보는 {body, ending} 형식이다." }],
+          content: [{ type: "input_text", text: "당신은 초등학교 담임교사의 학생평가 작성 전문가이며 학교생활기록부 교과학습발달상황에 사용할 교과 평어를 작성한다. 학생 입력의 itemIds에 연결된 각 평가 영역마다 해당 수준에 맞는 문장을 정확히 1개씩 작성한다. 영역 수와 문장 수는 반드시 같아야 하며 입력된 영역명·수준·평가기준만 사용하고 없는 영역·수준·사실을 만들지 않는다. 각 문장은 평가기준을 그대로 복사하지 말고 실제 관찰 가능한 행동 중심으로 자연스럽게 바꾸어 쓴다. 성취기준과 평가요소, 수업·평가 활동의 수행 내용, 수행 결과와 학습 태도가 구체적으로 드러나게 작성한다. 일반적인 칭찬을 피하고 모든 문장을 긍정적·발전적 관점으로 작성한다. 상 수준은 안정적인 수행과 정확성·적극성·자기주도성이, 중 수준은 대부분의 성취기준 수행과 꾸준한 참여·적절한 적용이, 하 수준은 활동 참여와 배운 내용을 익혀 가는 과정·교사의 도움을 받아 수행하는 모습·성장 가능성이 드러나게 작성한다. 부족함, 미흡함, 못함, 어려워함, 이해하지 못함, 소극적임, 불성실함을 쓰지 않는다. 각 itemId마다 의미는 같고 표현과 길이가 다른 candidates를 정확히 2개 작성한다. 각 후보는 body와 ending으로 나눈다. body는 마침표와 마지막 서술어 없이 작성하고, 선택한 ending을 한 칸 띄워 붙였을 때 문법적으로 자연스러운 완성 문장이 되어야 한다. 예: body가 ‘인물의 상황에 맞는 표정과 몸짓을 활용해 대화를 실감 나게’이면 ending은 ‘표현함.’을 선택한다. 첫 완성 문장은 50~55자, 둘째는 56~60자로 작성한다. 연결형 뒤에 함을 억지로 덧붙이지 않는다. variation의 구조·시작 방식·근거 순서를 활용하며 같은 묶음 학생 및 avoidComments와 표현을 겹치지 않게 한다. 제목·번호·설명·따옴표·상중하 표시는 쓰지 않는다. results 객체의 result1, result2 등 각 고정 슬롯을 빠짐없이 작성한다. 각 슬롯의 studentId와 subject는 스키마가 지정한 값을 그대로 사용하고 sentences는 지정된 itemIds와 같은 순서로 작성한다. candidates는 정확히 2개이며 각 후보는 {body, ending} 형식이다." }],
         },
         {
           role: "user",
@@ -90,43 +130,10 @@ export async function generateCommentBatch(evidence: CommentEvidence[], avoidCom
             required: ["results"],
             properties: {
               results: {
-                type: "array",
-                minItems: evidence.length,
-                maxItems: evidence.length,
-                items: {
-                  type: "object",
-                  additionalProperties: false,
-                  required: ["studentId", "subject", "sentences"],
-                  properties: {
-                    studentId: { type: "integer" },
-                    subject: { type: "string" },
-                    sentences: {
-                      type: "array",
-                      items: {
-                        type: "object",
-                        additionalProperties: false,
-                        required: ["itemId", "candidates"],
-                        properties: {
-                          itemId: { type: "string" },
-                          candidates: {
-                            type: "array",
-                            minItems: 2,
-                            maxItems: 2,
-                            items: {
-                              type: "object",
-                              additionalProperties: false,
-                              required: ["body", "ending"],
-                              properties: {
-                                body: { type: "string" },
-                                ending: { type: "string", enum: COMMENT_ENDINGS },
-                              },
-                            },
-                          },
-                        },
-                      },
-                    },
-                  },
-                },
+                type: "object",
+                additionalProperties: false,
+                required: resultSlotNames,
+                properties: resultSlotSchemas,
               },
             },
           },
@@ -138,8 +145,8 @@ export async function generateCommentBatch(evidence: CommentEvidence[], avoidCom
   if (!response.ok) throw new Error("AI 생성 요청을 처리하지 못했습니다.");
   const raw = extractOutputText(payload).replace(/^```json\s*/i, "").replace(/\s*```$/, "");
   const decoded = JSON.parse(raw) as { results?: unknown };
-  const parsed = Array.isArray(decoded.results)
-    ? decoded.results as Array<{ studentId?: unknown; subject?: unknown; sentences?: unknown }>
+  const parsed = decoded.results && typeof decoded.results === "object" && !Array.isArray(decoded.results)
+    ? Object.values(decoded.results) as Array<{ studentId?: unknown; subject?: unknown; sentences?: unknown }>
     : [];
   const allowed = new Set(evidence.map((item) => `${item.studentId}|${item.subject}`));
   const diagnostics: string[] = [];
