@@ -165,5 +165,32 @@ test("turns behavior byte gaps into concrete Korean syllable repair instructions
   });
   assert.match(behaviorRepairInstruction(495), /약 5음절.*15바이트.*추가.*510바이트/);
   assert.match(behaviorRepairInstruction(589), /약 16음절.*49바이트.*삭제.*540바이트/);
-  assert.match(behaviorRepairInstruction(525), /기준을 충족.*바꾸지 않음/);
+  assert.match(behaviorRepairInstruction(525), /기준을 충족.*길이와 핵심 사실을 유지/);
+});
+
+test("keeps behavior repair targets stable across byte boundaries and large misses", () => {
+  assert.deepEqual(
+    [0, 430, 499, 500, 525, 550, 551, 625].map((bytes) => behaviorRepairPlan(bytes)),
+    [
+      { bytes: 0, targetBytes: 510, byteDelta: 510, syllables: 170, direction: "add" },
+      { bytes: 430, targetBytes: 510, byteDelta: 80, syllables: 27, direction: "add" },
+      { bytes: 499, targetBytes: 510, byteDelta: 11, syllables: 4, direction: "add" },
+      { bytes: 500, targetBytes: 500, byteDelta: 0, syllables: 0, direction: "none" },
+      { bytes: 525, targetBytes: 525, byteDelta: 0, syllables: 0, direction: "none" },
+      { bytes: 550, targetBytes: 550, byteDelta: 0, syllables: 0, direction: "none" },
+      { bytes: 551, targetBytes: 540, byteDelta: -11, syllables: 4, direction: "remove" },
+      { bytes: 625, targetBytes: 540, byteDelta: -85, syllables: 28, direction: "remove" },
+    ],
+  );
+});
+
+test("limits behavior length repair to fact-preserving local edits", () => {
+  const shortInstruction = behaviorRepairInstruction(495);
+  assert.match(shortInstruction, /이미 언급된 행동의 방법·과정만 구체화/);
+  assert.match(shortInstruction, /새 활동·인물·성과·태도는 만들지 않음/);
+  assert.match(shortInstruction, /문장 전체를 다시 쓰거나 순서를 바꾸지 말고/);
+
+  const longInstruction = behaviorRepairInstruction(589);
+  assert.match(longInstruction, /중복 연결어·수식어만 줄이고/);
+  assert.match(longInstruction, /관찰 사실·성장 표현·문장 수는 삭제하지 않음/);
 });
