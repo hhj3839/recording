@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { commentAreaIssuesForDisplay, evidenceGroundingWarnings, hasCompleteEvidenceCoverage, openingRepetitionRate, replaceSelectedCommentText, validateGeneratedComment, validateGeneratedCommentPart } from "../app/comment-generation-policy.ts";
+import { commentAreaIssuesForDisplay, evidenceGroundingWarnings, hasCompleteEvidenceCoverage, normalizeGeneratedCommentCandidate, openingRepetitionRate, replaceSelectedCommentText, validateGeneratedComment, validateGeneratedCommentPart } from "../app/comment-generation-policy.ts";
 import { behaviorRepairInstruction, behaviorRepairPlan } from "../app/behavior-repair-policy.ts";
 import { generationModel } from "../app/ai-model-policy.ts";
 import { batchCommentsBySubject, COMMENT_BATCH_SIZE } from "../app/comment-batching.ts";
@@ -58,6 +58,15 @@ test("accepts one 50 to 60 character sentence per assessment area ending in 함"
   assert.equal(Array.from(sentence).length >= 50 && Array.from(sentence).length <= 60, true);
   const result = validateGeneratedComment(`${sentence} ${sentence}`, 2);
   assert.equal(result.valid, true);
+});
+
+test("normalizes only candidates that meet the strict 50 to 60 character gate", () => {
+  const strict = "글의 중심 생각을 정확하게 파악하고 중요한 내용을 근거와 함께 정리하여 발표 활동에 꾸준히 참여함.";
+  assert.equal(normalizeGeneratedCommentCandidate(strict), strict);
+  const short = Array.from(strict).slice(5).join("");
+  const normalized = normalizeGeneratedCommentCandidate(short);
+  assert.equal(Array.from(normalized).length >= 50 && Array.from(normalized).length <= 60, true);
+  assert.equal(normalized.endsWith("함."), true);
 });
 
 test("rejects missing areas, invalid length, endings, and forbidden expressions", () => {
@@ -187,13 +196,13 @@ test("keeps behavior repair context serializable for minimal revision", () => {
 
 test("turns behavior byte gaps into concrete Korean syllable repair instructions", () => {
   assert.deepEqual(behaviorRepairPlan(495), {
-    bytes: 495, targetBytes: 510, byteDelta: 15, syllables: 5, direction: "add",
+    bytes: 495, targetBytes: 525, byteDelta: 30, syllables: 10, direction: "add",
   });
   assert.deepEqual(behaviorRepairPlan(589), {
-    bytes: 589, targetBytes: 540, byteDelta: -49, syllables: 16, direction: "remove",
+    bytes: 589, targetBytes: 525, byteDelta: -64, syllables: 21, direction: "remove",
   });
-  assert.match(behaviorRepairInstruction(495), /약 5음절.*15바이트.*추가.*510바이트/);
-  assert.match(behaviorRepairInstruction(589), /약 16음절.*49바이트.*삭제.*540바이트/);
+  assert.match(behaviorRepairInstruction(495), /약 10음절.*30바이트.*추가.*525바이트/);
+  assert.match(behaviorRepairInstruction(589), /약 21음절.*64바이트.*삭제.*525바이트/);
   assert.match(behaviorRepairInstruction(525), /기준을 충족.*길이와 핵심 사실을 유지/);
 });
 
@@ -201,14 +210,14 @@ test("keeps behavior repair targets stable across byte boundaries and large miss
   assert.deepEqual(
     [0, 430, 499, 500, 525, 550, 551, 625].map((bytes) => behaviorRepairPlan(bytes)),
     [
-      { bytes: 0, targetBytes: 510, byteDelta: 510, syllables: 170, direction: "add" },
-      { bytes: 430, targetBytes: 510, byteDelta: 80, syllables: 27, direction: "add" },
-      { bytes: 499, targetBytes: 510, byteDelta: 11, syllables: 4, direction: "add" },
+      { bytes: 0, targetBytes: 525, byteDelta: 525, syllables: 175, direction: "add" },
+      { bytes: 430, targetBytes: 525, byteDelta: 95, syllables: 32, direction: "add" },
+      { bytes: 499, targetBytes: 525, byteDelta: 26, syllables: 9, direction: "add" },
       { bytes: 500, targetBytes: 500, byteDelta: 0, syllables: 0, direction: "none" },
       { bytes: 525, targetBytes: 525, byteDelta: 0, syllables: 0, direction: "none" },
       { bytes: 550, targetBytes: 550, byteDelta: 0, syllables: 0, direction: "none" },
-      { bytes: 551, targetBytes: 540, byteDelta: -11, syllables: 4, direction: "remove" },
-      { bytes: 625, targetBytes: 540, byteDelta: -85, syllables: 28, direction: "remove" },
+      { bytes: 551, targetBytes: 525, byteDelta: -26, syllables: 9, direction: "remove" },
+      { bytes: 625, targetBytes: 525, byteDelta: -100, syllables: 33, direction: "remove" },
     ],
   );
 });
