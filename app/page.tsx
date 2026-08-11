@@ -240,6 +240,7 @@ function ClassroomManager({ current }: { current: ClassroomInfo | null }) {
   return <section>
     <div className="page-heading"><div><p className="eyebrow">SCHOOL & CLASS</p><h1>학급 관리</h1><p>학년도·학기·학년·반별로 자료를 완전히 분리해 관리하세요.</p></div></div>
     {message && <p className="student-message">{message}</p>}
+    <aside className="semester-retention-notice"><span aria-hidden="true">✓</span><div><strong>로그인 계정마다 학기별 완성 자료를 따로 보관합니다.</strong><p>다음 학기에는 새 학급을 추가하세요. 현재 학기의 학생·평가·교과 평어·행동특성은 삭제하지 않는 한 그대로 유지됩니다.</p></div></aside>
     <div className="classroom-layout">
       <section className="classroom-list-panel">
         <div className="section-heading"><div><p className="eyebrow">MY CLASSES</p><h2>내 학급 · {classrooms.length}개</h2></div></div>
@@ -1694,6 +1695,7 @@ function PrivacySettings({ currentName, onNameChanged }: { currentName: string; 
       {summary ? <>
         <dl className="privacy-meta"><div><dt>교사 계정</dt><dd>{summary.account.email}</dd></div><div><dt>학교·학급</dt><dd>{summary.classroom.schoolName} · {summary.classroom.schoolYear}학년도 {summary.classroom.semester}학기 · {summary.classroom.grade}학년 {summary.classroom.classNumber}반</dd></div></dl>
         <div className="privacy-counts">{countItems.map(([label, value]) => <article key={label}><span>{label}</span><strong>{value}</strong></article>)}</div>
+        <p className="semester-storage-summary">이 숫자는 현재 로그인 계정의 위 학년도·학기 자료만 집계합니다. 다른 학기 자료와 섞이지 않습니다.</p>
       </> : <p>저장 현황을 확인하고 있습니다.</p>}
       <ul className="security-list"><li>로그인 세션은 보안 쿠키로 관리됩니다.</li><li>OpenAI API 키와 Supabase 관리 키는 서버에만 저장됩니다.</li><li>모든 조회·수정 요청에서 교사 ID와 학급 ID를 함께 확인합니다.</li></ul>
       <nav className="privacy-legal-links"><a href="/privacy" target="_blank">개인정보 처리방침</a><a href="/terms" target="_blank">서비스 이용약관</a></nav>
