@@ -65,6 +65,34 @@ export function validateGeneratedCommentPart(comment: string) {
   };
 }
 
+export function normalizeGeneratedCommentCandidate(candidate: string) {
+  const isStrict = (value: string) => {
+    const validation = validateGeneratedCommentPart(value);
+    const length = Array.from(value).length;
+    return validation.valid && length >= 50 && length <= 60;
+  };
+  if (isStrict(candidate)) return candidate;
+  const length = Array.from(candidate).length;
+  if (length >= 45 && length < 50 && !candidate.startsWith("수업에서 ")) {
+    const contextualized = `수업에서 ${candidate}`;
+    if (isStrict(contextualized)) return contextualized;
+  }
+  if (length > 60 && length <= 75) {
+    const optionalModifiers = [
+      "자기 주도적으로 ", "적극적으로 ", "구체적으로 ", "논리적으로 ",
+      "자연스럽게 ", "효과적으로 ", "능동적으로 ", "정확하게 ",
+      "성실하게 ", "꾸준하게 ", "꾸준히 ", "알맞게 ",
+    ];
+    let compacted = candidate;
+    for (const modifier of optionalModifiers) {
+      if (!compacted.includes(modifier)) continue;
+      compacted = compacted.replace(modifier, "");
+      if (isStrict(compacted)) return compacted;
+    }
+  }
+  return "";
+}
+
 const unsupportedAttitudeConcepts = [
   { label: "자신 있게", pattern: /자신(?:감)?있|자신감을?(?:가지|보이)/ },
   { label: "적극적으로", pattern: /적극적/ },

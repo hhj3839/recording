@@ -6,7 +6,7 @@ import { CommentEvidence, GeneratedComment, GeneratedCommentPart, generateCommen
 import { generationModel } from "../../../ai-model-policy";
 
 export const maxDuration = 300;
-const MAX_GENERATION_ATTEMPTS = 3;
+const MAX_GENERATION_ATTEMPTS = 4;
 
 type JobRow = {
   id: string;

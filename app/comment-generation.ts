@@ -1,6 +1,6 @@
 import { createHmac, timingSafeEqual } from "node:crypto";
 import { upsertRows } from "../db/supabase";
-import { evidenceGroundingWarnings, hasCompleteEvidenceCoverage, validateGeneratedComment, validateGeneratedCommentPart } from "./comment-generation-policy";
+import { evidenceGroundingWarnings, hasCompleteEvidenceCoverage, normalizeGeneratedCommentCandidate, validateGeneratedComment, validateGeneratedCommentPart } from "./comment-generation-policy";
 import { CommentVariation } from "./comment-variation";
 import { archiveComment } from "./record-revisions";
 import { primaryAiModel } from "./ai-model-policy";
@@ -24,29 +24,6 @@ function extractOutputText(payload: unknown): string {
   return (response.output ?? []).flatMap((item) => item.content ?? [])
     .filter((item) => item.type === "output_text" && typeof item.text === "string")
     .map((item) => item.text).join("").trim();
-}
-
-function normalizeCandidateLength(candidate: string) {
-  if (validateGeneratedCommentPart(candidate).valid) return candidate;
-  const length = Array.from(candidate).length;
-  if (length >= 45 && length < 50 && !candidate.startsWith("수업에서 ")) {
-    const contextualized = `수업에서 ${candidate}`;
-    if (validateGeneratedCommentPart(contextualized).valid) return contextualized;
-  }
-  if (length > 60 && length <= 75) {
-    const optionalModifiers = [
-      "자기 주도적으로 ", "적극적으로 ", "구체적으로 ", "논리적으로 ",
-      "자연스럽게 ", "효과적으로 ", "능동적으로 ", "정확하게 ",
-      "성실하게 ", "꾸준하게 ", "꾸준히 ", "알맞게 ",
-    ];
-    let compacted = candidate;
-    for (const modifier of optionalModifiers) {
-      if (!compacted.includes(modifier)) continue;
-      compacted = compacted.replace(modifier, "");
-      if (validateGeneratedCommentPart(compacted).valid) return compacted;
-    }
-  }
-  return "";
 }
 
 export async function generateCommentBatch(evidence: CommentEvidence[], avoidComments: string[] = [], repair = false, model = primaryAiModel()) {
@@ -121,7 +98,7 @@ export async function generateCommentBatch(evidence: CommentEvidence[], avoidCom
         },
         {
           role: "user",
-          content: [{ type: "input_text", text: `${repair ? "이전 응답 문장이 검수를 통과하지 못했다. 해당 영역 문장 한 개만 규칙에 맞게 다시 작성해 줘.\n" : ""}근거 사전과 학생별 근거 ID를 연결하여 각각 교과 평어를 작성해 줘. 작성 후 각 문장의 행동·태도·과정 표현을 연결된 근거와 대조하고 근거에서 확인할 수 없는 표현은 삭제해. 각 학생의 variation.opening을 첫 문장에 반드시 적용하되 opening이 근거에 없는 태도나 행동을 요구하면 근거 표현을 우선해. 같은 요청 안에서 첫 10~15자를 반복하지 마.\n근거 사전: ${JSON.stringify(evidenceDictionary)}\n학생 입력: ${JSON.stringify(requestEvidence)}\n피해야 할 기존 시작 표현: ${JSON.stringify(avoidanceHints)}` }],
+          content: [{ type: "input_text", text: `${repair ? "이전 응답에서 누락되거나 50~60자 검수를 통과하지 못한 영역만 다시 요청한다. itemId를 절대 생략하지 말고 각 itemId에 정확히 한 문장을 작성해 줘.\n" : ""}근거 사전과 학생별 근거 ID를 연결하여 각각 교과 평어를 작성해 줘. 완성 문장은 여유를 두고 52~58자를 목표로 하며 반드시 ‘함.’으로 끝내. body와 공백 한 칸과 ending을 합친 전체 글자 수를 센 뒤 52~58자가 아니면 출력 전에 고쳐. 작성 후 각 문장의 행동·태도·과정 표현을 연결된 근거와 대조하고 근거에서 확인할 수 없는 표현은 삭제해. 각 학생의 variation.opening을 첫 문장에 반드시 적용하되 opening이 근거에 없는 태도나 행동을 요구하면 근거 표현을 우선해. 같은 요청 안에서 첫 10~15자를 반복하지 마.\n근거 사전: ${JSON.stringify(evidenceDictionary)}\n학생 입력: ${JSON.stringify(requestEvidence)}\n피해야 할 기존 시작 표현: ${JSON.stringify(avoidanceHints)}` }],
         },
       ],
       text: {
@@ -185,7 +162,7 @@ export async function generateCommentBatch(evidence: CommentEvidence[], avoidCom
               ? [`${item.body.trim().replace(/[.。]+$/, "")} ${item.ending}`]
               : [];
           });
-          const text = candidates.map(normalizeCandidateLength).find(Boolean);
+          const text = candidates.map(normalizeGeneratedCommentCandidate).find(Boolean);
           return text ? [{ itemId: value.itemId, text, candidateLengths: candidates.map((candidate) => Array.from(candidate).length) }] : [];
         })
       : [];
