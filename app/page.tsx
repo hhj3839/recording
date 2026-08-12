@@ -932,7 +932,6 @@ function Comments({ assessmentDataBySubject, plan, roster }: { assessmentDataByS
   const [copied, setCopied] = useState(false);
   const [subjectGeneratedAt, setSubjectGeneratedAt] = useState<Record<string, string>>({});
   const [activeJob, setActiveJob] = useState<CommentJob | null>(null);
-  const [evidenceKey, setEvidenceKey] = useState("");
   const [rewriteBusyKey, setRewriteBusyKey] = useState("");
   const [selectedText, setSelectedText] = useState<Record<string, CommentSelection>>({});
   const loadGeneratedComments = useCallback(async () => {
@@ -1153,9 +1152,6 @@ function Comments({ assessmentDataBySubject, plan, roster }: { assessmentDataByS
                 const text = comments[key] ?? "";
                 const assessment = assessmentDataBySubject[selectedSubject]?.[index];
                 const hasLevel = assessment?.assessments.some((level) => ["상", "중", "하"].includes(level));
-                const evidence = plan.filter((item) => item.subject === selectedSubject).map((item, planIndex) => ({
-                  ...item, level: assessment?.assessments[planIndex] ?? "-",
-                })).filter((item) => ["상", "중", "하"].includes(item.level));
                 const validation = validateRecord(text);
                 const areaStatuses = commentParts.filter((part) => part.studentId === student.id && part.subject === selectedSubject);
                 const areaIssues = areaStatuses
@@ -1198,8 +1194,7 @@ function Comments({ assessmentDataBySubject, plan, roster }: { assessmentDataByS
                     <div>{!validation.endingsOk && <span className="fail">종결 확인</span>}{validation.forbidden.length > 0 && <span className="fail">금지어 확인</span>}{!validation.spellingOk && <span className="fail" title={validation.spellingIssues.join("\n")}>맞춤법 {validation.spellingIssues.length}건</span>}</div>
                     {similarStudents.length > 0 && closest && <div className="similarity-detail compact-similarity"><strong>{closest.student.name} 학생과 {Math.round(closest.score * 100)}%</strong></div>}
                     {!validation.spellingOk && <ul className="spelling-issues">{validation.spellingIssues.map((issue, issueIndex) => <li key={issueIndex}>{issue}</li>)}</ul>}
-                    <div className="comment-row-actions review-cell-actions"><button className="regenerate-button" disabled={!text || !!rewriteBusyKey} onMouseDown={(event) => event.preventDefault()} onClick={() => void rewriteComment(student.id, selectedSubject, "regenerate")}>{rewriteBusyKey === `${key}|regenerate` ? "생성 중…" : "다시 생성"}</button><button disabled={!selectedText[key] || !!rewriteBusyKey} title={selectedText[key] ? "선택한 부분만 평가 근거에 맞게 바꿉니다." : "평어에서 바꿀 문장이나 표현을 먼저 선택하세요."} onMouseDown={(event) => event.preventDefault()} onClick={() => void rewriteComment(student.id, selectedSubject, "selection")}>{rewriteBusyKey === `${key}|selection` ? "변경 중…" : "선택한 부분 바꾸기"}</button><button className="evidence-button" onMouseDown={(event) => event.preventDefault()} onClick={() => setEvidenceKey((current) => current === key ? "" : key)}>생성 근거 {evidenceKey === key ? "닫기" : "보기"}</button></div>
-                    {evidenceKey === key && <div className="comment-evidence">{evidence.length ? evidence.map((item, evidenceIndex) => <article key={`${item.unit}-${evidenceIndex}`}><strong>{item.unit} · {item.domain} · {item.level}</strong><span>{item.level === "상" ? item.high : item.level === "중" ? item.middle : item.low}</span></article>) : <p>평어 생성에 사용된 상·중·하 평가 근거가 없습니다.</p>}</div>}
+                    <div className="comment-row-actions review-cell-actions comment-review-actions"><button className="regenerate-button" disabled={!text || !!rewriteBusyKey} onMouseDown={(event) => event.preventDefault()} onClick={() => void rewriteComment(student.id, selectedSubject, "regenerate")}>{rewriteBusyKey === `${key}|regenerate` ? "생성 중…" : "다시 생성"}</button><button disabled={!selectedText[key] || !!rewriteBusyKey} title={selectedText[key] ? "선택한 부분만 평가 근거에 맞게 바꿉니다." : "평어에서 바꿀 문장이나 표현을 먼저 선택하세요."} onMouseDown={(event) => event.preventDefault()} onClick={() => void rewriteComment(student.id, selectedSubject, "selection")}>{rewriteBusyKey === `${key}|selection` ? "변경 중…" : "선택한 부분 바꾸기"}</button></div>
                   </td>
                 </tr>;
               })}</tbody>
