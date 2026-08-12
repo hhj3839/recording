@@ -801,13 +801,12 @@ function SubjectNavigator({ subjects, activeSubject, onChange, progress }: {
   </div>;
 }
 
-function Assessments({ data, setData, plan, activeSubject, setActiveSubject, onDeleteStudent, onSave }: {
+function Assessments({ data, setData, plan, activeSubject, setActiveSubject, onSave }: {
   data: AssessmentStudent[];
   setData: React.Dispatch<React.SetStateAction<AssessmentStudent[]>>;
   plan: AssessmentPlan[];
   activeSubject: string;
   setActiveSubject: (subject: string) => void;
-  onDeleteStudent: (id: number) => void;
   onSave: () => Promise<string>;
 }) {
   const [lastSavedAt, setLastSavedAt] = useState<Date | null>(null);
@@ -857,7 +856,7 @@ function Assessments({ data, setData, plan, activeSubject, setActiveSubject, onD
       }),
     })));
     setDirty(true);
-    setMessage(`${changed}개의 미입력 칸에 '${bulkLevel}'을 적용했습니다.`);
+    setMessage(`${activeSubject} 미입력 ${changed}칸에 '${bulkLevel}'을 적용했습니다.`);
   };
   const clearAll = () => {
     if (!window.confirm(`${activeSubject}의 현재 화면 평가수준을 모두 미입력으로 바꿀까요?`)) return;
@@ -900,18 +899,19 @@ function Assessments({ data, setData, plan, activeSubject, setActiveSubject, onD
       <div className="workspace-toolbar assessment-workspace-toolbar">
         <SubjectNavigator subjects={subjects} activeSubject={activeSubject} onChange={changeSubject} />
       </div>
-      <details className="secondary-tools">
+      <details className="secondary-tools assessment-bulk-panel">
         <summary>일괄 입력 도구</summary>
         <div className="assessment-bulk-tools">
-          <div><select aria-label="일괄 적용 수준" value={bulkLevel} onChange={(event) => setBulkLevel(event.target.value as Level)}><option>상</option><option>중</option><option>하</option><option>미응시</option><option>평가 예정</option></select><button onClick={applyToMissing}>미입력 전체 적용</button><button className="secondary" onClick={() => void pasteLevels()}>엑셀 표 붙여넣기</button><button className="danger-text" onClick={clearAll}>전체 초기화</button></div>
-          <span>평가 수준 영역만 복사하거나 번호·이름을 포함한 표를 붙여넣을 수 있습니다.</span>
+          <section className="assessment-bulk-section fill-missing"><div><strong>미입력 칸 채우기</strong><span>기존에 입력한 칸은 변경하지 않습니다.</span></div><div className="bulk-level-options" role="group" aria-label="미입력 칸에 적용할 평가 수준">{(["상", "중", "하", "미응시", "평가 예정"] as Level[]).map((level) => <button type="button" className={bulkLevel === level ? "active" : "secondary"} aria-pressed={bulkLevel === level} key={level} onClick={() => setBulkLevel(level)}>{level}</button>)}</div><button type="button" onClick={applyToMissing}>미입력 칸에 적용</button></section>
+          <section className="assessment-bulk-section paste-levels"><div><strong>표에서 가져오기</strong><span>평가수준만 또는 번호·이름을 포함한 표를 복사할 수 있습니다.</span></div><button type="button" className="secondary" onClick={() => void pasteLevels()}>엑셀 표 붙여넣기</button></section>
+          <section className="assessment-bulk-section reset-levels"><div><strong>현재 과목 초기화</strong><span>{activeSubject}의 평가수준만 모두 미입력으로 되돌립니다.</span></div><button type="button" className="danger-text" onClick={clearAll}>현재 과목 전체 초기화</button></section>
         </div>
       </details>
       {message && <p className="student-message">{message}</p>}
       <div className="assessment-wrap">
         <table className="assessment-table">
-          <thead><tr><th>번호</th><th>이름</th>{visiblePlan.map((item, index) => <th key={`${item.unit}-${item.domain}-${index}`} title={item.goal}><b>{item.unit}</b><small>{item.domain}</small></th>)}<th>관리</th></tr></thead>
-          <tbody>{data.map((student, row) => <tr key={student.id}><td>{student.number ?? student.id}</td><td><strong>{student.name}</strong></td>{student.assessments.map((level, col) => <td key={col}><button aria-label={`${student.name} ${col + 1}단원 수준 ${level}`} className={`level-button level-${level === "평가 예정" ? "평가예정" : level}`} onClick={() => cycle(row, col)}>{level}</button></td>)}<td><button className="delete-student" onClick={() => onDeleteStudent(student.id)} aria-label={`${student.name} 삭제`}>삭제</button></td></tr>)}</tbody>
+          <thead><tr><th>번호</th><th>이름</th>{visiblePlan.map((item, index) => <th key={`${item.unit}-${item.domain}-${index}`} title={item.goal}><b>{item.unit}</b><small>{item.domain}</small></th>)}</tr></thead>
+          <tbody>{data.map((student, row) => <tr key={student.id}><td>{student.number ?? student.id}</td><td><strong>{student.name}</strong></td>{student.assessments.map((level, col) => <td key={col}><button aria-label={`${student.name} ${col + 1}단원 수준 ${level}`} className={`level-button level-${level === "평가 예정" ? "평가예정" : level}`} onClick={() => cycle(row, col)}>{level}</button></td>)}</tr>)}</tbody>
         </table>
       </div>
     </section>
@@ -1917,7 +1917,7 @@ export default function Home() {
           {view === "classes" && <ClassroomManager current={classroom} />}
           {view === "students" && <StudentManager roster={roster} onAdded={mergeStudentIntoState} onChanged={mergeStudentIntoState} onDeleted={(id) => void deleteStudent(id)} onImported={mergeImportedStudents} />}
           {view === "plans" && <PlanManager plan={plan} onChanged={applyPlanChange} current={classroom} />}
-          {view === "assessments" && <Assessments data={assessmentDataBySubject[activeSubject] ?? []} setData={(updater) => setAssessmentDataBySubject((current) => ({ ...current, [activeSubject]: typeof updater === "function" ? updater(current[activeSubject] ?? []) : updater }))} plan={plan} activeSubject={activeSubject} setActiveSubject={setActiveSubject} onDeleteStudent={(id) => void deleteStudent(id)} onSave={saveAssessmentLevels} />}
+          {view === "assessments" && <Assessments data={assessmentDataBySubject[activeSubject] ?? []} setData={(updater) => setAssessmentDataBySubject((current) => ({ ...current, [activeSubject]: typeof updater === "function" ? updater(current[activeSubject] ?? []) : updater }))} plan={plan} activeSubject={activeSubject} setActiveSubject={setActiveSubject} onSave={saveAssessmentLevels} />}
           {view === "comments" && <Comments assessmentDataBySubject={assessmentDataBySubject} plan={plan} roster={roster} />}
           {view === "behavior" && <Behavior roster={roster} />}
           {SHOW_EXPORT_RESULTS && view === "export" && <ExportResults roster={roster} plan={plan} />}
