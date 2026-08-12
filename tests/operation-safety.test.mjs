@@ -111,4 +111,7 @@ test("keeps the simplified plan, assessment, and behavior toolbars", () => {
   assert.match(page, /issue-only-validation/);
   assert.match(page, /!validation\.lengthOk && <span className="fail">길이 확인<\/span>/);
   assert.equal((page.match(/className="secondary result-copy-button"/g) ?? []).length, 2);
+  assert.match(page, /className="validation-cell issue-only-validation comment-review-cell"[\s\S]*다시 생성[\s\S]*선택한 부분 바꾸기[\s\S]*생성 근거/);
+  assert.match(page, /<th>검수<\/th>[\s\S]*className="validation-cell behavior-validation issue-only-validation behavior-review-cell"/);
+  assert.match(page, /behavior-review-cell[\s\S]*길이 확인[\s\S]*다시 생성[\s\S]*길이 조정/);
 });
