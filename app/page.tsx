@@ -951,7 +951,7 @@ function Comments({ assessmentDataBySubject, plan, roster }: { assessmentDataByS
   const [selectedText, setSelectedText] = useState<Record<string, CommentSelection>>({});
   const loadGeneratedComments = useCallback(async () => {
     try {
-      const response = await fetch("/api/generated-comments");
+      const response = await fetch("/api/generated-comments", { cache: "no-store" });
       const result = await response.json() as {
         comments?: Array<{ studentId: number; subject: string; comment: string; candidates: string[]; confirmed: boolean; updatedAt: string }>;
         parts?: Array<{ studentId: number; subject: string; assessmentIndex: number; sentence: string; status: string; issues: string[] }>;
@@ -1236,7 +1236,7 @@ function Behavior({ roster }: { roster: AssessmentStudent[] }) {
   const [rewriteBusyKey, setRewriteBusyKey] = useState("");
   const loadBehaviors = async () => {
     try {
-      const response = await fetch("/api/student-behaviors");
+      const response = await fetch("/api/student-behaviors", { cache: "no-store" });
       const result = await response.json() as { behaviors?: Array<{ studentId: number; characteristic: string; behavior: string; confirmed: boolean; updatedAt: string }> };
       if (!response.ok || !result.behaviors) return;
       setRecords(Object.fromEntries(result.behaviors.map((item) => [item.studentId, { characteristic: item.characteristic, behavior: item.behavior }])));
@@ -1469,7 +1469,10 @@ function ExportResults({ roster, plan }: { roster: AssessmentStudent[]; plan: As
   useEffect(() => {
     const load = async () => {
       try {
-        const [commentResponse, behaviorResponse] = await Promise.all([fetch("/api/generated-comments"), fetch("/api/student-behaviors")]);
+        const [commentResponse, behaviorResponse] = await Promise.all([
+          fetch("/api/generated-comments", { cache: "no-store" }),
+          fetch("/api/student-behaviors", { cache: "no-store" }),
+        ]);
         const commentResult = await commentResponse.json() as { comments?: ExportComment[]; error?: string };
         const behaviorResult = await behaviorResponse.json() as { behaviors?: ExportBehavior[]; error?: string };
         if (!commentResponse.ok || !behaviorResponse.ok) throw new Error(commentResult.error || behaviorResult.error || "결과를 불러오지 못했습니다.");
@@ -1765,8 +1768,8 @@ export default function Home() {
         const [planResponse, classResponse, commentResponse, behaviorResponse] = await Promise.all([
           fetch("/api/assessment-plan"),
           fetch("/api/class-data"),
-          fetch("/api/generated-comments"),
-          fetch("/api/student-behaviors"),
+          fetch("/api/generated-comments", { cache: "no-store" }),
+          fetch("/api/student-behaviors", { cache: "no-store" }),
         ]);
         const planResult = await planResponse.json() as { plan?: AssessmentPlan[] };
         const classResult = await classResponse.json() as {
@@ -1810,7 +1813,10 @@ export default function Home() {
     if (view !== "dashboard") return;
     const refreshGeneratedCounts = async () => {
       try {
-        const [commentResponse, behaviorResponse] = await Promise.all([fetch("/api/generated-comments"), fetch("/api/student-behaviors")]);
+        const [commentResponse, behaviorResponse] = await Promise.all([
+          fetch("/api/generated-comments", { cache: "no-store" }),
+          fetch("/api/student-behaviors", { cache: "no-store" }),
+        ]);
         const commentResult = await commentResponse.json() as { comments?: Array<{ comment: string }> };
         const behaviorResult = await behaviorResponse.json() as { behaviors?: Array<{ behavior: string }> };
         if (commentResponse.ok) setGeneratedCommentCount((commentResult.comments ?? []).filter((item) => item.comment.trim()).length);

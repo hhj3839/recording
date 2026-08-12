@@ -21,7 +21,7 @@ export async function GET() {
         studentId: Number(row.student_id), subject: String(row.subject), assessmentIndex: Number(row.assessment_index),
         sentence: String(row.sentence), status: String(row.status), issues: Array.isArray(row.issues) ? row.issues : [],
       })),
-    });
+    }, { headers: { "Cache-Control": "private, no-store" } });
   } catch (error) {
     return dataError(error, "저장된 평어를 불러오지 못했습니다.");
   }
