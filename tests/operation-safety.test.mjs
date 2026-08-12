@@ -18,6 +18,7 @@ test("blocks every paid comment load-test mode before login without explicit app
     ["sample", "RUN_COMMENT_5_TEST"],
     ["subject", "RUN_COMMENT_25_TEST"],
     ["start", "RUN_FULL_225_TEST"],
+    ["missing-start", "RUN_MISSING_COMMENT_TEST"],
   ];
   for (const [mode, variable] of cases) {
     const result = runWithoutApproval("scripts/load-test-comments.mjs", mode, variable);
@@ -49,4 +50,10 @@ test("always refreshes generated result counts without browser caching", () => {
   for (const route of ["app/api/generated-comments/route.ts", "app/api/student-behaviors/route.ts"]) {
     assert.match(readFileSync(route, "utf8"), /"Cache-Control": "private, no-store"/);
   }
+});
+
+test("keeps missing comment audit outside paid generation modes", () => {
+  const source = readFileSync("scripts/load-test-comments.mjs", "utf8");
+  assert.match(source, /if \(mode === "missing"\)/);
+  assert.doesNotMatch(source.match(/if \(mode === "missing"\)[\s\S]*?process\.exit\(0\);/)?.[0] ?? "", /method:\s*"POST"|\/api\/comment-jobs/);
 });
