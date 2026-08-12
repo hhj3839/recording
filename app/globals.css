@@ -432,3 +432,6 @@ button.secondary { color: #526171; border: 1px solid #dce1e6; background: #fff; 
 .mobile-header{box-shadow:0 2px 8px rgba(29,41,57,.06)}.mobile-header select{min-height:38px;border-color:#cfd9e4;border-radius:var(--radius-sm);font-size:12px}
 @media(max-width:1000px){.content{padding-left:30px;padding-right:30px}}
 @media(max-width:760px){.mobile-header{height:62px;padding:0 15px}.content{padding:28px 16px 52px}.stats-grid{gap:10px}.stat-card{min-height:116px;padding:15px}.dashboard-grid{gap:12px}.task-panel,.quick-panel{padding:17px}.classroom-list-panel,.classroom-create-panel{padding:15px}.student-status-tabs{align-items:stretch;flex-direction:column}.student-status-tabs>div{overflow-x:auto}.student-status-tabs button{white-space:nowrap}}
+
+/* 교과 평어의 넓은 표는 모바일 페이지가 아니라 표 컨테이너 안에서만 스크롤합니다. */
+.comments-review-layout,.comments-review-layout .review-content{min-width:0;width:100%}.comments-review-layout .comments-table-wrap{width:100%;max-width:100%;min-width:0}
