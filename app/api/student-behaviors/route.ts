@@ -12,7 +12,7 @@ export async function GET() {
     });
     return Response.json({ behaviors: rows.map((row) => ({
       id: row.id, studentId: row.student_id, characteristic: row.characteristic, behavior: row.behavior, confirmed: Boolean(row.confirmed), confirmedAt: row.confirmed_at, updatedAt: row.updated_at,
-    })) });
+    })) }, { headers: { "Cache-Control": "private, no-store" } });
   } catch (error) {
     return dataError(error, "저장된 행동특성을 불러오지 못했습니다.");
   }
