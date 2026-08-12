@@ -2,7 +2,7 @@ import { waitUntil } from "@vercel/functions";
 import { eq, selectRows, updateRows } from "../../../../db/supabase";
 import { getAiUsage, MONTHLY_AI_LIMIT, recordAiUsage } from "../../../ai-usage";
 import { BehaviorInput, GeneratedBehavior, generateBehaviorBatch, saveGeneratedBehaviors } from "../../../behavior-generation";
-import { behaviorRepairInstruction } from "../../../behavior-repair-policy";
+import { behaviorRepairInstruction, behaviorRepairTargets } from "../../../behavior-repair-policy";
 import { signCommentJob, verifyCommentJob } from "../../../comment-generation";
 import { generationModel } from "../../../ai-model-policy";
 
@@ -89,6 +89,7 @@ export async function POST(request: Request) {
               ...item,
               repairHint: `${failure.issues.join(" · ")} · ${behaviorRepairInstruction(failure.bytes)}`,
               previousBehavior: failure.behavior,
+              repairTargets: behaviorRepairTargets(failure.bytes),
             } : item;
           });
         await recordAiUsage({

@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { commentAreaIssuesForDisplay, composeGeneratedCommentCandidate, evidenceGroundingWarnings, hasCompleteEvidenceCoverage, normalizeGeneratedCommentCandidate, openingRepetitionRate, replaceSelectedCommentText, validateGeneratedComment, validateGeneratedCommentPart } from "../app/comment-generation-policy.ts";
-import { behaviorRepairInstruction, behaviorRepairPlan } from "../app/behavior-repair-policy.ts";
+import { behaviorRepairInstruction, behaviorRepairPlan, behaviorRepairTargets } from "../app/behavior-repair-policy.ts";
 import { assertStrictGeneratedBehaviors, selectBehaviorCandidate } from "../app/behavior-persistence-policy.ts";
 import { generationModel } from "../app/ai-model-policy.ts";
 import { batchCommentsBySubject, COMMENT_BATCH_SIZE } from "../app/comment-batching.ts";
@@ -209,9 +209,18 @@ test("turns behavior byte gaps into concrete Korean syllable repair instructions
   assert.deepEqual(behaviorRepairPlan(589), {
     bytes: 589, targetBytes: 535, byteDelta: -54, syllables: 18, direction: "remove",
   });
-  assert.match(behaviorRepairInstruction(495), /약 7음절.*20바이트.*추가.*515바이트/);
-  assert.match(behaviorRepairInstruction(589), /약 18음절.*54바이트.*삭제.*535바이트/);
+  assert.match(behaviorRepairInstruction(495), /후보 1은 506바이트, 후보 2는 518바이트.*약 7음절.*20바이트.*추가/);
+  assert.match(behaviorRepairInstruction(589), /후보 1은 544바이트, 후보 2는 532바이트.*약 18음절.*54바이트.*삭제/);
   assert.match(behaviorRepairInstruction(525), /기준을 충족.*길이와 핵심 사실을 유지/);
+});
+
+test("uses asymmetric in-range targets for the smallest behavior repair", () => {
+  assert.deepEqual(behaviorRepairTargets(479), [506, 518]);
+  assert.deepEqual(behaviorRepairTargets(499), [506, 518]);
+  assert.deepEqual(behaviorRepairTargets(500), [500, 500]);
+  assert.deepEqual(behaviorRepairTargets(535), [535, 535]);
+  assert.deepEqual(behaviorRepairTargets(551), [544, 532]);
+  assert.deepEqual(behaviorRepairTargets(639), [544, 532]);
 });
 
 test("keeps behavior repair targets stable across byte boundaries and large misses", () => {
