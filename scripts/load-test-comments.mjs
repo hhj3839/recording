@@ -8,6 +8,7 @@ const paidModeApprovals = {
   sample: ["RUN_COMMENT_5_TEST", "5명 실제 AI 검사"],
   subject: ["RUN_COMMENT_25_TEST", "25명·1과목 실제 AI 검사"],
   start: ["RUN_FULL_225_TEST", "225건 전체 실제 AI 검사"],
+  "missing-start": ["RUN_MISSING_COMMENT_TEST", "누락 교과 평어 실제 AI 검사"],
 };
 const paidModeApproval = paidModeApprovals[mode];
 if (paidModeApproval && process.env[paidModeApproval[0]] !== "YES") {
@@ -64,6 +65,68 @@ const request = async (route, options = {}) => {
   if (!response.ok) throw new Error(data.error || `${route} failed (${response.status})`);
   return data;
 };
+
+if (mode === "missing") {
+  const [classData, planData, generatedData, usage] = await Promise.all([
+    request("/api/class-data"),
+    request("/api/assessment-plan"),
+    request("/api/generated-comments"),
+    request("/api/usage"),
+  ]);
+  const subjects = [...new Set(planData.plan.map((item) => item.subject))];
+  const saved = new Set(generatedData.comments.filter((item) => item.comment.trim()).map((item) => `${item.studentId}|${item.subject}`));
+  const missing = subjects.flatMap((subject) => classData.students.flatMap((student) =>
+    saved.has(`${student.id}|${subject}`) ? [] : [{ subject, studentId: student.id, studentNumber: student.number }],
+  ));
+  process.stdout.write(`${JSON.stringify({
+    mode,
+    students: classData.students.length,
+    subjects: subjects.length,
+    expectedItems: classData.students.length * subjects.length,
+    savedItems: saved.size,
+    missingItems: missing.length,
+    missing,
+    monthlyUsage: usage.monthly,
+    monthlyLimit: usage.limit,
+    remainingCalls: Math.max(0, usage.limit - usage.monthly),
+  })}\n`);
+  process.exit(0);
+}
+
+if (mode === "missing-start") {
+  const [classData, planData, generatedData, usage] = await Promise.all([
+    request("/api/class-data"),
+    request("/api/assessment-plan"),
+    request("/api/generated-comments"),
+    request("/api/usage"),
+  ]);
+  const subjects = [...new Set(planData.plan.map((item) => item.subject))];
+  const saved = new Set(generatedData.comments.filter((item) => item.comment.trim()).map((item) => `${item.studentId}|${item.subject}`));
+  const levelLookup = new Map(classData.levels.map((item) => [`${item.studentId}|${item.subject}|${item.assessmentIndex}`, item.level]));
+  const scores = Object.fromEntries(subjects.flatMap((subject) => {
+    const subjectPlan = planData.plan.filter((item) => item.subject === subject);
+    const missingStudents = classData.students.filter((student) => !saved.has(`${student.id}|${subject}`));
+    return missingStudents.length ? [[subject, missingStudents.map((student) => ({
+      studentId: student.id,
+      levels: subjectPlan.map((_, index) => levelLookup.get(`${student.id}|${subject}|${index}`) ?? "-"),
+    }))]] : [];
+  }));
+  const selectedStudentIds = [...new Set(Object.values(scores).flat().map((item) => item.studentId))];
+  const missingItems = Object.values(scores).flat().length;
+  if (!missingItems) throw new Error("No missing comments found");
+  const estimatedBatches = Object.values(scores).reduce((total, students) => total + Math.ceil(students.length / commentBatchSize), 0);
+  if (usage.monthly + estimatedBatches > usage.limit) throw new Error("Monthly AI limit is insufficient for missing comments");
+  const result = await request("/api/comment-jobs", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ scores, selectedStudentIds, overwriteExisting: false }),
+  });
+  process.stdout.write(`${JSON.stringify({
+    mode, jobId: result.job.id, status: result.job.status, alreadyRunning: Boolean(result.alreadyRunning),
+    subjects: Object.keys(scores), missingItems, estimatedBatches, monthlyUsageBefore: usage.monthly,
+  })}\n`);
+  process.exit(0);
+}
 
 if (mode === "start" || mode === "subject" || mode === "sample" || mode === "preflight") {
   const [classData, planData] = await Promise.all([request("/api/class-data"), request("/api/assessment-plan")]);
