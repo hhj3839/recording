@@ -27,7 +27,7 @@ export function validateGeneratedComment(comment: string, expectedSentenceCount:
     .filter(Boolean);
   const lengths = sentences.map((sentence) => Array.from(sentence).length);
   const forbidden = commentForbiddenExpressions.filter((expression) => normalized.includes(expression));
-  const awkwardEndings = sentences.filter((sentence) => /(?:고|며|아|어|감|함)함\.$/.test(sentence));
+  const awkwardEndings = sentences.filter((sentence) => /(?:고|며|아|어|감|함)\s*함\.$/.test(sentence));
   return {
     sentences,
     lengths,
@@ -44,6 +44,12 @@ export function validateGeneratedComment(comment: string, expectedSentenceCount:
       && awkwardEndings.length === 0
       && forbidden.length === 0,
   };
+}
+
+export function composeGeneratedCommentCandidate(body: string, ending: string) {
+  const normalizedBody = body.trim().replace(/[.。]+$/, "");
+  if (!normalizedBody || /(?:고|며|아|어|감|함)$/.test(normalizedBody)) return "";
+  return `${normalizedBody} ${ending}`;
 }
 
 export function validateGeneratedCommentPart(comment: string) {

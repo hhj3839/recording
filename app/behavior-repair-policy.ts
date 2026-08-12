@@ -8,7 +8,7 @@ export type BehaviorRepairPlan = {
 
 export function behaviorRepairPlan(bytes: number): BehaviorRepairPlan {
   const normalizedBytes = Math.max(0, Math.round(Number(bytes) || 0));
-  const targetBytes = normalizedBytes < 500 || normalizedBytes > 550 ? 525 : normalizedBytes;
+  const targetBytes = normalizedBytes < 500 ? 515 : normalizedBytes > 550 ? 535 : normalizedBytes;
   const byteDelta = targetBytes - normalizedBytes;
   return {
     bytes: normalizedBytes,
