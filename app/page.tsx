@@ -238,9 +238,9 @@ function ClassroomManager({ current }: { current: ClassroomInfo | null }) {
     [key]: key === "schoolName" ? value : Number(value),
   }));
   return <section>
-    <div className="page-heading"><div><p className="eyebrow">SCHOOL & CLASS</p><h1>학급 관리</h1><p>학년도·학기·학년·반별로 자료를 완전히 분리해 관리하세요.</p></div></div>
+    <div className="page-heading"><div><p className="eyebrow">SCHOOL & CLASS</p><h1>학급 관리</h1><p>담당 학급을 1년 동안 사용하고 학기별 기록은 구분해 보관하세요.</p></div></div>
     {message && <p className="student-message">{message}</p>}
-    <aside className="semester-retention-notice"><span aria-hidden="true">✓</span><div><strong>로그인 계정마다 학기별 완성 자료를 따로 보관합니다.</strong><p>다음 학기에는 새 학급을 추가하세요. 현재 학기의 학생·평가·교과 평어·행동특성은 삭제하지 않는 한 그대로 유지됩니다.</p></div></aside>
+    <aside className="semester-retention-notice"><span aria-hidden="true">✓</span><div><strong>같은 반은 1년 동안 계속 사용할 수 있습니다.</strong><p>1학기와 2학기 기록은 서로 섞이지 않도록 구분해 저장합니다. 2학기 기록을 시작하거나 다른 반·새 학년도를 맡을 때만 아래에서 학급을 추가하세요.</p></div></aside>
     <div className="classroom-layout">
       <section className="classroom-list-panel">
         <div className="section-heading"><div><p className="eyebrow">MY CLASSES</p><h2>내 학급 · {classrooms.length}개</h2></div></div>
@@ -257,15 +257,15 @@ function ClassroomManager({ current }: { current: ClassroomInfo | null }) {
         })}</div>
       </section>
       <section className="classroom-create-panel">
-        <div className="section-heading"><div><p className="eyebrow">NEW CLASS</p><h2>학급 추가</h2></div></div>
-        <p>새 학급은 빈 학생 명단과 평가계획으로 시작합니다. 기존 학급 자료에는 영향을 주지 않습니다.</p>
+        <div className="section-heading"><div><p className="eyebrow">NEW TERM OR CLASS</p><h2>다른 학기·학급 추가</h2></div></div>
+        <p>2학기 기록을 시작하거나 담당 반이 바뀔 때 사용하세요. 기존 학기의 자료는 그대로 유지됩니다.</p>
         <form onSubmit={(event) => void createClassroom(event)}>
           <label className="wide"><span>학교명</span><input required value={form.schoolName} onChange={(event) => updateForm("schoolName", event.target.value)} /></label>
           <label><span>학년도</span><input type="number" min="2020" max="2100" required value={form.schoolYear} onChange={(event) => updateForm("schoolYear", event.target.value)} /></label>
           <label><span>학기</span><select value={form.semester} onChange={(event) => updateForm("semester", event.target.value)}><option value="1">1학기</option><option value="2">2학기</option></select></label>
           <label><span>학년</span><select value={form.grade} onChange={(event) => updateForm("grade", event.target.value)}>{[1, 2, 3, 4, 5, 6].map((grade) => <option value={grade} key={grade}>{grade}학년</option>)}</select></label>
           <label><span>반</span><input type="number" min="1" max="30" required value={form.classNumber} onChange={(event) => updateForm("classNumber", event.target.value)} /></label>
-          <button className="wide" disabled={busy}>{busy ? "처리 중…" : "새 학급 추가 후 전환"}</button>
+          <button className="wide" disabled={busy}>{busy ? "처리 중…" : "다른 학기·학급 추가"}</button>
         </form>
       </section>
     </div>
@@ -737,27 +737,18 @@ function PlanManager({ plan, onChanged, current }: { plan: AssessmentPlan[]; onC
       <div className="shared-plan-list">{filteredSharedPlans.length ? filteredSharedPlans.map((shared) => <article key={shared.id}><div><strong>{shared.name}</strong><span>{shared.schoolYear}학년도 {shared.semester}학기 · {shared.grade}학년 · {shared.itemCount}개</span><small>{shared.subjects.join(" · ") || "과목 정보 없음"} · {new Date(shared.updatedAt).toLocaleString("ko-KR")}</small></div><button className="secondary" disabled={busy} onClick={() => void previewSharedPlan(shared)}>미리보기</button><button disabled={busy} onClick={() => void importSharedPlan(shared)}>현재 학급에 적용</button>{shared.canDelete && <button className="danger-text" disabled={busy} onClick={() => void deleteSharedPlan(shared)}>삭제</button>}</article>) : <p className="empty-cell">{sharedPlans.length ? "검색 조건에 맞는 공동 평가계획이 없습니다." : "아직 공유된 평가계획이 없습니다."}</p>}</div>
     </section>}
     <section className="plan-paste-entry">
-      <div className="section-heading"><div><p className="eyebrow">PASTE TABLE</p><h2>평가계획 표 붙여넣기</h2><p>엑셀이나 한글 표에서 10개 열을 복사하거나 AI로 변환한 결과를 붙여넣으세요.</p></div></div>
+      <div className="section-heading"><div><p className="eyebrow">PASTE TABLE</p><h2>평가계획 표 붙여넣기</h2><p>평가계획 표를 아래 입력칸에 그대로 붙여넣으세요. 형식이 맞지 않으면 변환 프롬프트를 복사해 ChatGPT에서 변환한 결과를 붙여넣을 수 있습니다.</p></div><button type="button" onClick={() => {
+        void navigator.clipboard.writeText(assessmentPlanGptPrompt)
+          .then(() => {
+            setPromptCopied(true);
+            setMessage("변환 프롬프트를 복사했습니다. ChatGPT에 원본 평가계획과 함께 붙여넣으세요.");
+            window.setTimeout(() => setPromptCopied(false), 2200);
+          })
+          .catch(() => setErrors(["프롬프트를 복사하지 못했습니다. 브라우저의 클립보드 권한을 확인해 주세요."]));
+      }}>{promptCopied ? "복사됨 ✓" : "변환 프롬프트 복사"}</button></div>
       <div className="plan-paste-columns">과목 → 단원 → 평가목표 → 영역 → 평가유형 → 평가관점 → 상 → 중 → 하 → 유의점</div>
-      <section className="plan-gpt-guide" aria-labelledby="plan-ai-guide-title">
-        <div className="plan-gpt-guide-heading"><div><p className="eyebrow">AI FORMAT HELPER</p><h3 id="plan-ai-guide-title">AI로 평가계획 표 변환하기</h3></div><button type="button" onClick={() => {
-          void navigator.clipboard.writeText(assessmentPlanGptPrompt)
-            .then(() => {
-              setPromptCopied(true);
-              setMessage("변환 프롬프트를 복사했습니다. ChatGPT에 원본 평가계획과 함께 붙여넣으세요.");
-              window.setTimeout(() => setPromptCopied(false), 2200);
-            })
-            .catch(() => setErrors(["프롬프트를 복사하지 못했습니다. 브라우저의 클립보드 권한을 확인해 주세요."]));
-        }}>{promptCopied ? "복사됨 ✓" : "① 변환 프롬프트 복사"}</button></div>
-        <ol className="plan-gpt-steps">
-          <li><b>프롬프트 복사</b><span>위 버튼으로 기록샘의 10열 변환 규칙을 복사합니다.</span></li>
-          <li><b>ChatGPT에서 변환</b><span>복사한 프롬프트 뒤에 원본 과정중심평가 계획을 붙여넣고 실행합니다.</span></li>
-          <li><b>결과 붙여넣기</b><span>마크다운 표가 아닌 탭으로 구분된 결과만 아래에 붙여넣습니다.</span></li>
-        </ol>
-        <details><summary>프롬프트 내용 보기</summary><pre>{assessmentPlanGptPrompt}</pre></details>
-      </section>
-      <label className="plan-paste-label" htmlFor="assessment-plan-paste">③ 변환된 10열 표 붙여넣기</label>
-      <textarea id="assessment-plan-paste" value={planText} onChange={(event) => setPlanText(event.target.value)} placeholder={"국어\t1. 생생하게 표현해요\t상황에 알맞게 표현할 수 있다.\t듣기·말하기\t구술 평가\t상황에 맞게 표현하는가?\t정확하고 실감 나게 표현할 수 있다.\t알맞게 표현할 수 있다.\t도움을 받아 표현하기 위해 노력한다.\t다양한 표현을 고려한다."} />
+      <label className="plan-paste-label" htmlFor="assessment-plan-paste">10열 평가계획 표</label>
+      <textarea id="assessment-plan-paste" value={planText} onChange={(event) => setPlanText(event.target.value)} placeholder={"Excel, 한글 또는 ChatGPT에서 변환한 10열 평가계획 표를 붙여넣으세요.\n\n국어\t1. 생생하게 표현해요\t상황에 알맞게 표현할 수 있다.\t듣기·말하기\t구술 평가\t상황에 맞게 표현하는가?\t정확하고 실감 나게 표현할 수 있다.\t알맞게 표현할 수 있다.\t도움을 받아 표현하기 위해 노력한다.\t다양한 표현을 고려한다."} />
       <div className="plan-paste-actions"><button disabled={busy || !planText.trim()} onClick={interpretPlanText}>표 분석·미리보기</button></div>
     </section>
     {message && <p className="student-message">{message}</p>}
@@ -1411,7 +1402,7 @@ function Behavior({ roster }: { roster: AssessmentStudent[] }) {
   return (
     <section>
       <div className="page-heading">
-        <div><p className="eyebrow">GROWTH NOTE</p><h1>행동특성 작성</h1><p>학생별 특성을 입력하고 한 번에 행동특성을 생성하세요.</p></div>
+        <div><p className="eyebrow">GROWTH NOTE</p><h1>행동특성 작성</h1><p>형식에 맞출 필요 없이 관찰한 내용을 편하게 작성하세요. 문장·메모·키워드 모두 가능하며, 서로 다른 특징을 4가지 이상 입력하면 AI가 자연스럽게 정리합니다.</p></div>
         <div className="ai-generate-actions">{formattedLastGeneratedAt && <span>마지막 사용 {formattedLastGeneratedAt}</span>}<button onClick={() => void generateAll()} disabled={loading || blockedSourceCount > 0}>{loading ? generationProgress || "전체 생성 중…" : blockedSourceCount ? `입력 확인 ${blockedSourceCount}명` : "✦ AI 행특 생성"}</button><button className="danger-text" onClick={() => void clearBehaviors()} disabled={loading || !roster.some((student) => records[student.id]?.behavior.trim())}>행동특성 초기화</button></div>
       </div>
       <div className="review-content behavior-table-content">
@@ -1440,7 +1431,7 @@ function Behavior({ roster }: { roster: AssessmentStudent[] }) {
           </div>
           {referenceOpen && <aside className="behavior-reference-drawer">
             <button className="drawer-close" onClick={() => setReferenceOpen(false)} aria-label="참고자료 닫기">×</button>
-            <div className="reference-guide compact-reference-guide"><div><strong>작성 참고자료</strong><span>현재 학생: {activeStudentId ? `${roster.find((student) => student.id === activeStudentId)?.number ?? roster.find((student) => student.id === activeStudentId)?.id}번 ${roster.find((student) => student.id === activeStudentId)?.name}` : "특성 입력칸을 선택하세요"}</span></div><details><summary>사용 방법</summary><ol><li>학생의 특성 입력칸을 누릅니다.</li><li>영역을 바꾸며 실제 관찰한 키워드 4~5개를 선택합니다.</li><li>자동 입력된 문장을 구체적인 관찰 내용으로 다듬습니다.</li></ol></details></div>
+            <div className="reference-guide compact-reference-guide"><div><strong>작성 참고자료</strong><span>현재 학생: {activeStudentId ? `${roster.find((student) => student.id === activeStudentId)?.number ?? roster.find((student) => student.id === activeStudentId)?.id}번 ${roster.find((student) => student.id === activeStudentId)?.name}` : "특성 입력칸을 선택하세요"}</span></div><details><summary>사용 방법</summary><ol><li>형식에 맞추지 않아도 됩니다. 관찰한 내용을 문장·메모·키워드 중 편한 방식으로 작성하세요.</li><li>학습 태도, 교우관계, 책임감, 생활 습관, 성장 모습 등 서로 다른 특징을 4가지 이상 입력하세요.</li><li>참고자료의 키워드를 선택한 뒤 실제 관찰 내용에 맞게 다듬어도 됩니다.</li><li>학생 이름이나 민감한 개인정보는 입력하지 마세요.</li></ol></details></div>
             <div className="reference-tabs">{behaviorReferences.map((group) => <button className={activeCategory === group.category ? "active" : ""} onClick={() => setActiveCategory(group.category)} key={group.category}>{group.category}</button>)}</div>
             {behaviorReferences.filter((group) => group.category === activeCategory).map((group) => <div className="reference-groups" key={group.category}>
               <section><h3>강점 키워드</h3><div>{group.strengths.map((phrase) => <button onClick={() => addReferencePhrase(phrase)} key={phrase}>{phrase}</button>)}</div></section>
