@@ -1,5 +1,6 @@
 import { readFile, readdir } from "node:fs/promises";
 import path from "node:path";
+import { selectBehaviorLoadScope } from "./load-test-scope.mjs";
 
 const baseUrl = (process.env.LOAD_TEST_BASE_URL || "https://giroksam-recording.vercel.app").replace(/\/$/, "");
 const mode = process.argv[2] || "status";
@@ -108,14 +109,17 @@ if (["preflight", "seed", "sample", "full"].includes(mode)) {
   const ready = classData.students.map((student) => ({
     studentId: student.id,
     characteristic: behaviorByStudent.get(student.id)?.characteristic ?? "",
+    strict: validateBehavior(behaviorByStudent.get(student.id)?.behavior ?? "").strict,
   })).filter((item) => characteristicCount(item.characteristic) >= 4);
   const targetCount = mode === "sample" || mode === "preflight" ? 5 : 25;
-  const selected = ready.slice(0, targetCount);
+  const selected = selectBehaviorLoadScope(mode, ready);
   const estimatedInitialCalls = Math.ceil(selected.length / 5);
   if (mode === "preflight") {
     process.stdout.write(`${JSON.stringify({
       mode, ready: ready.length >= 5, activeStudents: classData.students.length, readyStudents: ready.length,
       sampleGateStudents: Math.min(5, ready.length), estimatedInitialCalls,
+      selectedStudentIds: selected.map((item) => item.studentId),
+      selectedStrictBeforeRun: selected.filter((item) => item.strict).length,
       monthlyUsage: usage.monthly, monthlyLimit: usage.limit,
       remainingCalls: Math.max(0, usage.limit - usage.monthly),
     })}\n`);
@@ -127,7 +131,7 @@ if (["preflight", "seed", "sample", "full"].includes(mode)) {
   const result = await request("/api/behavior-jobs", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ students: selected }),
+    body: JSON.stringify({ students: selected.map(({ studentId, characteristic }) => ({ studentId, characteristic })) }),
   });
   process.stdout.write(`${JSON.stringify({
     mode, jobId: result.job.id, status: result.job.status, students: selected.length,
