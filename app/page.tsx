@@ -238,7 +238,7 @@ function ClassroomManager({ current }: { current: ClassroomInfo | null }) {
     [key]: key === "schoolName" ? value : Number(value),
   }));
   return <section>
-    <div className="page-heading"><div><p className="eyebrow">SCHOOL & CLASS</p><h1>학급 관리</h1><p>담당 학급을 1년 동안 사용하고 학기별 기록은 구분해 보관하세요.</p></div></div>
+    <div className="page-heading"><div><p className="eyebrow">학급 설정</p><h1>학급 관리</h1><p>담당 학급을 1년 동안 사용하고 학기별 기록은 구분해 보관하세요.</p></div></div>
     {message && <p className="student-message">{message}</p>}
     <aside className="semester-retention-notice"><span aria-hidden="true">✓</span><div><strong>같은 반은 1년 동안 계속 사용할 수 있습니다.</strong><p>1학기와 2학기 기록은 서로 섞이지 않도록 구분해 저장합니다. 2학기 기록을 시작하거나 다른 반·새 학년도를 맡을 때만 아래에서 학급을 추가하세요.</p></div></aside>
     <div className="classroom-layout">
@@ -420,7 +420,7 @@ function StudentManager({ roster, onAdded, onChanged, onDeleted, onImported }: {
     }
   }
   return <section>
-    <div className="page-heading"><div><p className="eyebrow">CLASS ROSTER</p><h1>학생 관리</h1><p>번호와 이름 두 열을 붙여넣으면 명단을 인식해 현재 학급에 등록합니다.</p></div></div>
+    <div className="page-heading"><div><p className="eyebrow">학생 명단</p><h1>학생 관리</h1><p>번호와 이름 두 열을 붙여넣으면 명단을 인식해 현재 학급에 등록합니다.</p></div></div>
     <section className="roster-paste-entry">
       <form onSubmit={addStudentsFromText}>
         <div className="section-heading"><div><p className="eyebrow">PASTE ROSTER</p><h2>학생 명단 붙여넣기</h2><p>엑셀이나 한글 표에서 번호와 이름 두 열을 복사해 그대로 붙여넣으세요.</p></div><button type="submit" disabled={busy || !rosterText.trim()}>{busy ? "추가 중…" : "명단 인식·추가"}</button></div>
@@ -1133,7 +1133,7 @@ function Comments({ assessmentDataBySubject, plan, roster }: { assessmentDataByS
   const selectedSubjectIsGenerating = loading && activeJob?.subject === selectedSubject;
   return (
     <section>
-      <div className="page-heading"><div><p className="eyebrow">AI DRAFT</p><h1>교과 평어</h1><p>평가수준 입력을 마친 과목부터 학생별 평어를 생성할 수 있습니다.</p></div></div>
+      <div className="page-heading"><div><p className="eyebrow">작성 결과</p><h1>교과 평어</h1><p>평가수준 입력을 마친 과목부터 학생별 평어를 생성할 수 있습니다.</p></div></div>
       <div className="review-layout comments-review-layout">
         <div className="review-content">
           <div className="workspace-toolbar comments-toolbar">
@@ -1407,7 +1407,7 @@ function Behavior({ roster }: { roster: AssessmentStudent[] }) {
   return (
     <section>
       <div className="page-heading">
-        <div><p className="eyebrow">GROWTH NOTE</p><h1>행동특성 작성</h1><p>왼쪽에 관찰한 키워드나 메모를 자유롭게 쓰고, 오른쪽에서 생성 결과를 바로 확인하세요.</p></div>
+        <div><p className="eyebrow">행동 기록</p><h1>행동특성 작성</h1><p>왼쪽에 관찰한 키워드나 메모를 자유롭게 쓰고, 오른쪽에서 생성 결과를 바로 확인하세요.</p></div>
         <div className="ai-generate-actions">{formattedLastGeneratedAt && <span>마지막 생성 {formattedLastGeneratedAt}</span>}<button onClick={() => void generateAll()} disabled={loading || inputIssueCount > 0}>{loading ? generationProgress || "전체 생성 중…" : inputIssueCount ? `입력 확인 ${inputIssueCount}명` : "✦ 행동특성 생성"}</button><button className="danger-text" onClick={() => void clearBehaviors()} disabled={loading || !roster.some((student) => records[student.id]?.behavior.trim())}>결과 초기화</button></div>
       </div>
       <div className="review-content behavior-table-content">
@@ -1564,7 +1564,7 @@ function ExportResults({ roster, plan }: { roster: AssessmentStudent[]; plan: As
   const writtenBehaviors = behaviors.filter((item) => item.confirmed).length;
   return <section>
     <div className="page-heading">
-      <div><p className="eyebrow">GOOGLE SHEETS · NEIS READY</p><h1>전체 결과 공유</h1><p>전체 교과 평어와 행동특성을 Google 스프레드시트로 만들거나 나이스용으로 복사합니다.</p></div>
+      <div><p className="eyebrow">결과 내보내기</p><h1>전체 결과 공유</h1><p>전체 교과 평어와 행동특성을 Google 스프레드시트로 만들거나 나이스용으로 복사합니다.</p></div>
       <div className="heading-actions"><button onClick={() => void createGoogleSheet()} disabled={loading || googleBusy}>{googleBusy ? "Google 시트 생성 중…" : "Google 스프레드시트 생성"}</button></div>
     </div>
     <section className="google-connect-card">
@@ -1687,7 +1687,7 @@ function PrivacySettings({ currentName, onNameChanged }: { currentName: string; 
     ["교과 평어", summary.counts.comments], ["행동특성", summary.counts.behaviors],
   ] : [];
   return <section>
-    <div className="page-heading"><div><p className="eyebrow">PRIVACY & SECURITY</p><h1>개인정보·데이터 관리</h1><p>로그인한 교사와 현재 학급에 연결된 자료만 표시됩니다.</p></div></div>
+    <div className="page-heading"><div><p className="eyebrow">개인정보 보호</p><h1>개인정보·데이터 관리</h1><p>로그인한 교사와 현재 학급에 연결된 자료만 표시됩니다.</p></div></div>
     {message && <p className="student-message">{message}</p>}
     <section className="privacy-card">
       <div className="section-heading"><div><p className="eyebrow">DATA SCOPE</p><h2>현재 저장 범위</h2></div><span className="security-badge">교사·학급별 격리</span></div>
