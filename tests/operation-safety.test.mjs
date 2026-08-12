@@ -111,7 +111,12 @@ test("keeps the simplified plan, assessment, and behavior toolbars", () => {
   assert.match(page, /issue-only-validation/);
   assert.match(page, /validation\.bytes < 500 \? `500B 미만 · \$\{validation\.bytes\}B` : `550B 초과 · \$\{validation\.bytes\}B`/);
   assert.equal((page.match(/className="secondary result-copy-button"/g) ?? []).length, 2);
-  assert.match(page, /className="validation-cell issue-only-validation comment-review-cell"[\s\S]*다시 생성[\s\S]*선택한 부분 바꾸기[\s\S]*생성 근거/);
+  assert.match(page, /className="comment-row-actions review-cell-actions comment-review-actions"[\s\S]*다시 생성[\s\S]*선택한 부분 바꾸기/);
+  assert.doesNotMatch(page, /evidenceKey|setEvidenceKey|className="evidence-button"/);
+  const css = readFileSync("app/globals.css", "utf8");
+  assert.match(css, /comment-review-cell \.review-cell-actions\{grid-template-columns:repeat\(2,minmax\(0,1fr\)\)/);
+  assert.match(css, /comment-review-cell \.review-cell-actions button\{min-height:24px/);
+  assert.match(css, /behavior-split-table th:nth-child\(2\),\.behavior-split-table td:nth-child\(2\)\{width:64px\}/);
   assert.match(page, /<th>검수<\/th>[\s\S]*className="validation-cell behavior-validation issue-only-validation behavior-review-cell"/);
   assert.match(page, /behavior-review-cell[\s\S]*500B 미만[\s\S]*550B 초과[\s\S]*다시 생성/);
   assert.doesNotMatch(page, />길이 조정<\/button>/);
