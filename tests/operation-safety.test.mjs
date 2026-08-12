@@ -57,3 +57,8 @@ test("keeps missing comment audit outside paid generation modes", () => {
   assert.match(source, /if \(mode === "missing"\)/);
   assert.doesNotMatch(source.match(/if \(mode === "missing"\)[\s\S]*?process\.exit\(0\);/)?.[0] ?? "", /method:\s*"POST"|\/api\/comment-jobs/);
 });
+
+test("behavior preflight uses the same five-student scope as the paid sample", () => {
+  const source = readFileSync("scripts/load-test-behaviors.mjs", "utf8");
+  assert.match(source, /mode === "sample" \|\| mode === "preflight" \? 5 : 25/);
+});

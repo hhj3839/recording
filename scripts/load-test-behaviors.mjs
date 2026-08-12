@@ -109,7 +109,7 @@ if (["preflight", "seed", "sample", "full"].includes(mode)) {
     studentId: student.id,
     characteristic: behaviorByStudent.get(student.id)?.characteristic ?? "",
   })).filter((item) => characteristicCount(item.characteristic) >= 4);
-  const targetCount = mode === "sample" ? 5 : 25;
+  const targetCount = mode === "sample" || mode === "preflight" ? 5 : 25;
   const selected = ready.slice(0, targetCount);
   const estimatedInitialCalls = Math.ceil(selected.length / 5);
   if (mode === "preflight") {
