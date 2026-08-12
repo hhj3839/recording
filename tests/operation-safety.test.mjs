@@ -110,4 +110,5 @@ test("keeps the simplified plan, assessment, and behavior toolbars", () => {
   assert.doesNotMatch(page, /validation\.bytes\}B|생성 전<\/small>|className=\{validation\.[^}]+ \? "pass"/);
   assert.match(page, /issue-only-validation/);
   assert.match(page, /!validation\.lengthOk && <span className="fail">길이 확인<\/span>/);
+  assert.equal((page.match(/className="secondary result-copy-button"/g) ?? []).length, 2);
 });
