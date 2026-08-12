@@ -114,8 +114,12 @@ test("keeps the simplified plan, assessment, and behavior toolbars", () => {
   assert.match(page, /className="comment-row-actions review-cell-actions comment-review-actions"[\s\S]*다시 생성[\s\S]*선택한 부분 바꾸기/);
   assert.doesNotMatch(page, /evidenceKey|setEvidenceKey|className="evidence-button"/);
   const css = readFileSync("app/globals.css", "utf8");
+  assert.match(page, /className="comment-review-controls"[\s\S]*compact-similarity[\s\S]*comment-review-actions/);
+  assert.match(css, /comment-review-controls\{display:inline-flex;align-items:stretch;flex-direction:column\}/);
   assert.match(css, /comment-review-cell \.review-cell-actions\{display:flex;align-items:center;gap:4px\}/);
   assert.match(css, /comment-review-cell \.review-cell-actions button\{width:auto;min-height:28px[^}]+font-size:9px/);
+  assert.match(css, /compact-similarity\{display:block;box-sizing:border-box;width:auto/);
+  assert.match(css, /behavior-review-cell>div:not\(\.review-cell-actions\):not\(\.similarity-detail\)>span\{box-sizing:border-box;width:100%;text-align:center\}/);
   assert.match(css, /behavior-split-table th:nth-child\(2\),\.behavior-split-table td:nth-child\(2\)\{width:64px\}/);
   assert.match(page, /<th>검수<\/th>[\s\S]*className="validation-cell behavior-validation issue-only-validation behavior-review-cell"/);
   assert.match(page, /behavior-review-cell[\s\S]*500B 미만[\s\S]*550B 초과[\s\S]*다시 생성/);
