@@ -719,7 +719,6 @@ function PlanManager({ plan, onChanged, current }: { plan: AssessmentPlan[]; onC
   return <section>
     <div className="page-heading">
       <div><p className="eyebrow">학급별 평가 기준</p><h1>평가계획 관리</h1><p>10개 열로 정리한 평가계획을 붙여넣으면 자동으로 인식하고 검증합니다.</p></div>
-      <div className="heading-actions"><button className="secondary" onClick={() => void loadSharedPlans()}>공동 평가계획</button><button className="secondary" onClick={() => void loadVersions()}>버전 기록</button></div>
     </div>
     {versionsOpen && <section className="plan-version-panel">
       <div className="section-heading"><div><p className="eyebrow">변경 기록</p><h2>평가계획 버전 기록</h2></div><button className="secondary" onClick={() => setVersionsOpen(false)}>닫기</button></div>
@@ -759,7 +758,7 @@ function PlanManager({ plan, onChanged, current }: { plan: AssessmentPlan[]; onC
       <div className="plan-preview-list">{preview.slice(0, 8).map((item, index) => <article key={`${item.subject}-${item.unit}-${index}`}><b>{item.subject} · {item.unit}</b><span>{item.goal}</span><small>{item.domain} / {item.type || "유형 미입력"}</small></article>)}</div>
     </section>}
     <section className="plan-list">
-      <div className="section-heading"><div><p className="eyebrow">저장 완료</p><h2>저장된 평가계획 · {plan.length}개</h2></div><button className="danger-text" disabled={busy || !plan.length} onClick={() => void clearCurrentPlan()}>현재 평가계획 초기화</button></div>
+      <div className="section-heading"><div><p className="eyebrow">저장 완료</p><h2>저장된 평가계획 · {plan.length}개</h2></div><div className="plan-saved-actions"><button className="secondary" onClick={() => void loadSharedPlans()}>공동 평가계획</button><button className="secondary" onClick={() => void loadVersions()}>버전 기록</button><button className="danger-text" disabled={busy || !plan.length} onClick={() => void clearCurrentPlan()}>현재 평가계획 초기화</button></div></div>
       {plan.map((item, index) => <article className="plan-card" key={item.id ?? `${item.subject}-${index}`}>
         <div className="plan-card-summary">
           <div className="plan-card-title"><strong>{index + 1}. {item.subject} · {item.unit}</strong><span>{item.domain}</span><span>{item.type || "유형 미입력"}</span></div>
@@ -818,8 +817,6 @@ function Assessments({ data, setData, plan, activeSubject, setActiveSubject, onD
   const [message, setMessage] = useState("");
   const subjects = [...new Set(plan.map((item) => item.subject))];
   const visiblePlan = plan.filter((item) => item.subject === activeSubject);
-  const completedCount = data.reduce((count, student) => count + student.assessments.filter((level) => level !== "-").length, 0);
-  const expectedCount = data.length * visiblePlan.length;
 
   const changeSubject = (subject: string) => {
     setActiveSubject(subject);
@@ -901,8 +898,7 @@ function Assessments({ data, setData, plan, activeSubject, setActiveSubject, onD
         <div className="heading-actions"><span className={`autosave-state ${saving ? "saving" : dirty ? "dirty" : lastSavedAt ? "saved" : "idle"}`}>{saving ? "저장 중…" : dirty ? "저장 대기 중" : lastSavedAt ? `마지막 저장 ${lastSavedAt.toLocaleTimeString("ko-KR", { hour: "numeric", minute: "2-digit" })}` : "마지막 저장 기록 없음"}</span><button onClick={() => void save()} disabled={saving || !dirty}>{saving ? "저장 중…" : "저장"}</button></div>
       </div>
       <div className="workspace-toolbar assessment-workspace-toolbar">
-        <SubjectNavigator subjects={subjects} activeSubject={activeSubject} onChange={changeSubject} progress={(subject) => subject === activeSubject ? `${completedCount}/${expectedCount}` : `${plan.filter((item) => item.subject === subject).length}개 영역`} />
-        <span><i className="level high" /> 상 <i className="level middle" /> 중 <i className="level low" /> 하 <i className="level absent" /> 미응시 <i className="level planned" /> 평가 예정</span>
+        <SubjectNavigator subjects={subjects} activeSubject={activeSubject} onChange={changeSubject} />
       </div>
       <details className="secondary-tools">
         <summary>일괄 입력 도구</summary>
@@ -918,7 +914,6 @@ function Assessments({ data, setData, plan, activeSubject, setActiveSubject, onD
           <tbody>{data.map((student, row) => <tr key={student.id}><td>{student.number ?? student.id}</td><td><strong>{student.name}</strong></td>{student.assessments.map((level, col) => <td key={col}><button aria-label={`${student.name} ${col + 1}단원 수준 ${level}`} className={`level-button level-${level === "평가 예정" ? "평가예정" : level}`} onClick={() => cycle(row, col)}>{level}</button></td>)}<td><button className="delete-student" onClick={() => onDeleteStudent(student.id)} aria-label={`${student.name} 삭제`}>삭제</button></td></tr>)}</tbody>
         </table>
       </div>
-      <div className="bottom-action"><span>입력 완료 <strong>{completedCount} / {expectedCount}</strong> · 미입력 {Math.max(expectedCount - completedCount, 0)}개</span></div>
     </section>
   );
 }
@@ -1221,7 +1216,6 @@ function Behavior({ roster }: { roster: AssessmentStudent[] }) {
   const [error, setError] = useState("");
   const [copied, setCopied] = useState(false);
   const [lastGeneratedAt, setLastGeneratedAt] = useState("");
-  const [referenceOpen, setReferenceOpen] = useState(true);
   const [activeCategory, setActiveCategory] = useState(behaviorReferences[0].category);
   const [activeStudentId, setActiveStudentId] = useState<number | null>(roster[0]?.id ?? null);
   const [rewriteBusyKey, setRewriteBusyKey] = useState("");
@@ -1408,13 +1402,13 @@ function Behavior({ roster }: { roster: AssessmentStudent[] }) {
     <section>
       <div className="page-heading">
         <div><p className="eyebrow">행동 기록</p><h1>행동특성 작성</h1><p>왼쪽에 관찰한 키워드나 메모를 자유롭게 쓰고, 오른쪽에서 생성 결과를 바로 확인하세요.</p></div>
-        <div className="ai-generate-actions">{formattedLastGeneratedAt && <span>마지막 생성 {formattedLastGeneratedAt}</span>}<button onClick={() => void generateAll()} disabled={loading || inputIssueCount > 0}>{loading ? generationProgress || "전체 생성 중…" : inputIssueCount ? `입력 확인 ${inputIssueCount}명` : "✦ 행동특성 생성"}</button><button className="danger-text" onClick={() => void clearBehaviors()} disabled={loading || !roster.some((student) => records[student.id]?.behavior.trim())}>결과 초기화</button></div>
+        <div className="ai-generate-actions">{formattedLastGeneratedAt && <span>마지막 생성 {formattedLastGeneratedAt}</span>}<button onClick={() => void generateAll()} disabled={loading || inputIssueCount > 0}>{loading ? generationProgress || "전체 생성 중…" : inputIssueCount ? `입력 확인 ${inputIssueCount}명` : "✦ 행동특성 생성"}</button><button className="secondary" onClick={() => void copyBehaviors()} disabled={!roster.some((student) => records[student.id]?.behavior)}>{copied ? "복사됨 ✓" : "행동특성만 복사하기"}</button><button className="danger-text" onClick={() => void clearBehaviors()} disabled={loading || !roster.some((student) => records[student.id]?.behavior.trim())}>결과 초기화</button></div>
       </div>
       <div className="review-content behavior-table-content">
-        <div className="workspace-toolbar behavior-table-toolbar"><div className="behavior-generation-summary"><span className="behavior-target-count"><small>생성 대상</small><strong>{eligibleStudentIds.length}/{roster.length}명</strong></span><span className="behavior-auto-rule"><i aria-hidden="true">✓</i>특성을 4개 이상 입력한 학생 자동 포함</span><span className="behavior-byte-target">권장 길이 500~550B</span></div><div className="behavior-toolbar-actions"><button className="reference-open-button" onClick={() => setReferenceOpen((current) => !current)}>{referenceOpen ? "참고자료 닫기" : "참고자료 열기"}</button><button className="copy-comments" onClick={() => void copyBehaviors()} disabled={!roster.some((student) => records[student.id]?.behavior)}>{copied ? "복사됨 ✓" : "행동특성만 복사하기"}</button></div></div>
+        <div className="workspace-toolbar behavior-table-toolbar"><div className="behavior-generation-summary"><span className="behavior-target-count"><small>생성 대상</small><strong>{eligibleStudentIds.length}/{roster.length}명</strong></span><span className="behavior-auto-rule"><i aria-hidden="true">✓</i>특성을 4개 이상 입력한 학생 자동 포함</span><span className="behavior-byte-target">권장 길이 500~550B</span></div></div>
         {error && <p className="generation-error">! {error}</p>}
         {loading && <div className="comment-loading class-loading"><span>✦</span><p>입력된 모든 학생의 행동특성을 생성하고 있어요.</p></div>}
-        <div className={`behavior-work-area ${referenceOpen ? "with-reference" : ""}`}>
+        <div className="behavior-work-area with-reference">
           <div className="comments-table-wrap">
             <table className="comments-table behavior-table behavior-split-table">
               <thead><tr><th>번호</th><th>이름</th><th><span className="behavior-column-step">1</span>관찰 키워드·메모</th><th><span className="behavior-column-step">2</span>생성 결과</th></tr></thead>
@@ -1434,15 +1428,14 @@ function Behavior({ roster }: { roster: AssessmentStudent[] }) {
               })}</tbody>
             </table>
           </div>
-          {referenceOpen && <aside className="behavior-reference-drawer">
-            <button className="drawer-close" onClick={() => setReferenceOpen(false)} aria-label="참고자료 닫기">×</button>
+          <aside className="behavior-reference-drawer">
             <div className="reference-guide compact-reference-guide"><div><strong>작성 참고자료</strong><span>현재 학생: {activeStudentId ? `${roster.find((student) => student.id === activeStudentId)?.number ?? roster.find((student) => student.id === activeStudentId)?.id}번 ${roster.find((student) => student.id === activeStudentId)?.name}` : "특성 입력칸을 선택하세요"}</span></div><details><summary>사용 방법</summary><ol><li>형식에 맞추지 않아도 됩니다. 관찰한 내용을 문장·메모·키워드 중 편한 방식으로 작성하세요.</li><li>학습 태도, 교우관계, 책임감, 생활 습관, 성장 모습 등 서로 다른 특징을 4가지 이상 입력하세요.</li><li>참고자료의 키워드를 선택한 뒤 실제 관찰 내용에 맞게 다듬어도 됩니다.</li><li>학생 이름이나 민감한 개인정보는 입력하지 마세요.</li></ol></details></div>
             <div className="reference-tabs">{behaviorReferences.map((group) => <button className={activeCategory === group.category ? "active" : ""} onClick={() => setActiveCategory(group.category)} key={group.category}>{group.category}</button>)}</div>
             {behaviorReferences.filter((group) => group.category === activeCategory).map((group) => <div className="reference-groups" key={group.category}>
               <section><h3>강점 키워드</h3><div>{group.strengths.map((phrase) => <button onClick={() => addReferencePhrase(phrase)} key={phrase}>{phrase}</button>)}</div></section>
               <section className="growth"><h3>성장 지원 표현</h3><div>{group.growth.map((phrase) => <button onClick={() => addReferencePhrase(phrase)} key={phrase}>{phrase}</button>)}</div></section>
             </div>)}
-          </aside>}
+          </aside>
         </div>
       </div>
     </section>
