@@ -1128,17 +1128,19 @@ function Comments({ assessmentDataBySubject, plan, roster }: { assessmentDataByS
   const selectedSubjectIsGenerating = loading && activeJob?.subject === selectedSubject;
   return (
     <section>
-      <div className="page-heading"><div><p className="eyebrow">작성 결과</p><h1>교과 평어</h1><p>평가수준 입력을 마친 과목부터 학생별 평어를 생성할 수 있습니다.</p></div></div>
+      <div className="page-heading comments-page-heading">
+        <div><p className="eyebrow">작성 결과</p><h1>교과 평어</h1><p>평가수준 입력을 마친 과목부터 학생별 평어를 생성할 수 있습니다.</p></div>
+        <div className="subject-generation-controls">
+          <div><span>{formattedLastGeneratedAt ? `마지막 생성 ${formattedLastGeneratedAt}` : "생성 기록 없음"}</span><strong>{eligibleCount}명 중 {completedCount}명 생성 완료</strong></div>
+          <button className="subject-generate-button" onClick={() => void generateSubjectComments()} disabled={loading || !eligibleCount}>{selectedSubjectIsGenerating ? generationProgress || `${selectedSubject} 생성 중…` : `✦ ${selectedSubject} 평어 생성`}</button>
+          <button className="copy-comments" onClick={() => void copySubjectComments()} disabled={!roster.some((student) => comments[`${student.id}|${selectedSubject}`])}>{copied ? "복사됨 ✓" : "평어만 복사하기"}</button>
+          <button className="subject-reset-button" title="학생 명단·평가계획·평가수준은 유지하고 현재 과목의 생성된 평어만 초기화합니다." onClick={() => void clearSubjectComments()} disabled={loading || !completedCount}><span aria-hidden="true">↺</span>{selectedSubject} 결과 초기화</button>
+        </div>
+      </div>
       <div className="review-layout comments-review-layout">
         <div className="review-content">
-          <div className="workspace-toolbar comments-toolbar">
+          <div className="workspace-toolbar comments-toolbar comments-subject-toolbar">
             <SubjectNavigator subjects={subjects} activeSubject={selectedSubject} onChange={(subject) => { setSelectedSubject(subject); setCopied(false); }} />
-            <div className="subject-generation-controls">
-              <div><span>{formattedLastGeneratedAt ? `마지막 생성 ${formattedLastGeneratedAt}` : "생성 기록 없음"}</span><strong>{eligibleCount}명 중 {completedCount}명 생성 완료</strong></div>
-              <button className="subject-generate-button" onClick={() => void generateSubjectComments()} disabled={loading || !eligibleCount}>{selectedSubjectIsGenerating ? generationProgress || `${selectedSubject} 생성 중…` : `✦ ${selectedSubject} AI 평어 생성`}</button>
-              <button className="copy-comments" onClick={() => void copySubjectComments()} disabled={!roster.some((student) => comments[`${student.id}|${selectedSubject}`])}>{copied ? "복사됨 ✓" : "평어만 복사하기"}</button>
-              <button className="subject-reset-button" title="학생 명단·평가계획·평가수준은 유지하고 현재 과목의 생성된 평어만 초기화합니다." onClick={() => void clearSubjectComments()} disabled={loading || !completedCount}><span aria-hidden="true">↺</span>{selectedSubject} 결과 초기화</button>
-            </div>
           </div>
           {error && <p className="generation-error">! {error}</p>}
           {notice && <p className="student-message" role="status">{notice}</p>}
@@ -1396,8 +1398,6 @@ function Behavior({ roster }: { roster: AssessmentStudent[] }) {
     return characteristic && countBehaviorCharacteristics(characteristic) < 4;
   }).length;
   const inputIssueCount = blockedSourceCount + incompleteSourceCount;
-  const eligibleStudentIds = roster.filter((student) => countBehaviorCharacteristics(records[student.id]?.characteristic ?? "") >= 4).map((student) => student.id);
-
   return (
     <section>
       <div className="page-heading">
@@ -1405,7 +1405,6 @@ function Behavior({ roster }: { roster: AssessmentStudent[] }) {
         <div className="ai-generate-actions">{formattedLastGeneratedAt && <span>마지막 생성 {formattedLastGeneratedAt}</span>}<button onClick={() => void generateAll()} disabled={loading || inputIssueCount > 0}>{loading ? generationProgress || "전체 생성 중…" : inputIssueCount ? `입력 확인 ${inputIssueCount}명` : "✦ 행동특성 생성"}</button><button className="secondary" onClick={() => void copyBehaviors()} disabled={!roster.some((student) => records[student.id]?.behavior)}>{copied ? "복사됨 ✓" : "행동특성만 복사하기"}</button><button className="danger-text" onClick={() => void clearBehaviors()} disabled={loading || !roster.some((student) => records[student.id]?.behavior.trim())}>결과 초기화</button></div>
       </div>
       <div className="review-content behavior-table-content">
-        <div className="workspace-toolbar behavior-table-toolbar"><div className="behavior-generation-summary"><span className="behavior-target-count"><small>생성 대상</small><strong>{eligibleStudentIds.length}/{roster.length}명</strong></span><span className="behavior-auto-rule"><i aria-hidden="true">✓</i>특성을 4개 이상 입력한 학생 자동 포함</span><span className="behavior-byte-target">권장 길이 500~550B</span></div></div>
         {error && <p className="generation-error">! {error}</p>}
         {loading && <div className="comment-loading class-loading"><span>✦</span><p>입력된 모든 학생의 행동특성을 생성하고 있어요.</p></div>}
         <div className="behavior-work-area with-reference">
