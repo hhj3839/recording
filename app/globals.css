@@ -435,3 +435,8 @@ button.secondary { color: #526171; border: 1px solid #dce1e6; background: #fff; 
 
 /* 교과 평어의 넓은 표는 모바일 페이지가 아니라 표 컨테이너 안에서만 스크롤합니다. */
 .comments-review-layout,.comments-review-layout .review-content{min-width:0;width:100%}.comments-review-layout .comments-table-wrap{width:100%;max-width:100%;min-width:0}
+
+/* 키보드·터치 접근성 */
+.skip-link{position:fixed;left:16px;top:-60px;z-index:1000;border-radius:var(--radius-sm);padding:11px 15px;background:var(--navy);color:#fff;font-size:12px;font-weight:800;text-decoration:none;box-shadow:0 5px 18px rgba(29,41,57,.22)}.skip-link:focus{top:12px}.app-shell>main:focus{outline:0}
+@media(max-width:760px){button,.mobile-header select,.reference-tabs button,.comment-row-actions button{min-height:44px}.drawer-close{min-width:44px}.subject-tabs button{min-height:40px}}
+@media(prefers-reduced-motion:reduce){*,*::before,*::after{scroll-behavior:auto!important;transition-duration:.01ms!important;animation-duration:.01ms!important;animation-iteration-count:1!important}}

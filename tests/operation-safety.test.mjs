@@ -84,3 +84,15 @@ test("keeps wide comment tables inside their responsive container", () => {
   assert.match(css, /\.comments-review-layout \.review-content\{min-width:0;width:100%\}/);
   assert.match(css, /\.comments-review-layout \.comments-table-wrap\{width:100%;max-width:100%;min-width:0\}/);
 });
+
+test("keeps the app shell keyboard and screen-reader friendly", () => {
+  const page = readFileSync("app/page.tsx", "utf8");
+  const css = readFileSync("app/globals.css", "utf8");
+  assert.match(page, /className="skip-link" href="#main-content"/);
+  assert.match(page, /<main id="main-content" tabIndex=\{-1\}>/);
+  assert.match(page, /aria-label="주요 메뉴"/);
+  assert.match(page, /aria-current=\{view === item\.id \? "page" : undefined\}/);
+  assert.match(page, /role="progressbar"/);
+  assert.match(page, /aria-label="화면 이동"/);
+  assert.match(css, /prefers-reduced-motion:reduce/);
+});
