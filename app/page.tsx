@@ -118,7 +118,7 @@ function Dashboard({ move, teacherName, classroom, studentCount, completedLevels
       <div className="dashboard-grid">
         <section className="panel task-panel">
           <div className="section-heading">
-            <div><p className="eyebrow">TO DO</p><h2>지금 할 일</h2></div>
+            <div><p className="eyebrow">진행 안내</p><h2>지금 할 일</h2></div>
             <button className="text-button">전체 보기 →</button>
           </div>
           <div className="task-list">
@@ -137,7 +137,7 @@ function Dashboard({ move, teacherName, classroom, studentCount, completedLevels
         </section>
 
         <aside className="panel quick-panel">
-          <div className="section-heading"><div><p className="eyebrow">QUICK START</p><h2>빠른 시작</h2></div></div>
+          <div className="section-heading"><div><p className="eyebrow">바로가기</p><h2>빠른 시작</h2></div></div>
           <button onClick={() => move("assessments")}><span className="quick-icon">▦</span><span><b>평가 수준 입력</b><small>등록된 평가계획으로 시작하기</small></span><i>›</i></button>
           <button onClick={() => move("comments")}><span className="quick-icon">✦</span><span><b>교과 평어 생성</b><small>입력된 평가로 초안 만들기</small></span><i>›</i></button>
           <button onClick={() => move("behavior")}><span className="quick-icon">＋</span><span><b>학생 관찰 기록</b><small>특성과 성장 모습 남기기</small></span><i>›</i></button>
@@ -243,7 +243,7 @@ function ClassroomManager({ current }: { current: ClassroomInfo | null }) {
     <aside className="semester-retention-notice"><span aria-hidden="true">✓</span><div><strong>같은 반은 1년 동안 계속 사용할 수 있습니다.</strong><p>1학기와 2학기 기록은 서로 섞이지 않도록 구분해 저장합니다. 2학기 기록을 시작하거나 다른 반·새 학년도를 맡을 때만 아래에서 학급을 추가하세요.</p></div></aside>
     <div className="classroom-layout">
       <section className="classroom-list-panel">
-        <div className="section-heading"><div><p className="eyebrow">MY CLASSES</p><h2>내 학급 · {classrooms.length}개</h2></div></div>
+        <div className="section-heading"><div><p className="eyebrow">현재 학급</p><h2>내 학급 · {classrooms.length}개</h2></div></div>
         <div className="classroom-list">{classrooms.map((item) => {
           const active = item.id === current?.id;
           return <article className={active ? "active" : ""} key={item.id}>
@@ -257,7 +257,7 @@ function ClassroomManager({ current }: { current: ClassroomInfo | null }) {
         })}</div>
       </section>
       <section className="classroom-create-panel">
-        <div className="section-heading"><div><p className="eyebrow">NEW TERM OR CLASS</p><h2>다른 학기·학급 추가</h2></div></div>
+        <div className="section-heading"><div><p className="eyebrow">학급 추가</p><h2>다른 학기·학급 추가</h2></div></div>
         <p>2학기 기록을 시작하거나 담당 반이 바뀔 때 사용하세요. 기존 학기의 자료는 그대로 유지됩니다.</p>
         <form onSubmit={(event) => void createClassroom(event)}>
           <label className="wide"><span>학교명</span><input required value={form.schoolName} onChange={(event) => updateForm("schoolName", event.target.value)} /></label>
@@ -423,7 +423,7 @@ function StudentManager({ roster, onAdded, onChanged, onDeleted, onImported }: {
     <div className="page-heading"><div><p className="eyebrow">학생 명단</p><h1>학생 관리</h1><p>번호와 이름 두 열을 붙여넣으면 명단을 인식해 현재 학급에 등록합니다.</p></div></div>
     <section className="roster-paste-entry">
       <form onSubmit={addStudentsFromText}>
-        <div className="section-heading"><div><p className="eyebrow">PASTE ROSTER</p><h2>학생 명단 붙여넣기</h2><p>엑셀이나 한글 표에서 번호와 이름 두 열을 복사해 그대로 붙여넣으세요.</p></div><button type="submit" disabled={busy || !rosterText.trim()}>{busy ? "추가 중…" : "명단 인식·추가"}</button></div>
+        <div className="section-heading"><div><p className="eyebrow">명단 가져오기</p><h2>학생 명단 붙여넣기</h2><p>엑셀이나 한글 표에서 번호와 이름 두 열을 복사해 그대로 붙여넣으세요.</p></div><button type="submit" disabled={busy || !rosterText.trim()}>{busy ? "추가 중…" : "명단 인식·추가"}</button></div>
         <div className="roster-paste-columns">번호 → 이름</div>
         <textarea aria-label="번호와 이름 명단" value={rosterText} onChange={(event) => setRosterText(event.target.value)} placeholder={"1\t김○○\n2\t이○○\n3\t박○○\n4\t최○○"} required />
       </form>
@@ -722,7 +722,7 @@ function PlanManager({ plan, onChanged, current }: { plan: AssessmentPlan[]; onC
       <div className="heading-actions"><button className="secondary" onClick={() => void loadSharedPlans()}>공동 평가계획</button><button className="secondary" onClick={() => void loadVersions()}>버전 기록</button></div>
     </div>
     {versionsOpen && <section className="plan-version-panel">
-      <div className="section-heading"><div><p className="eyebrow">VERSION HISTORY</p><h2>평가계획 버전 기록</h2></div><button className="secondary" onClick={() => setVersionsOpen(false)}>닫기</button></div>
+      <div className="section-heading"><div><p className="eyebrow">변경 기록</p><h2>평가계획 버전 기록</h2></div><button className="secondary" onClick={() => setVersionsOpen(false)}>닫기</button></div>
       <p>평가수준이 입력된 학급은 평가 항목 구조 보호를 위해 이전 버전을 조회만 할 수 있습니다.</p>
       <div>{versions.length ? versions.map((version) => <article key={version.id}>
         <span><b>{version.label}</b><small>{new Intl.DateTimeFormat("ko-KR", { dateStyle: "short", timeStyle: "short" }).format(new Date(version.createdAt))} · {version.itemCount}개</small></span>
@@ -730,14 +730,14 @@ function PlanManager({ plan, onChanged, current }: { plan: AssessmentPlan[]; onC
       </article>) : <p className="empty-cell">저장된 평가계획 버전이 없습니다.</p>}</div>
     </section>}
     {sharedOpen && <section className="shared-plan-panel">
-      <div className="section-heading"><div><p className="eyebrow">SHARED PLAN LIBRARY</p><h2>공동 평가계획</h2></div><div><button disabled={busy || !plan.length} onClick={() => void publishSharedPlan()}>현재 계획 공유</button><button className="secondary" onClick={() => setSharedOpen(false)}>닫기</button></div></div>
+      <div className="section-heading"><div><p className="eyebrow">공유 자료</p><h2>공동 평가계획</h2></div><div><button disabled={busy || !plan.length} onClick={() => void publishSharedPlan()}>현재 계획 공유</button><button className="secondary" onClick={() => setSharedOpen(false)}>닫기</button></div></div>
       <p>기록샘을 사용하는 모든 교사가 공유한 계획을 현재 학급에 가져올 수 있습니다. 평가수준이 입력된 학급은 계획을 교체할 수 없습니다.</p>
       <div className="shared-plan-filters"><input aria-label="공동 평가계획 검색" value={sharedSearch} onChange={(event) => setSharedSearch(event.target.value)} placeholder="계획 이름·과목 검색" /><select aria-label="학년도" value={sharedYear} onChange={(event) => setSharedYear(event.target.value)}><option value="all">전체 학년도</option>{sharedYears.map((year) => <option value={year} key={year}>{year}학년도</option>)}</select><select aria-label="학기" value={sharedSemester} onChange={(event) => setSharedSemester(event.target.value)}><option value="all">전체 학기</option><option value="1">1학기</option><option value="2">2학기</option></select><select aria-label="학년" value={sharedGrade} onChange={(event) => setSharedGrade(event.target.value)}><option value="all">전체 학년</option>{[1, 2, 3, 4, 5, 6].map((grade) => <option value={grade} key={grade}>{grade}학년</option>)}</select><select aria-label="과목" value={sharedSubject} onChange={(event) => setSharedSubject(event.target.value)}><option value="all">전체 과목</option>{sharedSubjects.map((subject) => <option value={subject} key={subject}>{subject}</option>)}</select></div>
-      {sharedPreview && <section className="shared-plan-preview"><div className="section-heading"><div><p className="eyebrow">PREVIEW</p><h3>{sharedPreview.name} · {sharedPreview.items.length}개</h3></div><button className="secondary" onClick={() => setSharedPreview(null)}>미리보기 닫기</button></div><div>{sharedPreview.items.map((item, index) => <details key={`${item.subject}-${item.unit}-${index}`}><summary>{index + 1}. {item.subject} · {item.unit} <span>{item.domain}</span></summary><p><b>평가목표</b>{item.goal}</p><p><b>평가관점</b>{item.perspective || "미입력"}</p><dl><div><dt>상</dt><dd>{item.high}</dd></div><div><dt>중</dt><dd>{item.middle}</dd></div><div><dt>하</dt><dd>{item.low}</dd></div></dl>{item.caution && <p><b>유의점</b>{item.caution}</p>}</details>)}</div></section>}
+      {sharedPreview && <section className="shared-plan-preview"><div className="section-heading"><div><p className="eyebrow">미리보기</p><h3>{sharedPreview.name} · {sharedPreview.items.length}개</h3></div><button className="secondary" onClick={() => setSharedPreview(null)}>미리보기 닫기</button></div><div>{sharedPreview.items.map((item, index) => <details key={`${item.subject}-${item.unit}-${index}`}><summary>{index + 1}. {item.subject} · {item.unit} <span>{item.domain}</span></summary><p><b>평가목표</b>{item.goal}</p><p><b>평가관점</b>{item.perspective || "미입력"}</p><dl><div><dt>상</dt><dd>{item.high}</dd></div><div><dt>중</dt><dd>{item.middle}</dd></div><div><dt>하</dt><dd>{item.low}</dd></div></dl>{item.caution && <p><b>유의점</b>{item.caution}</p>}</details>)}</div></section>}
       <div className="shared-plan-list">{filteredSharedPlans.length ? filteredSharedPlans.map((shared) => <article key={shared.id}><div><strong>{shared.name}</strong><span>{shared.schoolYear}학년도 {shared.semester}학기 · {shared.grade}학년 · {shared.itemCount}개</span><small>{shared.subjects.join(" · ") || "과목 정보 없음"} · {new Date(shared.updatedAt).toLocaleString("ko-KR")}</small></div><button className="secondary" disabled={busy} onClick={() => void previewSharedPlan(shared)}>미리보기</button><button disabled={busy} onClick={() => void importSharedPlan(shared)}>현재 학급에 적용</button>{shared.canDelete && <button className="danger-text" disabled={busy} onClick={() => void deleteSharedPlan(shared)}>삭제</button>}</article>) : <p className="empty-cell">{sharedPlans.length ? "검색 조건에 맞는 공동 평가계획이 없습니다." : "아직 공유된 평가계획이 없습니다."}</p>}</div>
     </section>}
     <section className="plan-paste-entry">
-      <div className="section-heading"><div><p className="eyebrow">PASTE TABLE</p><h2>평가계획 표 붙여넣기</h2><p>평가계획 표를 아래 입력칸에 그대로 붙여넣으세요. 형식이 맞지 않으면 변환 프롬프트를 복사해 ChatGPT에서 변환한 결과를 붙여넣을 수 있습니다.</p></div><button type="button" onClick={() => {
+      <div className="section-heading"><div><p className="eyebrow">표 가져오기</p><h2>평가계획 표 붙여넣기</h2><p>평가계획 표를 아래 입력칸에 그대로 붙여넣으세요. 형식이 맞지 않으면 변환 프롬프트를 복사해 ChatGPT에서 변환한 결과를 붙여넣을 수 있습니다.</p></div><button type="button" onClick={() => {
         void navigator.clipboard.writeText(assessmentPlanGptPrompt)
           .then(() => {
             setPromptCopied(true);
@@ -755,11 +755,11 @@ function PlanManager({ plan, onChanged, current }: { plan: AssessmentPlan[]; onC
     {!!errors.length && <div className="plan-errors"><strong>확인이 필요합니다.</strong>{errors.slice(0, 8).map((error) => <p key={error}>• {error}</p>)}</div>}
     {!!warnings.length && <div className="plan-warnings"><strong>저장할 수 있지만 확인이 필요합니다.</strong>{warnings.slice(0, 8).map((warning) => <p key={warning}>• {warning}</p>)}</div>}
     {!!preview.length && <section className="plan-preview">
-      <div className="section-heading"><div><p className="eyebrow">PREVIEW</p><h2>저장 전 미리보기 · {preview.length}개</h2></div><button disabled={busy || !!errors.length} onClick={() => void saveMany(preview)}>{busy ? "저장 중…" : "검증된 계획 저장"}</button></div>
+      <div className="section-heading"><div><p className="eyebrow">저장 전 확인</p><h2>저장 전 미리보기 · {preview.length}개</h2></div><button disabled={busy || !!errors.length} onClick={() => void saveMany(preview)}>{busy ? "저장 중…" : "검증된 계획 저장"}</button></div>
       <div className="plan-preview-list">{preview.slice(0, 8).map((item, index) => <article key={`${item.subject}-${item.unit}-${index}`}><b>{item.subject} · {item.unit}</b><span>{item.goal}</span><small>{item.domain} / {item.type || "유형 미입력"}</small></article>)}</div>
     </section>}
     <section className="plan-list">
-      <div className="section-heading"><div><p className="eyebrow">SAVED</p><h2>저장된 평가계획 · {plan.length}개</h2></div><button className="danger-text" disabled={busy || !plan.length} onClick={() => void clearCurrentPlan()}>현재 평가계획 초기화</button></div>
+      <div className="section-heading"><div><p className="eyebrow">저장 완료</p><h2>저장된 평가계획 · {plan.length}개</h2></div><button className="danger-text" disabled={busy || !plan.length} onClick={() => void clearCurrentPlan()}>현재 평가계획 초기화</button></div>
       {plan.map((item, index) => <article className="plan-card" key={item.id ?? `${item.subject}-${index}`}>
         <div className="plan-card-summary">
           <div className="plan-card-title"><strong>{index + 1}. {item.subject} · {item.unit}</strong><span>{item.domain}</span><span>{item.type || "유형 미입력"}</span></div>
@@ -1579,19 +1579,19 @@ function ExportResults({ roster, plan }: { roster: AssessmentStudent[]; plan: As
     {message && <p className="student-message">{message}</p>}
     <div className="export-grid">
       <section className="export-card">
-        <div className="section-heading"><div><p className="eyebrow">SUBJECT COMMENTS</p><h2>교과 평어</h2></div></div>
+        <div className="section-heading"><div><p className="eyebrow">교과 기록</p><h2>교과 평어</h2></div></div>
         <label className="export-select"><span>과목 선택</span><select value={selectedSubject} onChange={(event) => setSelectedSubject(event.target.value)}>{subjects.map((subject) => <option key={subject}>{subject}</option>)}</select></label>
         <p>복사 버튼은 번호와 이름을 제외하고 평어만 한 줄에 한 명씩 복사합니다.</p>
         <div className="export-actions"><button onClick={() => void copyLines(orderedRoster.map((student) => { const item = commentMap.get(`${student.id}|${selectedSubject}`); return item?.confirmed ? item.comment : ""; }), `${selectedSubject} 확정 평어`)}>확정 평어만 복사</button><button className="secondary" onClick={() => downloadCsv("comments")}>CSV 내려받기</button></div>
       </section>
       <section className="export-card">
-        <div className="section-heading"><div><p className="eyebrow">BEHAVIOR</p><h2>행동특성</h2></div></div>
+        <div className="section-heading"><div><p className="eyebrow">행동 기록</p><h2>행동특성</h2></div></div>
         <p>학생 번호순으로 행동특성만 복사해 나이스 입력란에 바로 붙여넣을 수 있습니다.</p>
         <div className="export-actions"><button onClick={() => void copyLines(orderedRoster.map((student) => { const item = behaviorMap.get(student.id); return item?.confirmed ? item.behavior : ""; }), "확정 행동특성")}>확정 행동특성만 복사</button><button className="secondary" onClick={() => downloadCsv("behaviors")}>CSV 내려받기</button></div>
       </section>
     </div>
     <section className="export-preview">
-      <div className="section-heading"><div><p className="eyebrow">PREVIEW</p><h2>{selectedSubject || "교과"} 평어 미리보기</h2></div></div>
+      <div className="section-heading"><div><p className="eyebrow">결과 미리보기</p><h2>{selectedSubject || "교과"} 평어 미리보기</h2></div></div>
       <div className="student-table-wrap"><table className="students-table"><thead><tr><th>번호</th><th>이름</th><th>평어</th><th>바이트</th></tr></thead><tbody>{orderedRoster.map((student) => {
         const item = commentMap.get(`${student.id}|${selectedSubject}`);
         const value = item?.confirmed ? item.comment : "";
@@ -1690,7 +1690,7 @@ function PrivacySettings({ currentName, onNameChanged }: { currentName: string; 
     <div className="page-heading"><div><p className="eyebrow">개인정보 보호</p><h1>개인정보·데이터 관리</h1><p>로그인한 교사와 현재 학급에 연결된 자료만 표시됩니다.</p></div></div>
     {message && <p className="student-message">{message}</p>}
     <section className="privacy-card">
-      <div className="section-heading"><div><p className="eyebrow">DATA SCOPE</p><h2>현재 저장 범위</h2></div><span className="security-badge">교사·학급별 격리</span></div>
+      <div className="section-heading"><div><p className="eyebrow">저장 자료</p><h2>현재 저장 범위</h2></div><span className="security-badge">교사·학급별 격리</span></div>
       {summary ? <>
         <dl className="privacy-meta"><div><dt>교사 계정</dt><dd>{summary.account.email}</dd></div><div><dt>학교·학급</dt><dd>{summary.classroom.schoolName} · {summary.classroom.schoolYear}학년도 {summary.classroom.semester}학기 · {summary.classroom.grade}학년 {summary.classroom.classNumber}반</dd></div></dl>
         <div className="privacy-counts">{countItems.map(([label, value]) => <article key={label}><span>{label}</span><strong>{value}</strong></article>)}</div>
@@ -1701,12 +1701,12 @@ function PrivacySettings({ currentName, onNameChanged }: { currentName: string; 
     </section>
     <div className="account-settings-grid">
     <form className="profile-settings-card" onSubmit={(event) => void changeProfile(event)}>
-      <div><p className="eyebrow">TEACHER PROFILE</p><h2>교사 이름</h2><p>대시보드와 앱 왼쪽 아래에 표시되는 이름입니다.</p></div>
+      <div><p className="eyebrow">사용자 정보</p><h2>교사 이름</h2><p>대시보드와 앱 왼쪽 아래에 표시되는 이름입니다.</p></div>
       <label><span>표시 이름</span><input minLength={2} maxLength={40} value={displayName} onChange={(event) => setDisplayName(event.target.value)} required /></label>
       <button disabled={busy || displayName.trim().length < 2 || displayName.trim() === currentName}>{busy ? "저장 중…" : "이름 저장"}</button>
     </form>
     <form className="account-security-card" onSubmit={(event) => void changePassword(event)}>
-      <div><p className="eyebrow">ACCOUNT SECURITY</p><h2>비밀번호 변경</h2><p>12자 이상이며 영문 대문자·소문자·숫자를 각각 포함해 주세요.</p></div>
+      <div><p className="eyebrow">계정 보안</p><h2>비밀번호 변경</h2><p>12자 이상이며 영문 대문자·소문자·숫자를 각각 포함해 주세요.</p></div>
       <label><span>새 비밀번호</span><input type="password" minLength={12} pattern="(?=.*[a-z])(?=.*[A-Z])(?=.*\d).{12,}" value={password} onChange={(event) => setPassword(event.target.value)} autoComplete="new-password" required /></label>
       <label><span>새 비밀번호 확인</span><input type="password" minLength={12} value={passwordConfirmation} onChange={(event) => setPasswordConfirmation(event.target.value)} autoComplete="new-password" required /></label>
       <button disabled={busy || !password || password !== passwordConfirmation}>{busy ? "변경 중…" : "비밀번호 변경"}</button>
