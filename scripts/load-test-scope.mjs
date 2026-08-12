@@ -6,7 +6,11 @@ export function selectCommentLoadScope(mode, students, subjects) {
   };
 }
 
-export function selectBehaviorLoadScope(mode, readyStudents) {
+export function selectBehaviorLoadScope(mode, readyStudents, approvedStudentIds = []) {
+  if (approvedStudentIds.length) {
+    const approved = new Set(approvedStudentIds.map(Number));
+    return readyStudents.filter((item) => approved.has(Number(item.studentId)));
+  }
   const sampleScope = mode === "sample" || mode === "preflight";
   if (!sampleScope) return readyStudents.slice(0, 25);
   return [...readyStudents]

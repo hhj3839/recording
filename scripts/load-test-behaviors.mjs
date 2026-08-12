@@ -4,6 +4,8 @@ import { selectBehaviorLoadScope } from "./load-test-scope.mjs";
 
 const baseUrl = (process.env.LOAD_TEST_BASE_URL || "https://giroksam-recording.vercel.app").replace(/\/$/, "");
 const mode = process.argv[2] || "status";
+const approvedStudentIds = (process.env.BEHAVIOR_TEST_STUDENT_IDS || "")
+  .split(",").map((value) => Number(value.trim())).filter((value) => Number.isInteger(value) && value > 0);
 if (mode === "seed" && process.env.SEED_BEHAVIOR_TEST_DATA !== "YES") {
   throw new Error("실험실 특성 입력은 SEED_BEHAVIOR_TEST_DATA=YES로 명시적으로 승인해야 합니다.");
 }
@@ -111,13 +113,13 @@ if (["preflight", "seed", "sample", "full"].includes(mode)) {
     characteristic: behaviorByStudent.get(student.id)?.characteristic ?? "",
     strict: validateBehavior(behaviorByStudent.get(student.id)?.behavior ?? "").strict,
   })).filter((item) => characteristicCount(item.characteristic) >= 4);
-  const targetCount = mode === "sample" || mode === "preflight" ? 5 : 25;
-  const selected = selectBehaviorLoadScope(mode, ready);
+  const targetCount = approvedStudentIds.length || (mode === "sample" || mode === "preflight" ? 5 : 25);
+  const selected = selectBehaviorLoadScope(mode, ready, approvedStudentIds);
   const estimatedInitialCalls = Math.ceil(selected.length / 5);
   if (mode === "preflight") {
     process.stdout.write(`${JSON.stringify({
       mode, ready: ready.length >= 5, activeStudents: classData.students.length, readyStudents: ready.length,
-      sampleGateStudents: Math.min(5, ready.length), estimatedInitialCalls,
+      sampleGateStudents: selected.length, estimatedInitialCalls,
       selectedStudentIds: selected.map((item) => item.studentId),
       selectedStrictBeforeRun: selected.filter((item) => item.strict).length,
       monthlyUsage: usage.monthly, monthlyLimit: usage.limit,
@@ -126,7 +128,7 @@ if (["preflight", "seed", "sample", "full"].includes(mode)) {
     process.exit(0);
   }
   if (selected.length !== targetCount) {
-    throw new Error(`특성이 4개 이상 입력된 학생이 ${selected.length}명입니다. ${targetCount}명이 필요합니다.`);
+    throw new Error(`승인 대상 중 특성이 4개 이상 입력된 학생이 ${selected.length}명입니다. ${targetCount}명이 필요합니다.`);
   }
   const result = await request("/api/behavior-jobs", {
     method: "POST",
