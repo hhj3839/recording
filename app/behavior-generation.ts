@@ -4,6 +4,7 @@ import { archiveBehavior } from "./record-revisions";
 import { validateBehaviorSource, validateRecord } from "./record-validation";
 import { primaryAiModel } from "./ai-model-policy";
 import { AiTokenUsage } from "./ai-usage";
+import { assertStrictGeneratedBehaviors } from "./behavior-persistence-policy";
 
 export type BehaviorOptions = { sentenceCount: number; maxBytes: number; emphasis: "balanced" | "strength" | "growth" };
 export type BehaviorInput = {
@@ -111,6 +112,7 @@ export async function saveGeneratedBehaviors(input: {
   classId: number;
   behaviors: GeneratedBehavior[];
 }) {
+  assertStrictGeneratedBehaviors(input.behaviors);
   const updatedAt = new Date().toISOString();
   await Promise.all(input.behaviors.map((item) => archiveBehavior({
     ownerId: input.ownerId, ownerEmail: input.ownerEmail, classId: input.classId, studentId: item.studentId,

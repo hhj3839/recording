@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { commentAreaIssuesForDisplay, evidenceGroundingWarnings, hasCompleteEvidenceCoverage, normalizeGeneratedCommentCandidate, openingRepetitionRate, replaceSelectedCommentText, validateGeneratedComment, validateGeneratedCommentPart } from "../app/comment-generation-policy.ts";
 import { behaviorRepairInstruction, behaviorRepairPlan } from "../app/behavior-repair-policy.ts";
+import { assertStrictGeneratedBehaviors } from "../app/behavior-persistence-policy.ts";
 import { generationModel } from "../app/ai-model-policy.ts";
 import { batchCommentsBySubject, COMMENT_BATCH_SIZE } from "../app/comment-batching.ts";
 import { batchBehaviors, BEHAVIOR_BATCH_SIZE } from "../app/behavior-batching.ts";
@@ -231,4 +232,20 @@ test("limits behavior length repair to fact-preserving local edits", () => {
   const longInstruction = behaviorRepairInstruction(589);
   assert.match(longInstruction, /중복 연결어·수식어만 줄이고/);
   assert.match(longInstruction, /관찰 사실·성장 표현·문장 수는 삭제하지 않음/);
+});
+
+test("blocks behavior candidates outside the strict byte range from persistence", () => {
+  const behaviorAtLeast = (targetBytes: number) => {
+    let text = "성장";
+    while (new TextEncoder().encode(`${text}함.`).length < targetBytes) text += "가";
+    return `${text}함.`;
+  };
+  const strict = { studentId: 17, characteristic: "성장 모습: 꾸준히 노력함", behavior: behaviorAtLeast(525) };
+  const tooLong = { studentId: 21, characteristic: "성장 모습: 꾸준히 노력함", behavior: behaviorAtLeast(556) };
+
+  assert.deepEqual(assertStrictGeneratedBehaviors([strict]), [strict]);
+  assert.throws(
+    () => assertStrictGeneratedBehaviors([strict, tooLong]),
+    /엄격 검수를 통과하지 못한 행동특성은 저장할 수 없습니다: 21/,
+  );
 });

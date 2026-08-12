@@ -1,7 +1,7 @@
 import { waitUntil } from "@vercel/functions";
 import { eq, selectRows, updateRows } from "../../../../db/supabase";
 import { getAiUsage, MONTHLY_AI_LIMIT, recordAiUsage } from "../../../ai-usage";
-import { BehaviorFailure, BehaviorInput, GeneratedBehavior, generateBehaviorBatch, saveGeneratedBehaviors } from "../../../behavior-generation";
+import { BehaviorInput, GeneratedBehavior, generateBehaviorBatch, saveGeneratedBehaviors } from "../../../behavior-generation";
 import { behaviorRepairInstruction } from "../../../behavior-repair-policy";
 import { signCommentJob, verifyCommentJob } from "../../../comment-generation";
 import { generationModel } from "../../../ai-model-policy";
@@ -46,7 +46,6 @@ export async function POST(request: Request) {
   });
   if (!claimed[0]) return Response.json({ ok: true, terminal: false, busy: true });
   let behaviors: GeneratedBehavior[] = [];
-  const fallbackBehaviors = new Map<number, BehaviorFailure>();
   let errorMessage = "";
   let pending = batch;
   const batchStudentIds = new Set(batch.map((item) => item.studentId));
@@ -76,10 +75,6 @@ export async function POST(request: Request) {
           });
         }
         for (const failure of generated.failures) {
-          const previous = fallbackBehaviors.get(failure.studentId);
-          if (failure.recoverable && (!previous || Math.abs(failure.bytes - 525) < Math.abs(previous.bytes - 525))) {
-            fallbackBehaviors.set(failure.studentId, failure);
-          }
           errorMessage = [
             errorMessage,
             `${failure.studentId}번 ${failure.bytes}B: ${failure.issues.join(", ")}`,
@@ -115,19 +110,6 @@ export async function POST(request: Request) {
   const cancelledBeforeSave = (await selectRows<{ status: string }>("generation_jobs", { id: eq(jobId), limit: 1 }))[0]?.status === "cancelled";
   if (cancelledBeforeSave) {
     return Response.json({ ok: true, terminal: true, cancelled: true });
-  }
-  const completedIds = new Set(behaviors.map((item) => item.studentId));
-  const recoverable = pending.flatMap((item) => {
-    const fallback = fallbackBehaviors.get(item.studentId);
-    return fallback && !completedIds.has(item.studentId)
-      ? [{ ...item, behavior: fallback.behavior }]
-      : [];
-  });
-  if (recoverable.length) {
-    behaviors = [...behaviors, ...recoverable];
-    await saveGeneratedBehaviors({
-      ownerId: job.owner_id, ownerEmail: job.owner_email, classId: Number(job.class_id), behaviors: recoverable,
-    });
   }
   const returned = new Set(behaviors.map((item) => item.studentId));
   const failedInBatch = batch.filter((item) => !returned.has(item.studentId)).length;
