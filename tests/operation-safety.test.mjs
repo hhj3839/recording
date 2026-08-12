@@ -96,3 +96,12 @@ test("keeps the app shell keyboard and screen-reader friendly", () => {
   assert.match(page, /aria-label="화면 이동"/);
   assert.match(css, /prefers-reduced-motion:reduce/);
 });
+
+test("keeps the simplified plan, assessment, and behavior toolbars", () => {
+  const page = readFileSync("app/page.tsx", "utf8");
+  assert.match(page, /className="plan-saved-actions"/);
+  assert.doesNotMatch(page, /progress=\{\(subject\) => subject === activeSubject/);
+  assert.doesNotMatch(page, /입력 완료 <strong>|미입력 \{Math\.max/);
+  assert.doesNotMatch(page, /referenceOpen|setReferenceOpen|참고자료 닫기|참고자료 열기/);
+  assert.match(page, /행동특성 생성[\s\S]*행동특성만 복사하기[\s\S]*결과 초기화/);
+});
