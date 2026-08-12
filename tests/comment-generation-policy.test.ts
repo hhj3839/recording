@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { commentAreaIssuesForDisplay, composeGeneratedCommentCandidate, evidenceGroundingWarnings, hasCompleteEvidenceCoverage, normalizeGeneratedCommentCandidate, openingRepetitionRate, replaceSelectedCommentText, validateGeneratedComment, validateGeneratedCommentPart } from "../app/comment-generation-policy.ts";
 import { behaviorRepairInstruction, behaviorRepairPlan } from "../app/behavior-repair-policy.ts";
-import { assertStrictGeneratedBehaviors } from "../app/behavior-persistence-policy.ts";
+import { assertStrictGeneratedBehaviors, selectBehaviorCandidate } from "../app/behavior-persistence-policy.ts";
 import { generationModel } from "../app/ai-model-policy.ts";
 import { batchCommentsBySubject, COMMENT_BATCH_SIZE } from "../app/comment-batching.ts";
 import { batchBehaviors, BEHAVIOR_BATCH_SIZE } from "../app/behavior-batching.ts";
@@ -255,4 +255,18 @@ test("blocks behavior candidates outside the strict byte range from persistence"
     () => assertStrictGeneratedBehaviors([strict, tooLong]),
     /엄격 검수를 통과하지 못한 행동특성은 저장할 수 없습니다: 21/,
   );
+});
+
+test("selects a strict behavior candidate before the closest repair fallback", () => {
+  const behaviorAtLeast = (targetBytes: number) => {
+    let text = "성장";
+    while (new TextEncoder().encode(`${text}함.`).length < targetBytes) text += "가";
+    return `${text}함.`;
+  };
+  const short = behaviorAtLeast(493);
+  const strict = behaviorAtLeast(525);
+  const long = behaviorAtLeast(560);
+  assert.equal(selectBehaviorCandidate([short, strict, long])?.behavior, strict);
+  assert.equal(selectBehaviorCandidate([short, long])?.behavior, short);
+  assert.equal(selectBehaviorCandidate(["", null, undefined]), null);
 });
