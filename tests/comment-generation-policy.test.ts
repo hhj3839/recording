@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { commentAreaIssuesForDisplay, evidenceGroundingWarnings, hasCompleteEvidenceCoverage, normalizeGeneratedCommentCandidate, openingRepetitionRate, replaceSelectedCommentText, validateGeneratedComment, validateGeneratedCommentPart } from "../app/comment-generation-policy.ts";
+import { commentAreaIssuesForDisplay, composeGeneratedCommentCandidate, evidenceGroundingWarnings, hasCompleteEvidenceCoverage, normalizeGeneratedCommentCandidate, openingRepetitionRate, replaceSelectedCommentText, validateGeneratedComment, validateGeneratedCommentPart } from "../app/comment-generation-policy.ts";
 import { behaviorRepairInstruction, behaviorRepairPlan } from "../app/behavior-repair-policy.ts";
 import { assertStrictGeneratedBehaviors } from "../app/behavior-persistence-policy.ts";
 import { generationModel } from "../app/ai-model-policy.ts";
@@ -77,12 +77,19 @@ test("rejects missing areas, invalid length, endings, and forbidden expressions"
 });
 
 test("rejects mechanically duplicated nominal endings", () => {
-  for (const ending of ["참여함함.", "표현하고함.", "나타내며함.", "마음을 담아함.", "내용을 익혀 감함."]) {
+  for (const ending of ["참여함함.", "표현하고함.", "표현하고 함.", "나타내며함.", "나타내며 함.", "마음을 담아함.", "내용을 익혀 감함."]) {
     const awkward = `수업에서 작품의 중심 내용을 정확하게 파악하고 중요한 근거를 찾아 발표 활동에 ${ending}`;
     const result = validateGeneratedComment(awkward, 1);
     assert.equal(result.naturalEndingsOk, false);
     assert.equal(result.valid, false);
   }
+});
+
+test("rejects dangling connective bodies before composing a generated ending", () => {
+  for (const body of ["자료를 정확하게 분류하고", "의견을 자연스럽게 나타내며", "작품에 마음을 담아", "배운 내용을 익혀 감", "활동에 참여함"]) {
+    assert.equal(composeGeneratedCommentCandidate(body, "설명함."), "");
+  }
+  assert.equal(composeGeneratedCommentCandidate("자료의 특징을 기준에 따라 정확하게", "분류함."), "자료의 특징을 기준에 따라 정확하게 분류함.");
 });
 
 test("shows near-miss lengths while keeping them as teacher-review warnings", () => {
@@ -197,13 +204,13 @@ test("keeps behavior repair context serializable for minimal revision", () => {
 
 test("turns behavior byte gaps into concrete Korean syllable repair instructions", () => {
   assert.deepEqual(behaviorRepairPlan(495), {
-    bytes: 495, targetBytes: 525, byteDelta: 30, syllables: 10, direction: "add",
+    bytes: 495, targetBytes: 515, byteDelta: 20, syllables: 7, direction: "add",
   });
   assert.deepEqual(behaviorRepairPlan(589), {
-    bytes: 589, targetBytes: 525, byteDelta: -64, syllables: 21, direction: "remove",
+    bytes: 589, targetBytes: 535, byteDelta: -54, syllables: 18, direction: "remove",
   });
-  assert.match(behaviorRepairInstruction(495), /약 10음절.*30바이트.*추가.*525바이트/);
-  assert.match(behaviorRepairInstruction(589), /약 21음절.*64바이트.*삭제.*525바이트/);
+  assert.match(behaviorRepairInstruction(495), /약 7음절.*20바이트.*추가.*515바이트/);
+  assert.match(behaviorRepairInstruction(589), /약 18음절.*54바이트.*삭제.*535바이트/);
   assert.match(behaviorRepairInstruction(525), /기준을 충족.*길이와 핵심 사실을 유지/);
 });
 
@@ -211,14 +218,14 @@ test("keeps behavior repair targets stable across byte boundaries and large miss
   assert.deepEqual(
     [0, 430, 499, 500, 525, 550, 551, 625].map((bytes) => behaviorRepairPlan(bytes)),
     [
-      { bytes: 0, targetBytes: 525, byteDelta: 525, syllables: 175, direction: "add" },
-      { bytes: 430, targetBytes: 525, byteDelta: 95, syllables: 32, direction: "add" },
-      { bytes: 499, targetBytes: 525, byteDelta: 26, syllables: 9, direction: "add" },
+      { bytes: 0, targetBytes: 515, byteDelta: 515, syllables: 172, direction: "add" },
+      { bytes: 430, targetBytes: 515, byteDelta: 85, syllables: 28, direction: "add" },
+      { bytes: 499, targetBytes: 515, byteDelta: 16, syllables: 5, direction: "add" },
       { bytes: 500, targetBytes: 500, byteDelta: 0, syllables: 0, direction: "none" },
       { bytes: 525, targetBytes: 525, byteDelta: 0, syllables: 0, direction: "none" },
       { bytes: 550, targetBytes: 550, byteDelta: 0, syllables: 0, direction: "none" },
-      { bytes: 551, targetBytes: 525, byteDelta: -26, syllables: 9, direction: "remove" },
-      { bytes: 625, targetBytes: 525, byteDelta: -100, syllables: 33, direction: "remove" },
+      { bytes: 551, targetBytes: 535, byteDelta: -16, syllables: 5, direction: "remove" },
+      { bytes: 625, targetBytes: 535, byteDelta: -90, syllables: 30, direction: "remove" },
     ],
   );
 });

@@ -38,7 +38,7 @@ export function groundingWarnings(sentence, evidence) {
 export function validateStoredComment(comment, expectedSentenceCount) {
   const sentences = sentencesOf(comment);
   const lengths = sentences.map((sentence) => Array.from(sentence).length);
-  const awkwardEndings = sentences.filter((sentence) => /(?:고|며|아|어|감|함)함\.$/.test(sentence));
+  const awkwardEndings = sentences.filter((sentence) => /(?:고|며|아|어|감|함)\s*함\.$/.test(sentence));
   const forbidden = commentForbiddenExpressions.filter((term) => String(comment).includes(term));
   const checks = {
     sentenceCount: expectedSentenceCount > 0 && sentences.length === expectedSentenceCount,

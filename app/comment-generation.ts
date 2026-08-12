@@ -1,6 +1,6 @@
 import { createHmac, timingSafeEqual } from "node:crypto";
 import { upsertRows } from "../db/supabase";
-import { evidenceGroundingWarnings, hasCompleteEvidenceCoverage, normalizeGeneratedCommentCandidate, validateGeneratedComment, validateGeneratedCommentPart } from "./comment-generation-policy";
+import { composeGeneratedCommentCandidate, evidenceGroundingWarnings, hasCompleteEvidenceCoverage, normalizeGeneratedCommentCandidate, validateGeneratedComment, validateGeneratedCommentPart } from "./comment-generation-policy";
 import { CommentVariation } from "./comment-variation";
 import { archiveComment } from "./record-revisions";
 import { primaryAiModel } from "./ai-model-policy";
@@ -159,7 +159,7 @@ export async function generateCommentBatch(evidence: CommentEvidence[], avoidCom
             return typeof item.body === "string"
               && typeof item.ending === "string"
               && COMMENT_ENDINGS.includes(item.ending as typeof COMMENT_ENDINGS[number])
-              ? [`${item.body.trim().replace(/[.。]+$/, "")} ${item.ending}`]
+              ? [composeGeneratedCommentCandidate(item.body, item.ending)].filter(Boolean)
               : [];
           });
           const text = candidates.map(normalizeGeneratedCommentCandidate).find(Boolean);
