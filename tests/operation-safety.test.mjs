@@ -124,5 +124,10 @@ test("keeps the simplified plan, assessment, and behavior toolbars", () => {
   assert.match(page, /<th>검수<\/th>[\s\S]*className="validation-cell behavior-validation issue-only-validation behavior-review-cell"/);
   assert.match(page, /behavior-review-cell[\s\S]*500B 미만[\s\S]*550B 초과[\s\S]*다시 생성/);
   assert.doesNotMatch(page, />길이 조정<\/button>/);
+  assert.doesNotMatch(page, /<th>관리<\/th>[\s\S]*className="delete-student"/);
+  assert.doesNotMatch(page, /function Assessments\([\s\S]{0,180}onDeleteStudent/);
+  assert.match(page, /미입력 칸 채우기[\s\S]*미입력 칸에 적용[\s\S]*표에서 가져오기[\s\S]*엑셀 표 붙여넣기[\s\S]*현재 과목 전체 초기화/);
+  assert.match(page, /기존에 입력한 칸은 변경하지 않습니다/);
+  assert.match(page, /className="comment-review-controls"[\s\S]*compact-similarity[\s\S]*comment-review-actions/);
   assert.match(page, /compact-similarity"><strong>\{closest\.student\.name\} 학생과 \{Math\.round\(closest\.score \* 100\)\}%<\/strong><\/div>/);
 });
