@@ -72,6 +72,9 @@ test("keeps the simplified teacher-facing guidance", () => {
   assert.match(page, />평가계획 표<\/label>/);
   assert.doesNotMatch(page, />10열 평가계획 표<\/label>|변환한 10열 평가계획 표/);
   assert.doesNotMatch(page, /AI FORMAT HELPER|① 변환 프롬프트 복사|③ 변환된 10열 표/);
-  assert.match(page, /형식에 맞출 필요 없이 관찰한 내용을 편하게 작성하세요/);
-  assert.match(page, /문장·메모·키워드 모두 가능/);
+  assert.match(page, /문장·메모·키워드 중 편한 방식으로 작성하세요/);
+  assert.match(page, /관찰 내용 입력/);
+  assert.match(page, /결과 검토/);
+  assert.match(page, /검수 내용 보기/);
+  assert.match(page, /countBehaviorCharacteristics\(records\[student\.id\]\?\.characteristic \?\? ""\) >= 4/);
 });
