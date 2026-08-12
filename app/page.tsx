@@ -747,8 +747,8 @@ function PlanManager({ plan, onChanged, current }: { plan: AssessmentPlan[]; onC
           .catch(() => setErrors(["프롬프트를 복사하지 못했습니다. 브라우저의 클립보드 권한을 확인해 주세요."]));
       }}>{promptCopied ? "복사됨 ✓" : "변환 프롬프트 복사"}</button></div>
       <div className="plan-paste-columns">과목 → 단원 → 평가목표 → 영역 → 평가유형 → 평가관점 → 상 → 중 → 하 → 유의점</div>
-      <label className="plan-paste-label" htmlFor="assessment-plan-paste">10열 평가계획 표</label>
-      <textarea id="assessment-plan-paste" value={planText} onChange={(event) => setPlanText(event.target.value)} placeholder={"Excel, 한글 또는 ChatGPT에서 변환한 10열 평가계획 표를 붙여넣으세요.\n\n국어\t1. 생생하게 표현해요\t상황에 알맞게 표현할 수 있다.\t듣기·말하기\t구술 평가\t상황에 맞게 표현하는가?\t정확하고 실감 나게 표현할 수 있다.\t알맞게 표현할 수 있다.\t도움을 받아 표현하기 위해 노력한다.\t다양한 표현을 고려한다."} />
+      <label className="plan-paste-label" htmlFor="assessment-plan-paste">평가계획 표</label>
+      <textarea id="assessment-plan-paste" value={planText} onChange={(event) => setPlanText(event.target.value)} placeholder={"Excel, 한글 또는 ChatGPT에서 변환한 평가계획 표를 붙여넣으세요.\n\n국어\t1. 생생하게 표현해요\t상황에 알맞게 표현할 수 있다.\t듣기·말하기\t구술 평가\t상황에 맞게 표현하는가?\t정확하고 실감 나게 표현할 수 있다.\t알맞게 표현할 수 있다.\t도움을 받아 표현하기 위해 노력한다.\t다양한 표현을 고려한다."} />
       <div className="plan-paste-actions"><button disabled={busy || !planText.trim()} onClick={interpretPlanText}>표 분석·미리보기</button></div>
     </section>
     {message && <p className="student-message">{message}</p>}
