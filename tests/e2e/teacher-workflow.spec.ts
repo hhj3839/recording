@@ -195,7 +195,7 @@ test("로그인부터 명단·평가계획·평가수준·교과 평어 화면�
 
     await navigate(page, "행동특성", "behavior");
     await expect(page.getByRole("heading", { name: "행동특성 작성" })).toBeVisible();
-    await expect(page.getByText("특성을 4개 이상 입력한 학생 자동 포함", { exact: false })).toBeVisible();
+    await expect(page.getByRole("button", { name: "✦ 행동특성 생성" })).toBeVisible();
     await expect(page.getByRole("columnheader", { name: /관찰 키워드·메모/ })).toBeVisible();
     await expect(page.getByRole("columnheader", { name: /생성 결과/ })).toBeVisible();
     await expect(page.getByLabel("관찰 사실 입력 학생 전체 선택")).toHaveCount(0);

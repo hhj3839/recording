@@ -76,7 +76,7 @@ test("keeps the simplified teacher-facing guidance", () => {
   assert.match(page, /관찰 키워드·메모/);
   assert.match(page, /생성 결과/);
   assert.match(page, /behavior-split-table/);
-  assert.match(page, /countBehaviorCharacteristics\(records\[student\.id\]\?\.characteristic \?\? ""\) >= 4/);
+  assert.match(page, /inputs\.filter\(\(item\) => countBehaviorCharacteristics\(item\.characteristic\) < 4\)/);
 });
 
 test("keeps wide comment tables inside their responsive container", () => {
@@ -104,4 +104,7 @@ test("keeps the simplified plan, assessment, and behavior toolbars", () => {
   assert.doesNotMatch(page, /입력 완료 <strong>|미입력 \{Math\.max/);
   assert.doesNotMatch(page, /referenceOpen|setReferenceOpen|참고자료 닫기|참고자료 열기/);
   assert.match(page, /행동특성 생성[\s\S]*행동특성만 복사하기[\s\S]*결과 초기화/);
+  assert.match(page, /className="page-heading comments-page-heading"[\s\S]*className="subject-generation-controls"/);
+  assert.match(page, /className="workspace-toolbar comments-toolbar comments-subject-toolbar"[\s\S]*<SubjectNavigator/);
+  assert.doesNotMatch(page, /behavior-generation-summary|생성 대상<\/small>|특성을 4개 이상 입력한 학생 자동 포함/);
 });
