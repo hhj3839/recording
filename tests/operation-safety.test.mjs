@@ -107,4 +107,7 @@ test("keeps the simplified plan, assessment, and behavior toolbars", () => {
   assert.match(page, /className="page-heading comments-page-heading"[\s\S]*className="subject-generation-controls"/);
   assert.match(page, /className="workspace-toolbar comments-toolbar comments-subject-toolbar"[\s\S]*<SubjectNavigator/);
   assert.doesNotMatch(page, /behavior-generation-summary|생성 대상<\/small>|특성을 4개 이상 입력한 학생 자동 포함/);
+  assert.doesNotMatch(page, /validation\.bytes\}B|생성 전<\/small>|className=\{validation\.[^}]+ \? "pass"/);
+  assert.match(page, /issue-only-validation/);
+  assert.match(page, /!validation\.lengthOk && <span className="fail">길이 확인<\/span>/);
 });

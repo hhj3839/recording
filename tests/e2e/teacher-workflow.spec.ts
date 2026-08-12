@@ -163,7 +163,7 @@ test("로그인부터 명단·평가계획·평가수준·교과 평어 화면�
 
     await navigate(page, "교과 평어", "comments");
     await expect(page.getByRole("heading", { name: "전 과목 교과 평어" })).toBeVisible();
-    await expect(page.getByRole("button", { name: "✦ AI 평어 생성" })).toBeVisible();
+    await expect(page.getByRole("button", { name: "✦ 국어 평어 생성" })).toBeVisible();
     await expect(page.locator(".comments-toolbar .unified-subject-tabs").getByRole("button", { name: /국어/ })).toBeVisible();
     await expect(page.locator(".subject-comments-table textarea")).toHaveCount(2);
     await expect(page.locator(".subject-comments-table textarea").nth(0)).toHaveValue(seededComments[0]);
@@ -211,7 +211,7 @@ test("로그인부터 명단·평가계획·평가수준·교과 평어 화면�
     expect(behaviorClipboard.replaceAll("\r\n", "\n")).toBe(seededBehaviors.join("\n"));
 
     if (process.env.E2E_RUN_AI === "1") {
-      await page.getByRole("button", { name: "✦ AI 평어 생성" }).click();
+      await page.getByRole("button", { name: "✦ 국어 평어 생성" }).click();
       await expect(page.getByRole("button", { name: "평어만 복사하기" })).toBeEnabled({ timeout: 240_000 });
     }
   } finally {
