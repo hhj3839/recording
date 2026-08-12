@@ -107,11 +107,13 @@ test("keeps the simplified plan, assessment, and behavior toolbars", () => {
   assert.match(page, /className="page-heading comments-page-heading"[\s\S]*className="subject-generation-controls"/);
   assert.match(page, /className="workspace-toolbar comments-toolbar comments-subject-toolbar"[\s\S]*<SubjectNavigator/);
   assert.doesNotMatch(page, /behavior-generation-summary|생성 대상<\/small>|특성을 4개 이상 입력한 학생 자동 포함/);
-  assert.doesNotMatch(page, /validation\.bytes\}B|생성 전<\/small>|className=\{validation\.[^}]+ \? "pass"/);
+  assert.doesNotMatch(page, /생성 전<\/small>|className=\{validation\.[^}]+ \? "pass"/);
   assert.match(page, /issue-only-validation/);
-  assert.match(page, /!validation\.lengthOk && <span className="fail">길이 확인<\/span>/);
+  assert.match(page, /validation\.bytes < 500 \? `500B 미만 · \$\{validation\.bytes\}B` : `550B 초과 · \$\{validation\.bytes\}B`/);
   assert.equal((page.match(/className="secondary result-copy-button"/g) ?? []).length, 2);
   assert.match(page, /className="validation-cell issue-only-validation comment-review-cell"[\s\S]*다시 생성[\s\S]*선택한 부분 바꾸기[\s\S]*생성 근거/);
   assert.match(page, /<th>검수<\/th>[\s\S]*className="validation-cell behavior-validation issue-only-validation behavior-review-cell"/);
-  assert.match(page, /behavior-review-cell[\s\S]*길이 확인[\s\S]*다시 생성[\s\S]*길이 조정/);
+  assert.match(page, /behavior-review-cell[\s\S]*500B 미만[\s\S]*550B 초과[\s\S]*다시 생성/);
+  assert.doesNotMatch(page, />길이 조정<\/button>/);
+  assert.match(page, /compact-similarity"><strong>\{closest\.student\.name\} 학생과 \{Math\.round\(closest\.score \* 100\)\}%<\/strong><\/div>/);
 });
