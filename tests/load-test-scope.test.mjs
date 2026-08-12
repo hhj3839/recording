@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { selectCommentLoadScope } from "../scripts/load-test-scope.mjs";
+import { selectBehaviorLoadScope, selectCommentLoadScope } from "../scripts/load-test-scope.mjs";
 
 const students = Array.from({ length: 25 }, (_, index) => ({ id: index + 1 }));
 const subjects = ["국어", "사회", "도덕", "수학", "과학", "음악", "미술", "체육", "영어"];
@@ -18,4 +18,12 @@ test("subject and full scopes remain unchanged", () => {
   assert.deepEqual(selectCommentLoadScope("subject", students, subjects).selectedSubjects, ["국어"]);
   assert.equal(selectCommentLoadScope("start", students, subjects).selectedStudents.length, 25);
   assert.equal(selectCommentLoadScope("start", students, subjects).selectedSubjects.length, 9);
+});
+
+test("behavior preflight and sample prioritize the same five strict failures", () => {
+  const ready = Array.from({ length: 25 }, (_, index) => ({ studentId: index + 101, strict: ![5, 11, 14, 16, 17, 19, 20, 24].includes(index) }));
+  const expectedIds = [106, 112, 115, 117, 118];
+  assert.deepEqual(selectBehaviorLoadScope("preflight", ready).map((item) => item.studentId), expectedIds);
+  assert.deepEqual(selectBehaviorLoadScope("sample", ready).map((item) => item.studentId), expectedIds);
+  assert.deepEqual(selectBehaviorLoadScope("full", ready).map((item) => item.studentId), ready.map((item) => item.studentId));
 });
