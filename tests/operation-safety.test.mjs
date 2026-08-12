@@ -78,3 +78,9 @@ test("keeps the simplified teacher-facing guidance", () => {
   assert.match(page, /behavior-split-table/);
   assert.match(page, /countBehaviorCharacteristics\(records\[student\.id\]\?\.characteristic \?\? ""\) >= 4/);
 });
+
+test("keeps wide comment tables inside their responsive container", () => {
+  const css = readFileSync("app/globals.css", "utf8");
+  assert.match(css, /\.comments-review-layout \.review-content\{min-width:0;width:100%\}/);
+  assert.match(css, /\.comments-review-layout \.comments-table-wrap\{width:100%;max-width:100%;min-width:0\}/);
+});
