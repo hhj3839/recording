@@ -118,6 +118,22 @@ export function auditStoredResults({ students, plan, levels, comments, parts, be
     const subjectStrict = subjectRows.filter((item) => item.strict).length;
     return [subject, { saved: subjectRows.filter((item) => !item.missing).length, strict: subjectStrict, strictRate: percent(subjectStrict, subjectRows.length) }];
   }));
+  const commentClassification = commentDetails.map((item) => {
+    const formatReasons = [];
+    if (item.missing) formatReasons.push("missing");
+    if (item.checks?.naturalEndings === false) formatReasons.push("awkwardNominalEnding");
+    if (item.checks?.sentenceCount === false) formatReasons.push("sentenceCount");
+    if (item.checks?.lengths === false) formatReasons.push("sentenceLength");
+    if (item.checks?.endings === false) formatReasons.push("ending");
+    if (item.checks?.forbidden === false) formatReasons.push("forbiddenExpression");
+    return {
+      studentId: item.studentId, subject: item.subject, formatReasons,
+      meaningReview: item.groundingWarnings.length > 0,
+      groundingWarnings: item.groundingWarnings,
+    };
+  });
+  const formatCandidates = commentClassification.filter((item) => item.formatReasons.length > 0);
+  const meaningCandidates = commentClassification.filter((item) => item.meaningReview);
   return {
     scope: { students: students.length, subjects: subjects.length, expectedComments: expectedCommentKeys.length, expectedBehaviors: students.length },
     comments: {
@@ -128,6 +144,15 @@ export function auditStoredResults({ students, plan, levels, comments, parts, be
       meaningTarget95Verified: false, unsupportedFactTarget3Verified: false,
       reviewNote: "근거 밖 태도·과정 표현 휴리스틱은 전수 검사했으나 의미 일치도와 미입력 사실 비율의 공식 판정에는 교사 검토가 필요함.",
       issues: commentDetails.filter((item) => item.missing || !item.strict || item.groundingWarnings.length).slice(0, 50),
+      remediation: {
+        readOnly: true, automaticChangesAllowed: false,
+        formatCandidateCount: formatCandidates.length,
+        meaningReviewCandidateCount: meaningCandidates.length,
+        reasonCounts: Object.fromEntries(["missing", "awkwardNominalEnding", "sentenceCount", "sentenceLength", "ending", "forbiddenExpression"]
+          .map((reason) => [reason, formatCandidates.filter((item) => item.formatReasons.includes(reason)).length])),
+        formatCandidates,
+        meaningReviewCandidates: meaningCandidates,
+      },
     },
     behaviors: {
       saved: savedBehaviors, missing: students.length - savedBehaviors,
