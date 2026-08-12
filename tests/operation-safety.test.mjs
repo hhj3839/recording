@@ -63,3 +63,13 @@ test("behavior preflight uses the same five-student scope as the paid sample", (
   assert.match(source, /mode === "sample" \|\| mode === "preflight" \? 5 : 25/);
   assert.match(source, /selectBehaviorLoadScope\(mode, ready, approvedStudentIds\)/);
 });
+
+test("keeps the simplified teacher-facing guidance", () => {
+  const page = readFileSync("app/page.tsx", "utf8");
+  assert.match(page, /같은 반은 1년 동안 계속 사용할 수 있습니다/);
+  assert.match(page, /다른 학기·학급 추가/);
+  assert.match(page, /변환 프롬프트 복사/);
+  assert.doesNotMatch(page, /AI FORMAT HELPER|① 변환 프롬프트 복사|③ 변환된 10열 표/);
+  assert.match(page, /형식에 맞출 필요 없이 관찰한 내용을 편하게 작성하세요/);
+  assert.match(page, /문장·메모·키워드 모두 가능/);
+});

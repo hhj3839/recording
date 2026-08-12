@@ -77,7 +77,7 @@ test("로그인부터 명단·평가계획·평가수준·교과 평어 화면�
     await form.locator("input").nth(2).fill(String(candidate!.classNumber));
     const createdResponse = page.waitForResponse((response) =>
       response.url().endsWith("/api/classrooms") && response.request().method() === "POST");
-    await form.getByRole("button", { name: "새 학급 추가 후 전환" }).click();
+    await form.getByRole("button", { name: "다른 학기·학급 추가" }).click();
     expect((await createdResponse).ok()).toBeTruthy();
 
     const refreshedClassrooms = await (await page.request.get("/api/classrooms")).json() as {
