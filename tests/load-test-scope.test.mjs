@@ -27,3 +27,10 @@ test("behavior preflight and sample prioritize the same five strict failures", (
   assert.deepEqual(selectBehaviorLoadScope("sample", ready).map((item) => item.studentId), expectedIds);
   assert.deepEqual(selectBehaviorLoadScope("full", ready).map((item) => item.studentId), ready.map((item) => item.studentId));
 });
+
+test("behavior scope never adds students outside explicit approval", () => {
+  const ready = Array.from({ length: 25 }, (_, index) => ({ studentId: index + 101, strict: false }));
+  const approved = [120, 121, 125];
+  assert.deepEqual(selectBehaviorLoadScope("preflight", ready, approved).map((item) => item.studentId), approved);
+  assert.deepEqual(selectBehaviorLoadScope("sample", ready, approved).map((item) => item.studentId), approved);
+});
