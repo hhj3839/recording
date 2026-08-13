@@ -1,7 +1,7 @@
 import { readFile, readdir } from "node:fs/promises";
 import path from "node:path";
 import { auditStoredResults } from "./stored-quality-audit-policy.mjs";
-import { resolveStoredAuditScope } from "./stored-audit-scope-policy.mjs";
+import { isKnownFixtureText, resolveStoredAuditScope } from "./stored-audit-scope-policy.mjs";
 import { buildTeacherReviewSample } from "./teacher-review-sample-policy.mjs";
 
 const baseUrl = (process.env.LOAD_TEST_BASE_URL || "https://giroksam-recording.vercel.app").replace(/\/$/, "");
@@ -43,14 +43,29 @@ const auditResult = auditStoredResults({
   students: classData.students, plan: planData.plan, levels: classData.levels,
   comments: commentData.comments, parts: commentData.parts, behaviors: behaviorData.behaviors,
 });
-const teacherReviewSample = auditScope.officialEligible ? buildTeacherReviewSample({
+const reviewComments = auditScope.partialReview
+  ? commentData.comments.filter((item) => !isKnownFixtureText(item.comment))
+  : commentData.comments;
+const excludedReviewComments = commentData.comments.length - reviewComments.length;
+const teacherReviewSample = auditScope.teacherReviewEligible ? buildTeacherReviewSample({
   students: classData.students,
   plan: planData.plan,
   levels: classData.levels,
-  comments: commentData.comments,
+  comments: reviewComments,
   auditResult,
   limit: Number(process.env.AUDIT_REVIEW_SAMPLE_SIZE) || 30,
 }) : null;
+if (teacherReviewSample) {
+  teacherReviewSample.scope = {
+    fullClassroomAudit: auditScope.officialEligible,
+    partialReview: auditScope.partialReview,
+    excludedKnownFixtureComments: excludedReviewComments,
+    eligibleStoredComments: reviewComments.filter((item) => item.comment?.trim()).length,
+    claimLimit: auditScope.partialReview
+      ? "fixture를 제외한 교사 의미·사실성 표본 검토 전용이며 225건 전체 품질 감사로 해석하지 않음"
+      : "공식 감사 안전장치를 통과한 학급 표본",
+  };
+}
 process.stdout.write(`${JSON.stringify({
   mode: "stored-quality-audit", readOnly: true, auditScope, teacherReviewSample,
   ...auditResult,
