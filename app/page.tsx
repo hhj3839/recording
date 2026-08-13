@@ -98,12 +98,12 @@ function Dashboard({ move, teacherName, classroom, studentCount, completedLevels
     <>
       <section className="welcome">
         <div>
-          <p className="eyebrow">{classroom ? `${classroom.schoolYear}학년도 · ${classroom.semester}학기` : "학급 정보를 불러오는 중"}</p>
+          <p className="eyebrow">학급 기록</p>
           <h1>{teacherName} 선생님, 안녕하세요.</h1>
           <p>오늘도 학생의 성장을 세심하게 기록해 볼까요?</p>
         </div>
-        <ClassroomManager current={classroom} embedded />
       </section>
+      <ClassroomManager current={classroom} embedded />
 
       <section className="stats-grid" aria-label="학급 진행 현황">
         {cards.map((card) => (
@@ -234,7 +234,14 @@ function ClassroomManager({ current, embedded = false }: { current: ClassroomInf
     [key]: key === "schoolName" ? value : Number(value),
   }));
   if (embedded) return <div className="dashboard-classroom">
-    <button className="class-button" aria-expanded={open} onClick={() => setOpen((value) => !value)}>{current ? `${current.schoolName} · ${current.grade}학년 ${current.classNumber}반` : "학급 정보 확인 중"} <span>{open ? "⌃" : "⌄"}</span></button>
+    <section className="dashboard-classroom-card" aria-label="현재 학급">
+      <div className="classroom-identity">
+        <span>현재 학급</span>
+        <strong>{current?.schoolName ?? "학급 정보를 불러오는 중"}</strong>
+        {current && <div><b>{current.grade}학년 {current.classNumber}반</b><i>{current.schoolYear}학년도</i><i>{current.semester}학기</i></div>}
+      </div>
+      <button className="class-switch-button" aria-expanded={open} onClick={() => setOpen((value) => !value)}>학급 전환 <span>{open ? "⌃" : "⌄"}</span></button>
+    </section>
     {open && <div className="classroom-popover">
       <div className="classroom-popover-heading"><div><strong>내 학급</strong><small>사용할 학급을 선택하세요.</small></div><button onClick={() => setShowCreate((value) => !value)}>{showCreate ? "추가 닫기" : "+ 새 학급"}</button></div>
       {message && <p className="student-message">{message}</p>}
