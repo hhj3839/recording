@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { countBehaviorCharacteristics, recordSimilarityDetails, validateBehaviorSource, validateRecord } from "./record-validation";
 import { parseStudentRosterText } from "./student-roster-parser";
 import { parseAssessmentPlanText } from "./assessment-plan-parser";
@@ -66,6 +66,36 @@ const navItems: { id: View; label: string; icon: string }[] = [
   { id: "comments", label: "교과 평어", icon: "✦" },
   { id: "behavior", label: "행동특성", icon: "◎" },
 ];
+
+function ReviewWarning({ issues }: { issues: string[] }) {
+  const warningRef = useRef<HTMLButtonElement>(null);
+  const [open, setOpen] = useState(false);
+  const [position, setPosition] = useState({ left: 12, top: 12 });
+  useEffect(() => {
+    if (!open) return;
+    const closeOutside = (event: PointerEvent) => {
+      if (!warningRef.current?.contains(event.target as Node)) setOpen(false);
+    };
+    document.addEventListener("pointerdown", closeOutside);
+    return () => document.removeEventListener("pointerdown", closeOutside);
+  }, [open]);
+  if (!issues.length) return null;
+  if (issues.length === 1) return <div className="review-warning-wrap"><span className="review-warning single">⚠ {issues[0]}</span></div>;
+  const show = () => {
+    const rect = warningRef.current?.getBoundingClientRect();
+    if (!rect) return;
+    const width = 240;
+    const estimatedHeight = Math.min(260, 46 + issues.length * 28);
+    const left = Math.max(12, Math.min(rect.right - width, window.innerWidth - width - 12));
+    const top = rect.top > estimatedHeight + 16 ? rect.top - estimatedHeight - 8 : Math.min(rect.bottom + 8, window.innerHeight - estimatedHeight - 12);
+    setPosition({ left, top: Math.max(12, top) });
+    setOpen(true);
+  };
+  return <div className="review-warning-wrap">
+    <button ref={warningRef} className="review-warning" type="button" aria-expanded={open} onMouseEnter={show} onMouseLeave={() => { if (document.activeElement !== warningRef.current) setOpen(false); }} onFocus={show} onBlur={() => setOpen(false)} onClick={show}>⚠ 오류 {issues.length}건</button>
+    {open && <span className="review-warning-tooltip" role="tooltip" style={{ left: position.left, top: position.top }}><strong>검수 필요 사항</strong>{issues.map((issue, issueIndex) => <i key={issueIndex}>{issue}</i>)}</span>}
+  </div>;
+}
 
 function Dashboard({ move, teacherName, classroom, studentCount, completedLevels, totalLevels, commentCount, expectedComments, behaviorCount }: {
   move: (view: View) => void;
@@ -1224,7 +1254,7 @@ function Comments({ assessmentDataBySubject, plan, roster }: { assessmentDataByS
                     {selectedText[key] && <small className="comment-selection-hint">“{selectedText[key].text.slice(0, 36)}{selectedText[key].text.length > 36 ? "…" : ""}” 선택됨</small>}
                   </td>
                   <td className="validation-cell issue-only-validation comment-review-cell">
-                    {commentReviewIssues.length > 0 && <div className="review-warning-wrap"><span className="review-warning" tabIndex={0}>⚠ 오류 {commentReviewIssues.length}건<span className="review-warning-tooltip" role="tooltip"><strong>검수 필요 사항</strong>{commentReviewIssues.map((issue, issueIndex) => <i key={issueIndex}>{issue}</i>)}</span></span></div>}
+                    <ReviewWarning issues={commentReviewIssues} />
                     <div className="comment-review-controls">{similarStudents.length > 0 && closest && <div className="similarity-detail compact-similarity"><strong>{closest.student.name} 학생과 {Math.round(closest.score * 100)}%</strong></div>}<div className="comment-row-actions review-cell-actions comment-review-actions"><button className="regenerate-button" disabled={!text || !!rewriteBusyKey} onMouseDown={(event) => event.preventDefault()} onClick={() => void rewriteComment(student.id, selectedSubject, "regenerate")}>{rewriteBusyKey === `${key}|regenerate` ? "생성 중…" : "다시 생성"}</button><button disabled={!selectedText[key] || !!rewriteBusyKey} title={selectedText[key] ? "선택한 부분만 평가 근거에 맞게 바꿉니다." : "평어에서 바꿀 문장이나 표현을 먼저 선택하세요."} onMouseDown={(event) => event.preventDefault()} onClick={() => void rewriteComment(student.id, selectedSubject, "selection")}>{rewriteBusyKey === `${key}|selection` ? "변경 중…" : "선택한 부분 바꾸기"}</button></div></div>
                   </td>
                 </tr>;
@@ -1467,7 +1497,7 @@ function Behavior({ roster }: { roster: AssessmentStudent[] }) {
                   <td className="behavior-source-pane"><textarea className={sourceIssues.length ? "input-blocked" : ""} value={record.characteristic} onFocus={() => setActiveStudentId(student.id)} onChange={(event) => updateRecord(student.id, { characteristic: event.target.value })} onBlur={() => void saveRecord(student.id, records[student.id] ?? record)} placeholder={"관찰한 내용을 키워드·메모·문장 중 편한 방식으로 작성하세요.\n예: 질문을 자주 함 · 친구 말을 잘 들어줌 · 맡은 역할을 끝까지 함 · 발표에 자신감이 생김"} />{sourceIssues.length > 0 && <small className="source-warning">AI 전송 불가: {sourceIssues.join(" · ")}</small>}{record.characteristic.trim() && characteristicCount < 4 && <small className="source-warning characteristic-warning">특징을 {4 - characteristicCount}개 더 입력해 주세요.</small>}</td>
                   <td className="behavior-result-pane"><textarea value={record.behavior} onChange={(event) => updateRecord(student.id, { behavior: event.target.value })} onBlur={() => void saveRecord(student.id, records[student.id] ?? record)} placeholder={record.characteristic ? "행동특성을 생성하면 이곳에 결과가 표시됩니다." : "왼쪽에 관찰 키워드나 메모를 먼저 입력해 주세요."} /></td>
                   <td className="validation-cell behavior-validation issue-only-validation behavior-review-cell">
-                    {behaviorReviewIssues.length > 0 && <div className="review-warning-wrap"><span className="review-warning" tabIndex={0}>⚠ 오류 {behaviorReviewIssues.length}건<span className="review-warning-tooltip" role="tooltip"><strong>검수 필요 사항</strong>{behaviorReviewIssues.map((issue, issueIndex) => <i key={issueIndex}>{issue}</i>)}</span></span></div>}
+                    <ReviewWarning issues={behaviorReviewIssues} />
                     {similarStudents.length > 0 && closest && <div className="similarity-detail"><strong>{closest.student.name} 학생과 {Math.round(closest.score * 100)}%</strong>{closest.overlaps.length > 0 && <span>겹치는 표현: {closest.overlaps.join(" · ")}</span>}</div>}
                     <div className="comment-row-actions review-cell-actions"><button disabled={!record.characteristic || !sourceValidation.valid || !!rewriteBusyKey} onMouseDown={(event) => event.preventDefault()} onClick={() => void rewriteBehavior(student.id, record, "regenerate")}>{rewriteBusyKey === `${student.id}|regenerate` ? "생성 중…" : "다시 생성"}</button></div>
                   </td>
