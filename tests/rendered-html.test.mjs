@@ -41,6 +41,9 @@ test("keeps classroom switching inside the dashboard without duplicate shortcuts
   assert.doesNotMatch(source, /id: "classes", label: "학급 관리"/);
   assert.match(source, /<ClassroomManager current=\{classroom\} embedded \/>/);
   assert.match(source, /className="classroom-popover"/);
+  assert.match(source, /className="dashboard-classroom-card" aria-label="현재 학급"/);
+  assert.match(source, /<strong>\{current\?\.schoolName/);
+  assert.match(source, />학급 전환 <span>/);
   assert.doesNotMatch(source, /<h2>빠른 시작<\/h2>|전체 보기 →/);
   assert.match(source, /rosterIds\.has\(Number\(item\.studentId\)\) && subjectNames\.has\(item\.subject\)/);
   assert.match(source, /입력 근거를 바탕으로 초안을 만들며, 교사가 최종 확인합니다/);
