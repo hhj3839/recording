@@ -1,6 +1,7 @@
 import { readFile, readdir } from "node:fs/promises";
 import path from "node:path";
 import { auditStoredResults } from "./stored-quality-audit-policy.mjs";
+import { resolveStoredAuditScope } from "./stored-audit-scope-policy.mjs";
 
 const baseUrl = (process.env.LOAD_TEST_BASE_URL || "https://giroksam-recording.vercel.app").replace(/\/$/, "");
 
@@ -31,8 +32,14 @@ const get = async (route) => {
 const [classData, planData, commentData, behaviorData] = await Promise.all([
   get("/api/class-data"), get("/api/assessment-plan"), get("/api/generated-comments"), get("/api/student-behaviors"),
 ]);
+const auditScope = resolveStoredAuditScope({
+  classroom: classData.classroom,
+  students: classData.students,
+  comments: commentData.comments,
+  behaviors: behaviorData.behaviors,
+});
 process.stdout.write(`${JSON.stringify({
-  mode: "stored-quality-audit", readOnly: true,
+  mode: "stored-quality-audit", readOnly: true, auditScope,
   ...auditStoredResults({
     students: classData.students, plan: planData.plan, levels: classData.levels,
     comments: commentData.comments, parts: commentData.parts, behaviors: behaviorData.behaviors,
