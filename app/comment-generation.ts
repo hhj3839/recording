@@ -1,6 +1,6 @@
 import { createHmac, timingSafeEqual } from "node:crypto";
 import { upsertRows } from "../db/supabase";
-import { composeGeneratedCommentCandidate, evidenceGroundingWarnings, hasCompleteEvidenceCoverage, normalizeGeneratedCommentCandidate, validateGeneratedComment, validateGeneratedCommentPart } from "./comment-generation-policy";
+import { composeGeneratedCommentCandidate, evidenceGroundingWarnings, generatedCommentFailureMessage, hasCompleteEvidenceCoverage, normalizeGeneratedCommentCandidate, resolveGeneratedEvidenceItemId, validateGeneratedComment, validateGeneratedCommentPart } from "./comment-generation-policy";
 import { CommentVariation } from "./comment-variation";
 import { archiveComment } from "./record-revisions";
 import { primaryAiModel } from "./ai-model-policy";
@@ -139,7 +139,7 @@ export async function generateCommentBatch(evidence: CommentEvidence[], avoidCom
     ? Object.values(decoded.results) as Array<{ studentId?: unknown; subject?: unknown; sentences?: unknown }>
     : [];
   const allowed = new Set(evidence.map((item) => `${item.studentId}|${item.subject}`));
-  const diagnostics: string[] = [];
+  const failureMessages: string[] = [];
   const parts: GeneratedCommentPart[] = [];
   const comments = Array.isArray(parsed) ? parsed.flatMap((item) => {
     const studentId = Number(item.studentId);
@@ -148,11 +148,12 @@ export async function generateCommentBatch(evidence: CommentEvidence[], avoidCom
     const expectedIds = [...new Set(source?.items
       .map((evidenceItem) => evidenceIds.get(`${studentId}|${subject}|${evidenceItem.assessmentIndex}`))
       .filter((id): id is string => Boolean(id)) ?? [])];
-    const sentenceRows = Array.isArray(item.sentences)
-      ? item.sentences.flatMap((row) => {
+    const rawSentences = Array.isArray(item.sentences) ? item.sentences : [];
+    const sentenceRows = rawSentences.length
+      ? rawSentences.flatMap((row) => {
           if (!row || typeof row !== "object") return [];
           const value = row as { itemId?: unknown; candidates?: unknown };
-          if (typeof value.itemId !== "string" || !Array.isArray(value.candidates)) return [];
+          if (!Array.isArray(value.candidates)) return [];
           const candidates = value.candidates.flatMap((candidate) => {
             if (!candidate || typeof candidate !== "object") return [];
             const item = candidate as { body?: unknown; ending?: unknown };
@@ -163,7 +164,8 @@ export async function generateCommentBatch(evidence: CommentEvidence[], avoidCom
               : [];
           });
           const text = candidates.map(normalizeGeneratedCommentCandidate).find(Boolean);
-          return text ? [{ itemId: value.itemId, text, candidateLengths: candidates.map((candidate) => Array.from(candidate).length) }] : [];
+          const itemId = resolveGeneratedEvidenceItemId(expectedIds, value.itemId, rawSentences.length);
+          return text && itemId ? [{ itemId, text, candidateLengths: candidates.map((candidate) => Array.from(candidate).length) }] : [];
         })
       : [];
     const complete = hasCompleteEvidenceCoverage(expectedIds, sentenceRows.map((row) => row.itemId));
@@ -185,15 +187,10 @@ export async function generateCommentBatch(evidence: CommentEvidence[], avoidCom
     const sentenceFormatsOk = ordered.length > 0
       && ordered.every((sentence) => validateGeneratedCommentPart(sentence).valid);
     if (!complete || !sentenceFormatsOk) {
-      diagnostics.push(JSON.stringify({
-        studentId,
-        subject,
+      failureMessages.push(generatedCommentFailureMessage({
         expectedIds,
         returnedIds: sentenceRows.map((row) => row.itemId),
-        lengths: ordered.map((sentence) => Array.from(sentence).length),
-        candidateLengths: sentenceRows.map((row) => row.candidateLengths),
-        endings: ordered.map((sentence) => sentence.endsWith("함.")),
-        forbidden: ordered.flatMap((sentence) => validateGeneratedComment(sentence, 1).forbidden),
+        invalidSentenceCount: ordered.filter((sentence) => !sentence || !validateGeneratedCommentPart(sentence).valid).length,
       }));
     }
     const candidates = sentenceFormatsOk ? [ordered.join(" ")] : [];
@@ -203,8 +200,7 @@ export async function generateCommentBatch(evidence: CommentEvidence[], avoidCom
       : [];
   }) : [];
   if (!comments.length && !parts.length) {
-    const detail = diagnostics.slice(0, 3).join(" | ");
-    throw new Error(`AI 결과가 영역별 1문장·50~60자·함 종결 검수를 통과하지 못했습니다.${detail ? ` 진단: ${detail}` : ""}`);
+    throw new Error(failureMessages[0] ?? "AI 결과를 확인하지 못했습니다. 기존 결과는 유지하며 완료되지 않은 영역만 다시 생성합니다.");
   }
   const responseUsage = payload && typeof payload === "object"
     ? (payload as { usage?: { input_tokens?: unknown; output_tokens?: unknown; total_tokens?: unknown; input_tokens_details?: { cached_tokens?: unknown } } }).usage

@@ -9,6 +9,35 @@ export function hasCompleteEvidenceCoverage(expectedIds: string[], coveredIds: u
     && expectedIds.every((id) => covered.has(id));
 }
 
+export function resolveGeneratedEvidenceItemId(
+  expectedIds: string[],
+  returnedId: unknown,
+  returnedSentenceCount: number,
+) {
+  if (typeof returnedId === "string") return expectedIds.includes(returnedId) ? returnedId : null;
+  return expectedIds.length === 1 && returnedSentenceCount === 1 ? expectedIds[0] : null;
+}
+
+export function generatedCommentFailureMessage(input: {
+  expectedIds: string[];
+  returnedIds: string[];
+  invalidSentenceCount: number;
+}) {
+  const returned = new Set(input.returnedIds);
+  const missingCount = input.expectedIds.filter((id) => !returned.has(id)).length;
+  if (missingCount > 0) {
+    return `AI가 ${missingCount}개 평가 영역의 문장을 반환하지 않았습니다. 기존 결과는 유지하며 누락 영역만 다시 생성합니다.`;
+  }
+  if (input.invalidSentenceCount > 0) {
+    return `AI가 반환한 ${input.invalidSentenceCount}개 문장이 작성 기준을 통과하지 못했습니다. 기존 결과는 유지하며 해당 영역만 다시 생성합니다.`;
+  }
+  return "AI 결과를 확인하지 못했습니다. 기존 결과는 유지하며 완료되지 않은 영역만 다시 생성합니다.";
+}
+
+export function normalizeGeneratedCommentWhitespace(comment: string) {
+  return comment.replace(/\s+/g, " ").trim();
+}
+
 export const commentForbiddenExpressions = [
   "부족함",
   "미흡함",

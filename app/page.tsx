@@ -1146,7 +1146,7 @@ function Comments({ assessmentDataBySubject, plan, roster }: { assessmentDataByS
     const subjectPlan = plan.filter((item) => item.subject === subject);
     const assessment = assessmentDataBySubject[subject]?.find((item) => item.id === studentId);
     if (!assessment) return;
-    if (mode === "regenerate" && !window.confirm(`${roster.find((student) => student.id === studentId)?.name ?? "이 학생"}의 ${subject} 평어 전체를 다시 생성할까요?\n\n현재 평어는 이전 버전으로 보관되고 새 결과로 교체됩니다. AI 호출 1회가 사용됩니다.`)) return;
+    if (mode === "regenerate" && !window.confirm(`${roster.find((student) => student.id === studentId)?.name ?? "이 학생"}의 ${subject} 평어 전체를 새로 생성할까요?\n\n현재 결과는 새 결과로 완전히 교체되며 이전 내용은 복구용 버전 기록에만 보관됩니다. AI 호출 1회가 사용됩니다.`)) return;
     const selection = selectedText[key];
     setRewriteBusyKey(`${key}|${mode}`);
     setError("");
