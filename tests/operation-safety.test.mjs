@@ -135,7 +135,7 @@ test("keeps the simplified plan, assessment, and behavior toolbars", () => {
   assert.match(css, /review-warning-tooltip\{position:fixed/);
   assert.match(css, /review-warning\{[^}]*min-height:28px[^}]*#dfaaa5[^}]*#fff0ee[^}]*#a33f38/);
   assert.match(css, /review-warning-tooltip\{position:fixed;z-index:10000/);
-  assert.match(recordValidation, /bytes >= 500 && bytes <= 550/);
+  assert.match(recordValidation, /bytes >= 500 && bytes <= 600/);
   assert.doesNotMatch(page, />길이 조정<\/button>/);
   assert.doesNotMatch(page, /<th>관리<\/th>[\s\S]*className="delete-student"/);
   assert.doesNotMatch(page, /function Assessments\([\s\S]{0,180}onDeleteStudent/);
