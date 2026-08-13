@@ -223,47 +223,48 @@ test("keeps behavior repair context serializable for minimal revision", () => {
   const repair = {
     studentId: 1,
     characteristic: "책임감: 맡은 역할을 끝까지 수행함",
-    repairHint: "현재 495바이트 · 목표 515~535바이트",
+    repairHint: "현재 495바이트 · 목표 515~540바이트",
     previousBehavior: "맡은 역할을 책임감 있게 수행함.",
   };
   const restored = JSON.parse(JSON.stringify(repair));
   assert.equal(restored.previousBehavior, repair.previousBehavior);
-  assert.match(restored.repairHint, /515~535/);
+  assert.match(restored.repairHint, /515~540/);
 });
 
 test("turns behavior byte gaps into concrete Korean syllable repair instructions", () => {
   assert.deepEqual(behaviorRepairPlan(495), {
-    bytes: 495, targetBytes: 515, byteDelta: 20, syllables: 7, direction: "add",
+    bytes: 495, targetBytes: 530, byteDelta: 35, syllables: 12, direction: "add",
   });
-  assert.deepEqual(behaviorRepairPlan(589), {
-    bytes: 589, targetBytes: 535, byteDelta: -54, syllables: 18, direction: "remove",
+  assert.deepEqual(behaviorRepairPlan(625), {
+    bytes: 625, targetBytes: 570, byteDelta: -55, syllables: 18, direction: "remove",
   });
-  assert.match(behaviorRepairInstruction(495), /후보 1은 506바이트, 후보 2는 518바이트.*약 7음절.*20바이트.*추가/);
-  assert.match(behaviorRepairInstruction(589), /후보 1은 544바이트, 후보 2는 532바이트.*약 18음절.*54바이트.*삭제/);
+  assert.match(behaviorRepairInstruction(495), /후보 1은 515바이트, 후보 2는 540바이트.*약 12음절.*35바이트.*추가/);
+  assert.match(behaviorRepairInstruction(625), /후보 1은 585바이트, 후보 2는 560바이트.*약 18음절.*55바이트.*삭제/);
   assert.match(behaviorRepairInstruction(525), /기준을 충족.*길이와 핵심 사실을 유지/);
 });
 
 test("uses asymmetric in-range targets for the smallest behavior repair", () => {
-  assert.deepEqual(behaviorRepairTargets(479), [506, 518]);
-  assert.deepEqual(behaviorRepairTargets(499), [506, 518]);
+  assert.deepEqual(behaviorRepairTargets(479), [515, 540]);
+  assert.deepEqual(behaviorRepairTargets(499), [515, 540]);
   assert.deepEqual(behaviorRepairTargets(500), [500, 500]);
   assert.deepEqual(behaviorRepairTargets(535), [535, 535]);
-  assert.deepEqual(behaviorRepairTargets(551), [544, 532]);
-  assert.deepEqual(behaviorRepairTargets(639), [544, 532]);
+  assert.deepEqual(behaviorRepairTargets(551), [551, 551]);
+  assert.deepEqual(behaviorRepairTargets(601), [585, 560]);
+  assert.deepEqual(behaviorRepairTargets(639), [585, 560]);
 });
 
 test("keeps behavior repair targets stable across byte boundaries and large misses", () => {
   assert.deepEqual(
-    [0, 430, 499, 500, 525, 550, 551, 625].map((bytes) => behaviorRepairPlan(bytes)),
+    [0, 430, 499, 500, 550, 600, 601, 625].map((bytes) => behaviorRepairPlan(bytes)),
     [
-      { bytes: 0, targetBytes: 515, byteDelta: 515, syllables: 172, direction: "add" },
-      { bytes: 430, targetBytes: 515, byteDelta: 85, syllables: 28, direction: "add" },
-      { bytes: 499, targetBytes: 515, byteDelta: 16, syllables: 5, direction: "add" },
+      { bytes: 0, targetBytes: 530, byteDelta: 530, syllables: 177, direction: "add" },
+      { bytes: 430, targetBytes: 530, byteDelta: 100, syllables: 33, direction: "add" },
+      { bytes: 499, targetBytes: 530, byteDelta: 31, syllables: 10, direction: "add" },
       { bytes: 500, targetBytes: 500, byteDelta: 0, syllables: 0, direction: "none" },
-      { bytes: 525, targetBytes: 525, byteDelta: 0, syllables: 0, direction: "none" },
       { bytes: 550, targetBytes: 550, byteDelta: 0, syllables: 0, direction: "none" },
-      { bytes: 551, targetBytes: 535, byteDelta: -16, syllables: 5, direction: "remove" },
-      { bytes: 625, targetBytes: 535, byteDelta: -90, syllables: 30, direction: "remove" },
+      { bytes: 600, targetBytes: 600, byteDelta: 0, syllables: 0, direction: "none" },
+      { bytes: 601, targetBytes: 570, byteDelta: -31, syllables: 10, direction: "remove" },
+      { bytes: 625, targetBytes: 570, byteDelta: -55, syllables: 18, direction: "remove" },
     ],
   );
 });
@@ -274,7 +275,7 @@ test("limits behavior length repair to fact-preserving local edits", () => {
   assert.match(shortInstruction, /새 활동·인물·성과·태도는 만들지 않음/);
   assert.match(shortInstruction, /문장 전체를 다시 쓰거나 순서를 바꾸지 말고/);
 
-  const longInstruction = behaviorRepairInstruction(589);
+  const longInstruction = behaviorRepairInstruction(625);
   assert.match(longInstruction, /중복 연결어·수식어만 줄이고/);
   assert.match(longInstruction, /관찰 사실·성장 표현·문장 수는 삭제하지 않음/);
 });
@@ -286,7 +287,7 @@ test("blocks behavior candidates outside the strict byte range from persistence"
     return `${text}함.`;
   };
   const strict = { studentId: 17, characteristic: "성장 모습: 꾸준히 노력함", behavior: behaviorAtLeast(525) };
-  const tooLong = { studentId: 21, characteristic: "성장 모습: 꾸준히 노력함", behavior: behaviorAtLeast(556) };
+  const tooLong = { studentId: 21, characteristic: "성장 모습: 꾸준히 노력함", behavior: behaviorAtLeast(606) };
 
   assert.deepEqual(assertStrictGeneratedBehaviors([strict]), [strict]);
   assert.throws(
@@ -303,7 +304,7 @@ test("selects a strict behavior candidate before the closest repair fallback", (
   };
   const short = behaviorAtLeast(493);
   const strict = behaviorAtLeast(525);
-  const long = behaviorAtLeast(560);
+  const long = behaviorAtLeast(610);
   assert.equal(selectBehaviorCandidate([short, strict, long])?.behavior, strict);
   assert.equal(selectBehaviorCandidate([short, long])?.behavior, short);
   assert.equal(selectBehaviorCandidate(["", null, undefined]), null);

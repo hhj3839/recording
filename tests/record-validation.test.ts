@@ -157,7 +157,7 @@ test("checks behavior byte length and growth expression", () => {
   }
   text += "책임감 있는 태도가 돋보임.";
   const result = validateRecord(text, true);
-  assert.equal(result.bytes >= 500 && result.bytes <= 550, true);
+  assert.equal(result.bytes >= 500 && result.bytes <= 600, true);
   assert.equal(result.growthIncluded, true);
   assert.equal(result.valid, true);
   const looseEnding = validateRecord(text.replace(/돋보임\.$/, "생활한다."), true);

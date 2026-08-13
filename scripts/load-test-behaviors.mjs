@@ -53,7 +53,7 @@ function validateBehavior(text) {
   };
   return {
     bytes,
-    strict: bytes >= 500 && bytes <= 550 && sentences.length > 0 && sentences.every(nominalEnding),
+    strict: bytes >= 500 && bytes <= 600 && sentences.length > 0 && sentences.every(nominalEnding),
     reviewable: bytes >= 470 && bytes <= 580 && sentences.length > 0 && sentences.every(nominalEnding),
   };
 }

@@ -70,7 +70,7 @@ export function validateStoredBehavior(text) {
   const spellingIssueCount = spellingRules.filter((pattern) => pattern.test(normalized)).length
     + (normalized.match(/\(/g)?.length === normalized.match(/\)/g)?.length ? 0 : 1);
   const checks = {
-    length: bytes >= 500 && bytes <= 550,
+    length: bytes >= 500 && bytes <= 600,
     endings: sentences.length > 0 && sentences.every(hasNominalMieumEnding),
     forbidden: forbidden.length === 0,
     repeated: repeated.length === 0,
