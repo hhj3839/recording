@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { auditStoredResults, groundingWarnings, validateStoredBehavior, validateStoredComment } from "../scripts/stored-quality-audit-policy.mjs";
 import { resolveStoredAuditScope } from "../scripts/stored-audit-scope-policy.mjs";
+import { buildTeacherReviewSample, summarizeTeacherReview } from "../scripts/teacher-review-sample-policy.mjs";
 
 const strictSentence = "글의 중심 생각을 정확하게 파악하고 중요한 내용을 근거와 함께 정리하여 발표 활동에 꾸준히 참여함.";
 
@@ -99,4 +100,41 @@ test("blocks fixture data from official quality metrics", () => {
     }),
     /knownFixtureContent/,
   );
+});
+
+test("teacher review summarizer only reads a local review file", async () => {
+  const source = await import("node:fs/promises").then(({ readFile }) => readFile("scripts/summarize-teacher-review.mjs", "utf8"));
+  assert.doesNotMatch(source, /fetch\s*\(|method:\s*["'](?:POST|PUT|PATCH|DELETE)["']/);
+  assert.match(source, /readFile\(file/);
+});
+
+test("creates a deterministic anonymous teacher review sample without student identifiers", () => {
+  const sample = buildTeacherReviewSample({
+    students: [{ id: 7, number: 12, name: "홍길동" }],
+    plan: [{ subject: "국어", high: "중심 생각을 근거와 함께 설명할 수 있다.", middle: "", low: "" }],
+    levels: [{ studentId: 7, subject: "국어", assessmentIndex: 0, level: "상" }],
+    comments: [{ studentId: 7, subject: "국어", comment: strictSentence }],
+    auditResult: { comments: { remediation: { meaningReviewCandidates: [] } } },
+    limit: 30,
+  });
+  assert.equal(sample.selected, 1);
+  assert.equal(sample.rows[0].reviewCode, "R001");
+  assert.equal(sample.rows[0].evidence, "중심 생각을 근거와 함께 설명할 수 있다.");
+  assert.equal(sample.rows[0].judgment.meaningMatch, "pending");
+  assert.equal("studentId" in sample.rows[0], false);
+  assert.doesNotMatch(JSON.stringify(sample), /홍길동|"number":12|"id":7/);
+});
+
+test("summarizes completed teacher judgments against PRD targets", () => {
+  const rows = Array.from({ length: 100 }, (_, index) => ({
+    judgment: { meaningMatch: index < 95 ? "pass" : "fail", unsupportedFact: index < 3 ? "yes" : "no" },
+  }));
+  assert.deepEqual(summarizeTeacherReview(rows), {
+    decided: 100,
+    meaningMatchRate: 95,
+    meaningTarget95Met: true,
+    unsupportedFactRate: 3,
+    unsupportedFactTarget3Met: true,
+    complete: true,
+  });
 });

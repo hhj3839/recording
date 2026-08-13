@@ -2,6 +2,7 @@ import { readFile, readdir } from "node:fs/promises";
 import path from "node:path";
 import { auditStoredResults } from "./stored-quality-audit-policy.mjs";
 import { resolveStoredAuditScope } from "./stored-audit-scope-policy.mjs";
+import { buildTeacherReviewSample } from "./teacher-review-sample-policy.mjs";
 
 const baseUrl = (process.env.LOAD_TEST_BASE_URL || "https://giroksam-recording.vercel.app").replace(/\/$/, "");
 
@@ -38,10 +39,19 @@ const auditScope = resolveStoredAuditScope({
   comments: commentData.comments,
   behaviors: behaviorData.behaviors,
 });
+const auditResult = auditStoredResults({
+  students: classData.students, plan: planData.plan, levels: classData.levels,
+  comments: commentData.comments, parts: commentData.parts, behaviors: behaviorData.behaviors,
+});
+const teacherReviewSample = auditScope.officialEligible ? buildTeacherReviewSample({
+  students: classData.students,
+  plan: planData.plan,
+  levels: classData.levels,
+  comments: commentData.comments,
+  auditResult,
+  limit: Number(process.env.AUDIT_REVIEW_SAMPLE_SIZE) || 30,
+}) : null;
 process.stdout.write(`${JSON.stringify({
-  mode: "stored-quality-audit", readOnly: true, auditScope,
-  ...auditStoredResults({
-    students: classData.students, plan: planData.plan, levels: classData.levels,
-    comments: commentData.comments, parts: commentData.parts, behaviors: behaviorData.behaviors,
-  }),
+  mode: "stored-quality-audit", readOnly: true, auditScope, teacherReviewSample,
+  ...auditResult,
 }, null, 2)}\n`);
