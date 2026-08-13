@@ -115,6 +115,7 @@ test("keeps the simplified plan, assessment, and behavior toolbars", () => {
   assert.match(page, /className="comment-row-actions review-cell-actions comment-review-actions"[\s\S]*다시 생성[\s\S]*선택한 부분 바꾸기/);
   assert.doesNotMatch(page, /evidenceKey|setEvidenceKey|className="evidence-button"/);
   const css = readFileSync("app/globals.css", "utf8");
+  const recordValidation = readFileSync("app/record-validation.ts", "utf8");
   assert.match(page, /className="comment-review-controls"[\s\S]*compact-similarity[\s\S]*comment-review-actions/);
   assert.match(css, /comment-review-cell>\.comment-review-controls\{display:inline-flex;width:max-content;max-width:100%;align-items:stretch;flex-direction:column;flex-wrap:nowrap;gap:0\}/);
   assert.match(css, /comment-review-cell \.review-cell-actions\{display:flex;align-items:center;gap:4px\}/);
@@ -127,7 +128,12 @@ test("keeps the simplified plan, assessment, and behavior toolbars", () => {
   assert.doesNotMatch(page, /issues\.length === 1/);
   assert.match(page, /createPortal\([\s\S]*review-warning-tooltip[\s\S]*document\.body/);
   assert.match(page, /document\.addEventListener\("pointerdown", closeOutside\)/);
+  assert.match(page, /rect\.top > estimatedHeight \+ 16[\s\S]*rect\.bottom \+ 8/);
+  assert.match(page, /window\.innerWidth - width - 12/);
   assert.match(css, /review-warning-tooltip\{position:fixed/);
+  assert.match(css, /review-warning\{[^}]*min-height:28px[^}]*#dfaaa5[^}]*#fff0ee[^}]*#a33f38/);
+  assert.match(css, /review-warning-tooltip\{position:fixed;z-index:10000/);
+  assert.match(recordValidation, /bytes >= 500 && bytes <= 550/);
   assert.doesNotMatch(page, />길이 조정<\/button>/);
   assert.doesNotMatch(page, /<th>관리<\/th>[\s\S]*className="delete-student"/);
   assert.doesNotMatch(page, /function Assessments\([\s\S]{0,180}onDeleteStudent/);
