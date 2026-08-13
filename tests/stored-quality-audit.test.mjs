@@ -83,6 +83,20 @@ test("requires and verifies the active classroom for an official audit", () => {
   );
 });
 
+test("accepts a fixture-excluded official scope after fixtures are removed from the supplied range", () => {
+  const classroom = { id: 10, schoolName: "기록샘 실험실", schoolYear: 2026, semester: 1, grade: 3, classNumber: 1 };
+  const scope = resolveStoredAuditScope({
+    env: { AUDIT_MODE: "official-fixture-excluded", AUDIT_CLASSROOM_ID: "10" },
+    classroom,
+    students: [{ id: 4, name: "학생04" }],
+    comments: [],
+    behaviors: [],
+  });
+  assert.equal(scope.mode, "official-fixture-excluded");
+  assert.equal(scope.officialEligible, true);
+  assert.equal(scope.targetVerified, true);
+});
+
 test("blocks fixture data from official quality metrics", () => {
   assert.throws(
     () => resolveStoredAuditScope({
