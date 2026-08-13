@@ -237,8 +237,13 @@ function ClassroomManager({ current, embedded = false }: { current: ClassroomInf
     <section className="dashboard-classroom-card" aria-label="현재 학급">
       <div className="classroom-identity">
         <span>현재 학급</span>
-        <strong>{current?.schoolName ?? "학급 정보를 불러오는 중"}</strong>
-        {current && <div><b>{current.grade}학년 {current.classNumber}반</b><i>{current.schoolYear}학년도</i><i>{current.semester}학기</i></div>}
+        {current ? <div className="classroom-identity-line">
+          <strong>{current.schoolName}</strong>
+          <i aria-hidden="true">·</i>
+          <b>{current.grade}학년 {current.classNumber}반</b>
+          <i aria-hidden="true">·</i>
+          <em>{current.schoolYear}학년도 {current.semester}학기</em>
+        </div> : <strong>학급 정보를 불러오는 중</strong>}
       </div>
       <button className="class-switch-button" aria-expanded={open} onClick={() => setOpen((value) => !value)}>학급 전환 <span>{open ? "⌃" : "⌄"}</span></button>
     </section>
