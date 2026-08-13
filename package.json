@@ -23,6 +23,7 @@
     "test:load-behaviors:preflight": "node scripts/load-test-behaviors.mjs preflight",
     "test:audit-stored": "node scripts/audit-stored-results.mjs",
     "audit:stored-classification": "node scripts/audit-stored-results.mjs",
+    "audit:teacher-review": "node scripts/summarize-teacher-review.mjs",
     "lint": "eslint . --ignore-pattern dist --ignore-pattern .next",
     "db:generate": "drizzle-kit generate",
     "db:migrate-auth": "node scripts/migrate-auth-ownership.mjs",
