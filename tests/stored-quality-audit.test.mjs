@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { auditStoredResults, groundingWarnings, validateStoredBehavior, validateStoredComment } from "../scripts/stored-quality-audit-policy.mjs";
+import { resolveStoredAuditScope } from "../scripts/stored-audit-scope-policy.mjs";
 
 const strictSentence = "글의 중심 생각을 정확하게 파악하고 중요한 내용을 근거와 함께 정리하여 발표 활동에 꾸준히 참여함.";
 
@@ -53,4 +54,49 @@ test("audit runner contains GET-only data reads after login", async () => {
   const afterLogin = source.slice(source.indexOf("const get ="));
   assert.doesNotMatch(afterLogin, /method:\s*["'](?:POST|PUT|PATCH|DELETE)["']/);
   assert.doesNotMatch(afterLogin, /\/api\/(?:comment-jobs|behavior-jobs|generate-(?:all-)?(?:comment|behavior))/);
+});
+
+test("marks an unspecified audit as diagnostic instead of an official result", () => {
+  const scope = resolveStoredAuditScope({
+    env: {},
+    classroom: { id: 10, schoolName: "기록샘 실험실", schoolYear: 2026, semester: 1, grade: 3, classNumber: 1 },
+    students: [{ id: 1, name: "학생01" }],
+  });
+  assert.equal(scope.mode, "diagnostic");
+  assert.equal(scope.officialEligible, false);
+  assert.equal(scope.targetVerified, false);
+});
+
+test("requires and verifies the active classroom for an official audit", () => {
+  const classroom = { id: 10, schoolName: "정상 기준 학급", schoolYear: 2026, semester: 1, grade: 3, classNumber: 1 };
+  const scope = resolveStoredAuditScope({
+    env: { AUDIT_MODE: "official", AUDIT_CLASSROOM_ID: "10" }, classroom, students: [{ id: 1, name: "학생01" }],
+  });
+  assert.equal(scope.officialEligible, true);
+  assert.equal(scope.targetVerified, true);
+  assert.throws(
+    () => resolveStoredAuditScope({ env: { AUDIT_MODE: "official", AUDIT_CLASSROOM_ID: "11" }, classroom, students: [] }),
+    /classroom mismatch/,
+  );
+});
+
+test("blocks fixture data from official quality metrics", () => {
+  assert.throws(
+    () => resolveStoredAuditScope({
+      env: { AUDIT_MODE: "official", AUDIT_CLASSROOM_ID: "20" },
+      classroom: { id: 20, schoolName: "기록샘 UI 오류 점검", schoolYear: 2026, semester: 1, grade: 3, classNumber: 2 },
+      students: [{ id: 1, name: "오류학생01" }],
+    }),
+    /Official audit blocked by fixture signals/,
+  );
+  assert.throws(
+    () => resolveStoredAuditScope({
+      env: { AUDIT_MODE: "official", AUDIT_CLASSROOM_ID: "10" },
+      classroom: { id: 10, schoolName: "기록샘 실험실", schoolYear: 2026, semester: 1, grade: 3, classNumber: 1 },
+      students: [{ id: 1, name: "학생01" }],
+      comments: [{ studentId: 1, comment: "학원에서 대회 실적을 준비하며 되여" }],
+      behaviors: [],
+    }),
+    /knownFixtureContent/,
+  );
 });
