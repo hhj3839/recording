@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { auditStoredResults, groundingWarnings, validateStoredBehavior, validateStoredComment } from "../scripts/stored-quality-audit-policy.mjs";
-import { resolveStoredAuditScope } from "../scripts/stored-audit-scope-policy.mjs";
+import { isKnownFixtureText, resolveStoredAuditScope } from "../scripts/stored-audit-scope-policy.mjs";
 import { buildTeacherReviewSample, summarizeTeacherReview } from "../scripts/teacher-review-sample-policy.mjs";
 
 const strictSentence = "글의 중심 생각을 정확하게 파악하고 중요한 내용을 근거와 함께 정리하여 발표 활동에 꾸준히 참여함.";
@@ -100,6 +100,25 @@ test("blocks fixture data from official quality metrics", () => {
     }),
     /knownFixtureContent/,
   );
+});
+
+test("allows known comment fixtures only in a clearly partial teacher review", () => {
+  const classroom = { id: 10, schoolName: "기록샘 실험실", schoolYear: 2026, semester: 1, grade: 3, classNumber: 1 };
+  const scope = resolveStoredAuditScope({
+    env: { AUDIT_MODE: "teacher-review", AUDIT_CLASSROOM_ID: "10" },
+    classroom,
+    students: [{ id: 1, name: "학생01" }],
+    comments: [{ studentId: 1, comment: "학원에서 대회 실적을 준비하며 되여" }],
+  });
+  assert.equal(scope.officialEligible, false);
+  assert.equal(scope.teacherReviewEligible, true);
+  assert.equal(scope.partialReview, true);
+  assert.equal(isKnownFixtureText("학원에서 대회 실적을 준비하며 되여"), true);
+  assert.throws(() => resolveStoredAuditScope({
+    env: { AUDIT_MODE: "teacher-review", AUDIT_CLASSROOM_ID: "20" },
+    classroom: { ...classroom, id: 20, schoolName: "기록샘 UI 오류 점검" },
+    students: [{ id: 1, name: "오류학생01" }],
+  }), /Teacher review blocked by fixture scope/);
 });
 
 test("teacher review summarizer only reads a local review file", async () => {

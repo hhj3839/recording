@@ -24,6 +24,7 @@
 - 수기 기준선과 기록샘 측정은 같은 교사가 비슷한 규모·난이도의 자료로 수행함.
 - 공식 저장 결과 감사의 익명 30문장 표본은 이름·학번·학생 ID 없이 `R001` 형식으로 제공함. 교사는 각 문장의 평가수준 의미 일치 여부와 입력 밖 사실 포함 여부를 판정하며, 자동 휴리스틱 경고만으로 목표 달성을 확정하지 않음.
 - 표본 JSON의 `judgment.meaningMatch`를 `pass` 또는 `fail`, `judgment.unsupportedFact`를 `yes` 또는 `no`로 작성한 뒤 `pnpm audit:teacher-review <검토파일.json>`으로 완료 수와 두 비율을 집계함. 판정이 남은 행이 있으면 `complete: false`로 표시함.
+- 오류 상태를 유지한 기존 실험실 학급에서는 `AUDIT_MODE=teacher-review`와 정확한 `AUDIT_CLASSROOM_ID`를 사용해 알려진 오류 교과 평어를 제외한 부분 표본만 만들 수 있음. 출력의 제외 건수와 `partialReview: true`를 함께 보관하고 225건 전체 감사 결과로 기록하지 않음.
 
 ## 측정 규칙
 
