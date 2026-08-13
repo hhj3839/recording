@@ -29,12 +29,13 @@ export async function GET() {
 
 export async function PUT(request: Request) {
   try {
-    const body = await request.json() as { studentId?: unknown; subject?: unknown; comment?: unknown; confirmed?: unknown };
+    const body = await request.json() as { studentId?: unknown; subject?: unknown; comment?: unknown; confirmed?: unknown; discardPrevious?: unknown };
     const studentId = Number(body.studentId);
     const subject = typeof body.subject === "string" ? body.subject : "";
     const comment = typeof body.comment === "string" ? body.comment.trim().slice(0, 4000) : "";
     if (!Number.isInteger(studentId) || !subject) return Response.json({ error: "평어 정보를 확인해 주세요." }, { status: 400 });
     const confirmed = body.confirmed === true;
+    const discardPrevious = body.discardPrevious === true;
     const validation = validateRecord(comment);
     const { user, classId } = await getDataScope();
     await requireOwnedStudentIds([studentId], user.id, classId);
@@ -50,7 +51,9 @@ export async function PUT(request: Request) {
       if (issue) return Response.json(issue, { status: issue.status });
     }
     if (contentChanged) {
+      if (!discardPrevious) {
       await archiveComment({ ownerId: user.id, ownerEmail: user.email, classId, studentId, subject, nextContent: comment, source: confirmed ? "confirmation" : "manual-edit" });
+      }
       await supabaseRequest("generated_comment_parts", {
         method: "DELETE",
         query: { owner_id: eq(user.id), class_id: eq(classId), student_id: eq(studentId), subject: eq(subject) },
