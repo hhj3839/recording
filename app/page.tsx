@@ -1072,6 +1072,8 @@ function Comments({ assessmentDataBySubject, plan, roster }: { assessmentDataByS
     const eligibleIds = subjectStudents
       .filter((student) => student.assessments.some((level) => ["상", "중", "하"].includes(level)))
       .map((student) => student.id);
+    if (!eligibleIds.length) return setError(`${selectedSubject}에서 상·중·하 평가수준이 입력된 학생이 없습니다.`);
+    const isRetry = Boolean(retryStudentIds?.length);
     let targetIds = retryStudentIds?.length ? retryStudentIds.filter((id) => eligibleIds.includes(id)) : eligibleIds;
     let overwriteExisting = false;
     if (!retryStudentIds?.length) {
@@ -1083,7 +1085,9 @@ function Comments({ assessmentDataBySubject, plan, roster }: { assessmentDataByS
         else return;
       }
     }
-    if (!targetIds.length) return setError(`${selectedSubject}에서 상·중·하 평가수준이 입력된 학생이 없습니다.`);
+    if (!targetIds.length) return setError(isRetry
+      ? `${selectedSubject}에서 다시 생성할 수 있는 학생이 없습니다.`
+      : `${selectedSubject} 평어가 모든 생성 대상 학생에게 이미 작성되어 있습니다.`);
     setLoading(true);
     setError("");
     setGenerationProgress("작업 등록 중…");
