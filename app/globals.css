@@ -63,7 +63,7 @@ h1, h2, h3, p { margin-top: 0; }
 .trend { background: #f3f7fb; color: #65809e; width: 24px; height: 24px; border-radius: 7px; display: grid; place-items: center; }
 .stat-card strong { display: block; font-size: 27px; margin-top: 15px; }
 .stat-card small { color: #929aa6; font-size: 11px; }
-.dashboard-grid { display: grid; grid-template-columns: 1.65fr 1fr; gap: 18px; }
+.dashboard-grid { display: grid; grid-template-columns: 1fr; gap: 18px; }
 .panel { background: #fff; border: 1px solid var(--line); border-radius: 12px; box-shadow: 0 3px 12px #1d293906; }
 .task-panel, .quick-panel, .behavior-form, .result-panel { padding: 22px; }
 .section-heading { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 14px; }
@@ -89,6 +89,7 @@ h1, h2, h3, p { margin-top: 0; }
 .privacy-banner strong { font-size: 11px; color: #35618f; }
 .privacy-banner p { margin: 3px 0 0; font-size: 10px; color: #7a91aa; }
 .privacy-banner button { border: 0; background: none; color: #4779ad; font-size: 10px; font-weight: 700; }
+.dashboard-classroom{position:relative}.classroom-popover{position:absolute;z-index:20;right:0;top:calc(100% + 8px);width:min(430px,calc(100vw - 32px));padding:16px;border:1px solid #dfe5ec;border-radius:12px;background:#fff;box-shadow:0 18px 45px rgba(30,41,59,.16)}.classroom-popover-heading{display:flex;align-items:center;justify-content:space-between;margin-bottom:12px}.classroom-popover-heading strong,.classroom-popover-heading small{display:block}.classroom-popover-heading small{margin-top:3px;color:#7c8998;font-size:10px}.classroom-popover-heading>button{border:0;border-radius:7px;background:#edf3fa;color:#315f94;padding:8px 10px;font-size:10px;font-weight:800}.classroom-popover .classroom-list{max-height:260px;overflow-y:auto}.classroom-popover .classroom-list>article{grid-template-columns:1fr}.classroom-popover-form{display:grid;grid-template-columns:1fr 1fr;gap:9px;margin-top:14px;padding-top:14px;border-top:1px solid #e8edf2}.classroom-popover-form label{display:grid;gap:5px}.classroom-popover-form label span{color:#58677a;font-size:10px;font-weight:750}.classroom-popover-form input,.classroom-popover-form select{width:100%;min-height:38px;box-sizing:border-box;border:1px solid #d5dce7;border-radius:7px;padding:8px;background:#fff}.classroom-popover-form .wide{grid-column:1/-1}.classroom-popover-form button{border:0;border-radius:7px;padding:10px;background:#315f94;color:#fff;font-weight:800}.dashboard-complete{margin:0;padding:28px 16px;text-align:center;color:#607087;background:#f7fafc;border-radius:9px}
 .page-heading { display: flex; justify-content: space-between; align-items: flex-end; margin-bottom: 28px; }
 .page-heading button, .heading-actions button, .bottom-action button, .confirm-box button, .confirm-result { border: 0; background: var(--navy); color: white; border-radius: 8px; padding: 11px 16px; font-size: 12px; font-weight: 750; }
 button.secondary { color: #526171; border: 1px solid #dce1e6; background: #fff; }

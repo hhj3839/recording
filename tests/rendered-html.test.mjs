@@ -35,3 +35,13 @@ test("publishes privacy policy and service terms without login", async () => {
   assert.equal(terms.status, 200);
   assert.match(await terms.text(), /서비스 이용약관/);
 });
+
+test("keeps classroom switching inside the dashboard without duplicate shortcuts", async () => {
+  const source = await import("node:fs/promises").then(({ readFile }) => readFile("app/page.tsx", "utf8"));
+  assert.doesNotMatch(source, /id: "classes", label: "학급 관리"/);
+  assert.match(source, /<ClassroomManager current=\{classroom\} embedded \/>/);
+  assert.match(source, /className="classroom-popover"/);
+  assert.doesNotMatch(source, /<h2>빠른 시작<\/h2>|전체 보기 →/);
+  assert.match(source, /rosterIds\.has\(Number\(item\.studentId\)\) && subjectNames\.has\(item\.subject\)/);
+  assert.match(source, /입력 근거를 바탕으로 초안을 만들며, 교사가 최종 확인합니다/);
+});
