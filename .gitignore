@@ -46,3 +46,4 @@ next-env.d.ts
 /.pnpm-store/
 *.tsbuildinfo
 /.local-secrets/
+/.local-reports/

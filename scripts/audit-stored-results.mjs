@@ -1,4 +1,4 @@
-import { readFile, readdir } from "node:fs/promises";
+import { mkdir, readFile, readdir, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { auditStoredResults } from "./stored-quality-audit-policy.mjs";
 import { isKnownFixtureText, resolveStoredAuditScope } from "./stored-audit-scope-policy.mjs";
@@ -66,7 +66,30 @@ if (teacherReviewSample) {
       : "공식 감사 안전장치를 통과한 학급 표본",
   };
 }
-process.stdout.write(`${JSON.stringify({
+const output = JSON.stringify({
   mode: "stored-quality-audit", readOnly: true, auditScope, teacherReviewSample,
   ...auditResult,
-}, null, 2)}\n`);
+}, null, 2);
+const outputFile = process.env.AUDIT_OUTPUT_FILE?.trim();
+if (outputFile) {
+  const resolvedOutputFile = path.resolve(outputFile);
+  const localReportDirectory = path.resolve(".local-reports");
+  if (resolvedOutputFile !== localReportDirectory && !resolvedOutputFile.startsWith(`${localReportDirectory}${path.sep}`)) {
+    throw new Error("AUDIT_OUTPUT_FILE must be inside .local-reports");
+  }
+  await mkdir(path.dirname(resolvedOutputFile), { recursive: true });
+  await writeFile(resolvedOutputFile, `${output}\n`, { encoding: "utf8", mode: 0o600 });
+  process.stdout.write(`${JSON.stringify({
+    saved: true,
+    outputFile: resolvedOutputFile,
+    auditScope,
+    teacherReviewSummary: teacherReviewSample ? {
+      requested: teacherReviewSample.requested,
+      available: teacherReviewSample.available,
+      selected: teacherReviewSample.selected,
+      scope: teacherReviewSample.scope,
+    } : null,
+  }, null, 2)}\n`);
+} else {
+  process.stdout.write(`${output}\n`);
+}

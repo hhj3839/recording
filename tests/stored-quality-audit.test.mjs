@@ -55,6 +55,8 @@ test("audit runner contains GET-only data reads after login", async () => {
   const afterLogin = source.slice(source.indexOf("const get ="));
   assert.doesNotMatch(afterLogin, /method:\s*["'](?:POST|PUT|PATCH|DELETE)["']/);
   assert.doesNotMatch(afterLogin, /\/api\/(?:comment-jobs|behavior-jobs|generate-(?:all-)?(?:comment|behavior))/);
+  assert.match(source, /AUDIT_OUTPUT_FILE must be inside \.local-reports/);
+  assert.match(source, /mode: 0o600/);
 });
 
 test("marks an unspecified audit as diagnostic instead of an official result", () => {
