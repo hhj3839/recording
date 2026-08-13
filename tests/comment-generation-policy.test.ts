@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { commentAreaIssuesForDisplay, composeGeneratedCommentCandidate, evidenceGroundingWarnings, hasCompleteEvidenceCoverage, normalizeGeneratedCommentCandidate, openingRepetitionRate, replaceSelectedCommentText, validateGeneratedComment, validateGeneratedCommentPart } from "../app/comment-generation-policy.ts";
+import { commentAreaIssuesForDisplay, composeGeneratedCommentCandidate, evidenceGroundingWarnings, generatedCommentFailureMessage, hasCompleteEvidenceCoverage, normalizeGeneratedCommentCandidate, normalizeGeneratedCommentWhitespace, openingRepetitionRate, replaceSelectedCommentText, resolveGeneratedEvidenceItemId, validateGeneratedComment, validateGeneratedCommentPart } from "../app/comment-generation-policy.ts";
 import { behaviorRepairInstruction, behaviorRepairPlan, behaviorRepairTargets } from "../app/behavior-repair-policy.ts";
 import { assertStrictGeneratedBehaviors, selectBehaviorCandidate } from "../app/behavior-persistence-policy.ts";
 import { generationModel } from "../app/ai-model-policy.ts";
@@ -52,6 +52,35 @@ test("rejects a generated comment when any assessment item is omitted", () => {
 test("rejects unknown or duplicated coverage identifiers", () => {
   assert.equal(hasCompleteEvidenceCoverage(["e1", "e2"], ["e1", "e2", "e3"]), false);
   assert.equal(hasCompleteEvidenceCoverage(["e1", "e2"], ["e1", "e1", "e2"]), false);
+});
+
+test("recovers a missing item id only for one unambiguous generated sentence", () => {
+  assert.equal(resolveGeneratedEvidenceItemId(["e1"], undefined, 1), "e1");
+  assert.equal(resolveGeneratedEvidenceItemId(["e1"], "unknown", 1), null);
+  assert.equal(resolveGeneratedEvidenceItemId(["e1", "e2"], undefined, 1), null);
+  assert.equal(resolveGeneratedEvidenceItemId(["e1"], undefined, 2), null);
+  assert.equal(resolveGeneratedEvidenceItemId(["e1", "e2"], "e2", 2), "e2");
+});
+
+test("explains missing areas separately without exposing internal diagnostics", () => {
+  const missing = generatedCommentFailureMessage({
+    expectedIds: ["e1"], returnedIds: [], invalidSentenceCount: 1,
+  });
+  assert.match(missing, /1개 평가 영역의 문장을 반환하지 않았습니다/);
+  assert.match(missing, /기존 결과는 유지/);
+  assert.doesNotMatch(missing, /expectedIds|50~60자|함 종결/);
+
+  const invalid = generatedCommentFailureMessage({
+    expectedIds: ["e1"], returnedIds: ["e1"], invalidSentenceCount: 1,
+  });
+  assert.match(invalid, /1개 문장이 작성 기준을 통과하지 못했습니다/);
+});
+
+test("flattens AI line breaks when a complete comment is regenerated", () => {
+  assert.equal(
+    normalizeGeneratedCommentWhitespace("첫 번째 영역을 평가함.\n\n두 번째 영역을 평가함.\r\n세 번째 영역을 평가함."),
+    "첫 번째 영역을 평가함. 두 번째 영역을 평가함. 세 번째 영역을 평가함.",
+  );
 });
 
 test("accepts one 50 to 60 character sentence per assessment area ending in 함", () => {

@@ -3,7 +3,7 @@ import { checkAiUsage, MONTHLY_AI_LIMIT, recordAiUsage } from "../../ai-usage";
 import { createCommentVariations } from "../../comment-variation";
 import { eq, selectRows } from "../../../db/supabase";
 import { primaryAiModel } from "../../ai-model-policy";
-import { replaceSelectedCommentText, validateGeneratedComment } from "../../comment-generation-policy";
+import { normalizeGeneratedCommentWhitespace, replaceSelectedCommentText, validateGeneratedComment } from "../../comment-generation-policy";
 
 type Level = "상" | "중" | "하" | "미응시" | "평가 예정" | "-";
 
@@ -131,7 +131,7 @@ export async function POST(request: Request) {
 
     const activeEvidenceCount = levels.filter((level) => ["상", "중", "하"].includes(level)).length;
     const modeInstruction = mode === "regenerate"
-      ? `기존 평어 전체를 평가 근거에 맞게 새로 작성해 줘. 평가 영역마다 정확히 1문장씩 총 ${activeEvidenceCount}문장을 작성하고, 각 문장은 50~60자이며 반드시 ‘함.’으로 끝내. 기존 평어의 표현은 복사하지 말고 근거에 없는 행동·태도·과정을 추가하지 마.\n기존 평어: ${currentComment}`
+      ? `이 학생의 기존 평어를 참고하거나 수정하지 말고, 아래 평가 근거만 사용하여 평어 전체를 처음부터 새로 작성해 줘. 평가 영역마다 정확히 1문장씩 총 ${activeEvidenceCount}문장을 작성하고, 각 문장은 50~60자이며 반드시 ‘함.’으로 끝내. 근거에 없는 행동·태도·과정을 추가하지 마.`
       : mode === "shorter"
       ? `기존 평어를 평가 근거에서 벗어나지 않게 더 짧고 간결하게 다시 작성해 줘.\n기존 평어: ${currentComment}`
       : mode === "specific"
@@ -188,7 +188,10 @@ export async function POST(request: Request) {
       return Response.json({ error: "AI 생성 요청을 처리하지 못했습니다. 잠시 후 다시 시도해 주세요." }, { status: 502 });
     }
 
-    const generatedText = extractOutputText(payload);
+    const rawGeneratedText = extractOutputText(payload);
+    const generatedText = mode === "regenerate"
+      ? normalizeGeneratedCommentWhitespace(rawGeneratedText)
+      : rawGeneratedText;
     if (!generatedText) return Response.json({ error: "AI가 문장을 반환하지 않았습니다. 다시 시도해 주세요." }, { status: 502 });
     if (mode === "regenerate" && !validateGeneratedComment(generatedText, activeEvidenceCount).valid) {
       return Response.json({ error: "새 평어가 영역별 문장 형식 검수를 통과하지 못했습니다. 다시 시도해 주세요." }, { status: 502 });
