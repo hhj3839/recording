@@ -113,6 +113,8 @@ test("keeps the simplified plan, assessment, and behavior toolbars", () => {
   assert.match(page, /validation\.bytes > 600 \? \[`600B 초과 · 현재 \$\{validation\.bytes\}B`\]/);
   assert.equal((page.match(/className="secondary result-copy-button"/g) ?? []).length, 2);
   assert.match(page, /className="comment-row-actions review-cell-actions comment-review-actions"[\s\S]*다시 생성[\s\S]*선택한 부분 바꾸기/);
+  assert.match(page, /if \(!eligibleIds\.length\) return setError\(`\$\{selectedSubject\}에서 상·중·하 평가수준이 입력된 학생이 없습니다\.`\)/);
+  assert.match(page, /isRetry[\s\S]*다시 생성할 수 있는 학생이 없습니다[\s\S]*모든 생성 대상 학생에게 이미 작성되어 있습니다/);
   assert.doesNotMatch(page, /evidenceKey|setEvidenceKey|className="evidence-button"/);
   const css = readFileSync("app/globals.css", "utf8");
   const recordValidation = readFileSync("app/record-validation.ts", "utf8");
