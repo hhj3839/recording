@@ -1146,12 +1146,26 @@ function Comments({ assessmentDataBySubject, plan, roster }: { assessmentDataByS
     const subjectPlan = plan.filter((item) => item.subject === subject);
     const assessment = assessmentDataBySubject[subject]?.find((item) => item.id === studentId);
     if (!assessment) return;
-    if (mode === "regenerate" && !window.confirm(`${roster.find((student) => student.id === studentId)?.name ?? "이 학생"}의 ${subject} 평어 전체를 새로 생성할까요?\n\n현재 결과는 새 결과로 완전히 교체되며 이전 내용은 복구용 버전 기록에만 보관됩니다. AI 호출 1회가 사용됩니다.`)) return;
     const selection = selectedText[key];
+    const previousComment = comments[key] ?? "";
     setRewriteBusyKey(`${key}|${mode}`);
     setError("");
     setNotice("");
     try {
+      if (mode === "regenerate") {
+        setComments((current) => ({ ...current, [key]: "" }));
+        setCommentParts((current) => current.filter((part) => part.studentId !== studentId || part.subject !== subject));
+        const clearResponse = await fetch("/api/generated-comments", {
+          method: "PUT",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ studentId, subject, comment: "", confirmed: false, discardPrevious: true }),
+        });
+        const clearResult = await clearResponse.json() as { error?: string };
+        if (!clearResponse.ok) {
+          setComments((current) => ({ ...current, [key]: previousComment }));
+          throw new Error(clearResult.error || "기존 평어를 삭제하지 못했습니다.");
+        }
+      }
       const response = await fetch("/api/generate-comment", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -1160,7 +1174,7 @@ function Comments({ assessmentDataBySubject, plan, roster }: { assessmentDataByS
           levels: assessment.assessments,
           plan: subjectPlan,
           mode,
-          currentComment: comments[key] ?? "",
+          currentComment: mode === "regenerate" ? "" : previousComment,
           selectedText: selection?.text ?? "",
           selectionStart: selection?.start,
           selectionEnd: selection?.end,
@@ -1258,7 +1272,7 @@ function Comments({ assessmentDataBySubject, plan, roster }: { assessmentDataByS
                     {selectedText[key] && <small className="comment-selection-hint">“{selectedText[key].text.slice(0, 36)}{selectedText[key].text.length > 36 ? "…" : ""}” 선택됨</small>}
                   </td>
                   <td className="validation-cell issue-only-validation comment-review-cell">
-                    <div className="comment-review-controls"><ReviewWarning issues={commentReviewIssues} />{similarStudents.length > 0 && closest && <div className="similarity-detail compact-similarity"><strong>{closest.student.name} 학생과 {Math.round(closest.score * 100)}%</strong></div>}<div className="comment-row-actions review-cell-actions comment-review-actions"><button className="regenerate-button" disabled={!text || !!rewriteBusyKey} onMouseDown={(event) => event.preventDefault()} onClick={() => void rewriteComment(student.id, selectedSubject, "regenerate")}>{rewriteBusyKey === `${key}|regenerate` ? "생성 중…" : "다시 생성"}</button><button disabled={!selectedText[key] || !!rewriteBusyKey} title={selectedText[key] ? "선택한 부분만 평가 근거에 맞게 바꿉니다." : "평어에서 바꿀 문장이나 표현을 먼저 선택하세요."} onMouseDown={(event) => event.preventDefault()} onClick={() => void rewriteComment(student.id, selectedSubject, "selection")}>{rewriteBusyKey === `${key}|selection` ? "변경 중…" : "선택한 부분 바꾸기"}</button></div></div>
+                    <div className="comment-review-controls"><ReviewWarning issues={commentReviewIssues} />{similarStudents.length > 0 && closest && <div className="similarity-detail compact-similarity"><strong>{closest.student.name} 학생과 {Math.round(closest.score * 100)}%</strong></div>}<div className="comment-row-actions review-cell-actions comment-review-actions"><button className="regenerate-button" disabled={!hasLevel || !!rewriteBusyKey} onMouseDown={(event) => event.preventDefault()} onClick={() => void rewriteComment(student.id, selectedSubject, "regenerate")}>{rewriteBusyKey === `${key}|regenerate` ? "생성 중…" : "다시 생성"}</button><button disabled={!selectedText[key] || !!rewriteBusyKey} title={selectedText[key] ? "선택한 부분만 평가 근거에 맞게 바꿉니다." : "평어에서 바꿀 문장이나 표현을 먼저 선택하세요."} onMouseDown={(event) => event.preventDefault()} onClick={() => void rewriteComment(student.id, selectedSubject, "selection")}>{rewriteBusyKey === `${key}|selection` ? "변경 중…" : "선택한 부분 바꾸기"}</button></div></div>
                   </td>
                 </tr>;
               })}</tbody>

@@ -144,3 +144,10 @@ test("keeps the simplified plan, assessment, and behavior toolbars", () => {
   assert.match(page, /className="comment-review-controls"[\s\S]*compact-similarity[\s\S]*comment-review-actions/);
   assert.match(page, /compact-similarity"><strong>\{closest\.student\.name\} 학생과 \{Math\.round\(closest\.score \* 100\)\}%<\/strong><\/div>/);
 });
+
+test("clears a comment before regeneration without a confirmation dialog", () => {
+  const page = readFileSync("app/page.tsx", "utf8");
+  assert.match(page, /mode === "regenerate"[\s\S]*discardPrevious: true[\s\S]*\/api\/generate-comment/);
+  assert.doesNotMatch(page, /mode === "regenerate" && !window\.confirm/);
+  assert.match(page, /disabled=\{!hasLevel \|\| !!rewriteBusyKey\}/);
+});

@@ -108,7 +108,9 @@ export async function POST(request: Request) {
     const selectionStart = Number(body.selectionStart);
     const selectionEnd = Number(body.selectionEnd);
     const studentId = Number(body.studentId);
-    if (mode !== "new" && !currentComment.trim()) return Response.json({ error: "다시 작성할 기존 평어가 없습니다." }, { status: 400 });
+    if (["shorter", "specific", "selection"].includes(mode) && !currentComment.trim()) {
+      return Response.json({ error: "다시 작성할 기존 평어가 없습니다." }, { status: 400 });
+    }
     if (mode === "selection" && !selectedText) return Response.json({ error: "다시 생성할 문장을 먼저 선택해 주세요." }, { status: 400 });
     if (mode === "selection"
       && (!Number.isInteger(selectionStart) || !Number.isInteger(selectionEnd)
