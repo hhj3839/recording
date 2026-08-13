@@ -1188,6 +1188,16 @@ function Comments({ assessmentDataBySubject, plan, roster }: { assessmentDataByS
                 const areaIssues = areaStatuses
                   .map((part) => ({ ...part, visibleIssues: commentAreaIssuesForDisplay(part.status, part.issues) }))
                   .filter((part) => part.status === "needs_review" || part.visibleIssues.length > 0);
+                const commentReviewIssues = [
+                  ...(!validation.endingsOk ? ["음·임 종결 확인"] : []),
+                  ...(validation.forbidden.length > 0 ? [`금지어 확인: ${validation.forbidden.join(" · ")}`] : []),
+                  ...(!validation.spellingOk ? validation.spellingIssues.map((issue) => `맞춤법: ${issue}`) : []),
+                  ...areaIssues.flatMap((part) => {
+                    const domain = plan.filter((item) => item.subject === selectedSubject)[part.assessmentIndex]?.domain || `${part.assessmentIndex + 1}번째`;
+                    const reasons = part.visibleIssues.length ? part.visibleIssues : ["AI 생성이 완료되지 않아 교사 확인이 필요합니다."];
+                    return reasons.map((reason) => `${domain} 영역: ${reason}`);
+                  }),
+                ];
                 const comparisons = roster.filter((other) => other.id !== student.id).map((other) => ({
                   student: other,
                   ...recordSimilarityDetails(text, comments[`${other.id}|${selectedSubject}`] ?? ""),
@@ -1211,19 +1221,10 @@ function Comments({ assessmentDataBySubject, plan, roster }: { assessmentDataByS
                     setSelectedText((current) => { const next = { ...current }; delete next[key]; return next; });
                     setCopied(false);
                   }} onBlur={(event) => void saveComment(student.id, selectedSubject, event.target.value)} placeholder={hasLevel ? "AI 평어 생성 버튼을 누르면 결과가 표시됩니다." : "상·중·하 평가 수준이 입력되지 않았습니다."} />
-                    {areaIssues.length > 0 && <div className="comment-area-issues">{areaIssues.map((part) => {
-                      const domain = plan.filter((item) => item.subject === selectedSubject)[part.assessmentIndex]?.domain || `${part.assessmentIndex + 1}번째`;
-                      const reasons = part.visibleIssues.length ? part.visibleIssues : ["AI 생성이 완료되지 않아 교사 확인이 필요합니다."];
-                      return <article className={part.status === "needs_review" ? "fail" : "warning"} key={`${part.assessmentIndex}-${part.status}`}>
-                        <strong>{domain} 영역 · {part.status === "needs_review" ? "생성 미완료" : "근거 확인 권장"}</strong>
-                        {reasons.map((issue) => <span key={issue}>{issue}</span>)}
-                      </article>;
-                    })}</div>}
                     {selectedText[key] && <small className="comment-selection-hint">“{selectedText[key].text.slice(0, 36)}{selectedText[key].text.length > 36 ? "…" : ""}” 선택됨</small>}
                   </td>
                   <td className="validation-cell issue-only-validation comment-review-cell">
-                    <div>{!validation.endingsOk && <span className="fail">종결 확인</span>}{validation.forbidden.length > 0 && <span className="fail">금지어 확인</span>}{!validation.spellingOk && <span className="fail" title={validation.spellingIssues.join("\n")}>맞춤법 {validation.spellingIssues.length}건</span>}</div>
-                    {!validation.spellingOk && <ul className="spelling-issues">{validation.spellingIssues.map((issue, issueIndex) => <li key={issueIndex}>{issue}</li>)}</ul>}
+                    {commentReviewIssues.length > 0 && <div className="review-warning-wrap"><span className="review-warning" tabIndex={0}>⚠ 오류 {commentReviewIssues.length}건<span className="review-warning-tooltip" role="tooltip"><strong>검수 필요 사항</strong>{commentReviewIssues.map((issue, issueIndex) => <i key={issueIndex}>{issue}</i>)}</span></span></div>}
                     <div className="comment-review-controls">{similarStudents.length > 0 && closest && <div className="similarity-detail compact-similarity"><strong>{closest.student.name} 학생과 {Math.round(closest.score * 100)}%</strong></div>}<div className="comment-row-actions review-cell-actions comment-review-actions"><button className="regenerate-button" disabled={!text || !!rewriteBusyKey} onMouseDown={(event) => event.preventDefault()} onClick={() => void rewriteComment(student.id, selectedSubject, "regenerate")}>{rewriteBusyKey === `${key}|regenerate` ? "생성 중…" : "다시 생성"}</button><button disabled={!selectedText[key] || !!rewriteBusyKey} title={selectedText[key] ? "선택한 부분만 평가 근거에 맞게 바꿉니다." : "평어에서 바꿀 문장이나 표현을 먼저 선택하세요."} onMouseDown={(event) => event.preventDefault()} onClick={() => void rewriteComment(student.id, selectedSubject, "selection")}>{rewriteBusyKey === `${key}|selection` ? "변경 중…" : "선택한 부분 바꾸기"}</button></div></div>
                   </td>
                 </tr>;
@@ -1452,14 +1453,22 @@ function Behavior({ roster }: { roster: AssessmentStudent[] }) {
                 const similarStudents = comparisons.filter((item) => item.score >= 0.82);
                 const closest = comparisons[0];
                 const characteristicCount = countBehaviorCharacteristics(record.characteristic);
+                const behaviorReviewIssues = record.behavior ? [
+                  ...(validation.bytes < 500 ? [`500B 미만 · 현재 ${validation.bytes}B`] : []),
+                  ...(validation.bytes > 600 ? [`600B 초과 · 현재 ${validation.bytes}B`] : []),
+                  ...(!validation.endingsOk ? ["음·임 종결 확인"] : []),
+                  ...(!validation.growthIncluded ? ["성장 표현 확인"] : []),
+                  ...(validation.forbidden.length > 0 ? [`금지어 확인: ${validation.forbidden.join(" · ")}`] : []),
+                  ...(!validation.spellingOk ? validation.spellingIssues.map((issue) => `맞춤법: ${issue}`) : []),
+                  ...(validation.repeated.length > 0 ? ["반복 표현 확인"] : []),
+                ] : [];
                 return <tr className={activeStudentId === student.id ? "active-reference-row" : ""} key={student.id}>
                   <td>{student.number ?? student.id}</td><td><strong>{student.name}</strong></td>
                   <td className="behavior-source-pane"><textarea className={sourceIssues.length ? "input-blocked" : ""} value={record.characteristic} onFocus={() => setActiveStudentId(student.id)} onChange={(event) => updateRecord(student.id, { characteristic: event.target.value })} onBlur={() => void saveRecord(student.id, records[student.id] ?? record)} placeholder={"관찰한 내용을 키워드·메모·문장 중 편한 방식으로 작성하세요.\n예: 질문을 자주 함 · 친구 말을 잘 들어줌 · 맡은 역할을 끝까지 함 · 발표에 자신감이 생김"} />{sourceIssues.length > 0 && <small className="source-warning">AI 전송 불가: {sourceIssues.join(" · ")}</small>}{record.characteristic.trim() && characteristicCount < 4 && <small className="source-warning characteristic-warning">특징을 {4 - characteristicCount}개 더 입력해 주세요.</small>}</td>
                   <td className="behavior-result-pane"><textarea value={record.behavior} onChange={(event) => updateRecord(student.id, { behavior: event.target.value })} onBlur={() => void saveRecord(student.id, records[student.id] ?? record)} placeholder={record.characteristic ? "행동특성을 생성하면 이곳에 결과가 표시됩니다." : "왼쪽에 관찰 키워드나 메모를 먼저 입력해 주세요."} /></td>
                   <td className="validation-cell behavior-validation issue-only-validation behavior-review-cell">
-                    {record.behavior && <div>{!validation.lengthOk && <span className="fail">{validation.bytes < 500 ? `500B 미만 · ${validation.bytes}B` : `550B 초과 · ${validation.bytes}B`}</span>}{!validation.endingsOk && <span className="fail">음·임 종결 확인</span>}{!validation.growthIncluded && <span className="fail">성장 표현 확인</span>}{validation.forbidden.length > 0 && <span className="fail">금지어 확인</span>}{!validation.spellingOk && <span className="fail" title={validation.spellingIssues.join("\n")}>맞춤법 확인</span>}{validation.repeated.length > 0 && <span className="fail">반복 확인</span>}{similarStudents.length > 0 && <span className="fail">중복 {closest ? `${Math.round(closest.score * 100)}%` : "확인"}</span>}</div>}
+                    {behaviorReviewIssues.length > 0 && <div className="review-warning-wrap"><span className="review-warning" tabIndex={0}>⚠ 오류 {behaviorReviewIssues.length}건<span className="review-warning-tooltip" role="tooltip"><strong>검수 필요 사항</strong>{behaviorReviewIssues.map((issue, issueIndex) => <i key={issueIndex}>{issue}</i>)}</span></span></div>}
                     {similarStudents.length > 0 && closest && <div className="similarity-detail"><strong>{closest.student.name} 학생과 {Math.round(closest.score * 100)}%</strong>{closest.overlaps.length > 0 && <span>겹치는 표현: {closest.overlaps.join(" · ")}</span>}</div>}
-                    {!validation.spellingOk && <ul className="spelling-issues">{validation.spellingIssues.map((issue, issueIndex) => <li key={issueIndex}>{issue}</li>)}</ul>}
                     <div className="comment-row-actions review-cell-actions"><button disabled={!record.characteristic || !sourceValidation.valid || !!rewriteBusyKey} onMouseDown={(event) => event.preventDefault()} onClick={() => void rewriteBehavior(student.id, record, "regenerate")}>{rewriteBusyKey === `${student.id}|regenerate` ? "생성 중…" : "다시 생성"}</button></div>
                   </td>
                 </tr>;

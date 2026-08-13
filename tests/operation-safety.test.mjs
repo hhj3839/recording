@@ -109,7 +109,8 @@ test("keeps the simplified plan, assessment, and behavior toolbars", () => {
   assert.doesNotMatch(page, /behavior-generation-summary|생성 대상<\/small>|특성을 4개 이상 입력한 학생 자동 포함/);
   assert.doesNotMatch(page, /생성 전<\/small>|className=\{validation\.[^}]+ \? "pass"/);
   assert.match(page, /issue-only-validation/);
-  assert.match(page, /validation\.bytes < 500 \? `500B 미만 · \$\{validation\.bytes\}B` : `550B 초과 · \$\{validation\.bytes\}B`/);
+  assert.match(page, /validation\.bytes < 500 \? \[`500B 미만 · 현재 \$\{validation\.bytes\}B`\]/);
+  assert.match(page, /validation\.bytes > 600 \? \[`600B 초과 · 현재 \$\{validation\.bytes\}B`\]/);
   assert.equal((page.match(/className="secondary result-copy-button"/g) ?? []).length, 2);
   assert.match(page, /className="comment-row-actions review-cell-actions comment-review-actions"[\s\S]*다시 생성[\s\S]*선택한 부분 바꾸기/);
   assert.doesNotMatch(page, /evidenceKey|setEvidenceKey|className="evidence-button"/);
@@ -122,7 +123,7 @@ test("keeps the simplified plan, assessment, and behavior toolbars", () => {
   assert.match(css, /behavior-review-cell>div:not\(\.review-cell-actions\):not\(\.similarity-detail\)>span\{box-sizing:border-box;width:100%;text-align:center\}/);
   assert.match(css, /behavior-split-table th:nth-child\(2\),\.behavior-split-table td:nth-child\(2\)\{width:64px\}/);
   assert.match(page, /<th>검수<\/th>[\s\S]*className="validation-cell behavior-validation issue-only-validation behavior-review-cell"/);
-  assert.match(page, /behavior-review-cell[\s\S]*500B 미만[\s\S]*550B 초과[\s\S]*다시 생성/);
+  assert.match(page, /behavior-review-cell[\s\S]*review-warning-tooltip[\s\S]*다시 생성/);
   assert.doesNotMatch(page, />길이 조정<\/button>/);
   assert.doesNotMatch(page, /<th>관리<\/th>[\s\S]*className="delete-student"/);
   assert.doesNotMatch(page, /function Assessments\([\s\S]{0,180}onDeleteStudent/);
