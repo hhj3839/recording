@@ -124,7 +124,8 @@ test("keeps the simplified plan, assessment, and behavior toolbars", () => {
   assert.match(css, /behavior-split-table th:nth-child\(2\),\.behavior-split-table td:nth-child\(2\)\{width:64px\}/);
   assert.match(page, /<th>검수<\/th>[\s\S]*className="validation-cell behavior-validation issue-only-validation behavior-review-cell"/);
   assert.match(page, /behavior-review-cell[\s\S]*<ReviewWarning issues=\{behaviorReviewIssues\}[\s\S]*다시 생성/);
-  assert.match(page, /issues\.length === 1[\s\S]*⚠ \{issues\[0\]\}/);
+  assert.doesNotMatch(page, /issues\.length === 1/);
+  assert.match(page, /createPortal\([\s\S]*review-warning-tooltip[\s\S]*document\.body/);
   assert.match(page, /document\.addEventListener\("pointerdown", closeOutside\)/);
   assert.match(css, /review-warning-tooltip\{position:fixed/);
   assert.doesNotMatch(page, />길이 조정<\/button>/);

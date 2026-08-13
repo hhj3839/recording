@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import { countBehaviorCharacteristics, recordSimilarityDetails, validateBehaviorSource, validateRecord } from "./record-validation";
 import { parseStudentRosterText } from "./student-roster-parser";
 import { parseAssessmentPlanText } from "./assessment-plan-parser";
@@ -80,7 +81,6 @@ function ReviewWarning({ issues }: { issues: string[] }) {
     return () => document.removeEventListener("pointerdown", closeOutside);
   }, [open]);
   if (!issues.length) return null;
-  if (issues.length === 1) return <div className="review-warning-wrap"><span className="review-warning single">⚠ {issues[0]}</span></div>;
   const show = () => {
     const rect = warningRef.current?.getBoundingClientRect();
     if (!rect) return;
@@ -93,7 +93,7 @@ function ReviewWarning({ issues }: { issues: string[] }) {
   };
   return <div className="review-warning-wrap">
     <button ref={warningRef} className="review-warning" type="button" aria-expanded={open} onMouseEnter={show} onMouseLeave={() => { if (document.activeElement !== warningRef.current) setOpen(false); }} onFocus={show} onBlur={() => setOpen(false)} onClick={show}>⚠ 오류 {issues.length}건</button>
-    {open && <span className="review-warning-tooltip" role="tooltip" style={{ left: position.left, top: position.top }}><strong>검수 필요 사항</strong>{issues.map((issue, issueIndex) => <i key={issueIndex}>{issue}</i>)}</span>}
+    {open && createPortal(<span className="review-warning-tooltip" role="tooltip" style={{ left: position.left, top: position.top }}><strong>검수 필요 사항</strong>{issues.map((issue, issueIndex) => <i key={issueIndex}>{issue}</i>)}</span>, document.body)}
   </div>;
 }
 
@@ -1254,8 +1254,7 @@ function Comments({ assessmentDataBySubject, plan, roster }: { assessmentDataByS
                     {selectedText[key] && <small className="comment-selection-hint">“{selectedText[key].text.slice(0, 36)}{selectedText[key].text.length > 36 ? "…" : ""}” 선택됨</small>}
                   </td>
                   <td className="validation-cell issue-only-validation comment-review-cell">
-                    <ReviewWarning issues={commentReviewIssues} />
-                    <div className="comment-review-controls">{similarStudents.length > 0 && closest && <div className="similarity-detail compact-similarity"><strong>{closest.student.name} 학생과 {Math.round(closest.score * 100)}%</strong></div>}<div className="comment-row-actions review-cell-actions comment-review-actions"><button className="regenerate-button" disabled={!text || !!rewriteBusyKey} onMouseDown={(event) => event.preventDefault()} onClick={() => void rewriteComment(student.id, selectedSubject, "regenerate")}>{rewriteBusyKey === `${key}|regenerate` ? "생성 중…" : "다시 생성"}</button><button disabled={!selectedText[key] || !!rewriteBusyKey} title={selectedText[key] ? "선택한 부분만 평가 근거에 맞게 바꿉니다." : "평어에서 바꿀 문장이나 표현을 먼저 선택하세요."} onMouseDown={(event) => event.preventDefault()} onClick={() => void rewriteComment(student.id, selectedSubject, "selection")}>{rewriteBusyKey === `${key}|selection` ? "변경 중…" : "선택한 부분 바꾸기"}</button></div></div>
+                    <div className="comment-review-controls"><ReviewWarning issues={commentReviewIssues} />{similarStudents.length > 0 && closest && <div className="similarity-detail compact-similarity"><strong>{closest.student.name} 학생과 {Math.round(closest.score * 100)}%</strong></div>}<div className="comment-row-actions review-cell-actions comment-review-actions"><button className="regenerate-button" disabled={!text || !!rewriteBusyKey} onMouseDown={(event) => event.preventDefault()} onClick={() => void rewriteComment(student.id, selectedSubject, "regenerate")}>{rewriteBusyKey === `${key}|regenerate` ? "생성 중…" : "다시 생성"}</button><button disabled={!selectedText[key] || !!rewriteBusyKey} title={selectedText[key] ? "선택한 부분만 평가 근거에 맞게 바꿉니다." : "평어에서 바꿀 문장이나 표현을 먼저 선택하세요."} onMouseDown={(event) => event.preventDefault()} onClick={() => void rewriteComment(student.id, selectedSubject, "selection")}>{rewriteBusyKey === `${key}|selection` ? "변경 중…" : "선택한 부분 바꾸기"}</button></div></div>
                   </td>
                 </tr>;
               })}</tbody>
