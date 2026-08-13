@@ -33,37 +33,62 @@ const get = async (route) => {
 const [classData, planData, commentData, behaviorData] = await Promise.all([
   get("/api/class-data"), get("/api/assessment-plan"), get("/api/generated-comments"), get("/api/student-behaviors"),
 ]);
+const excludedStudentIds = [...new Set(String(process.env.AUDIT_EXCLUDED_STUDENT_IDS || "")
+  .split(",").map((value) => Number(value.trim())).filter((value) => Number.isInteger(value) && value > 0))];
+const fixtureExcludedMode = process.env.AUDIT_MODE === "official-fixture-excluded";
+if (fixtureExcludedMode && !excludedStudentIds.length) {
+  throw new Error("AUDIT_EXCLUDED_STUDENT_IDS is required for an official fixture-excluded audit");
+}
+if (!fixtureExcludedMode && excludedStudentIds.length) {
+  throw new Error("AUDIT_EXCLUDED_STUDENT_IDS is allowed only with AUDIT_MODE=official-fixture-excluded");
+}
+const knownStudentIds = new Set(classData.students.map((student) => Number(student.id)));
+const unknownExcludedIds = excludedStudentIds.filter((studentId) => !knownStudentIds.has(studentId));
+if (unknownExcludedIds.length) throw new Error(`Excluded students are not in the active classroom: ${unknownExcludedIds.join(", ")}`);
+const excluded = new Set(excludedStudentIds);
+const students = classData.students.filter((student) => !excluded.has(Number(student.id)));
+const levels = classData.levels.filter((item) => !excluded.has(Number(item.studentId)));
+const comments = commentData.comments.filter((item) => !excluded.has(Number(item.studentId)));
+const parts = commentData.parts.filter((item) => !excluded.has(Number(item.studentId)));
+const behaviors = behaviorData.behaviors.filter((item) => !excluded.has(Number(item.studentId)));
 const auditScope = resolveStoredAuditScope({
   classroom: classData.classroom,
-  students: classData.students,
-  comments: commentData.comments,
-  behaviors: behaviorData.behaviors,
+  students, comments, behaviors,
 });
+auditScope.population = {
+  originalStudents: classData.students.length,
+  auditedStudents: students.length,
+  excludedFixtureStudentIds: excludedStudentIds,
+  claimLimit: excludedStudentIds.length
+    ? "명시한 오류 fixture 학생을 제외한 정상 범위의 공식 수치이며 학급 전체 수치로 해석하지 않음"
+    : "학급 전체 공식 수치",
+};
 const auditResult = auditStoredResults({
-  students: classData.students, plan: planData.plan, levels: classData.levels,
-  comments: commentData.comments, parts: commentData.parts, behaviors: behaviorData.behaviors,
+  students, plan: planData.plan, levels, comments, parts, behaviors,
 });
 const reviewComments = auditScope.partialReview
   ? commentData.comments.filter((item) => !isKnownFixtureText(item.comment))
-  : commentData.comments;
+  : comments;
 const excludedReviewComments = commentData.comments.length - reviewComments.length;
 const teacherReviewSample = auditScope.teacherReviewEligible ? buildTeacherReviewSample({
-  students: classData.students,
+  students,
   plan: planData.plan,
-  levels: classData.levels,
+  levels,
   comments: reviewComments,
   auditResult,
   limit: Number(process.env.AUDIT_REVIEW_SAMPLE_SIZE) || 30,
 }) : null;
 if (teacherReviewSample) {
   teacherReviewSample.scope = {
-    fullClassroomAudit: auditScope.officialEligible,
+    fullClassroomAudit: auditScope.officialEligible && excludedStudentIds.length === 0,
     partialReview: auditScope.partialReview,
     excludedKnownFixtureComments: excludedReviewComments,
     eligibleStoredComments: reviewComments.filter((item) => item.comment?.trim()).length,
     claimLimit: auditScope.partialReview
       ? "fixture를 제외한 교사 의미·사실성 표본 검토 전용이며 225건 전체 품질 감사로 해석하지 않음"
-      : "공식 감사 안전장치를 통과한 학급 표본",
+      : excludedStudentIds.length
+        ? "명시한 오류 fixture 학생을 제외한 정상 범위의 공식 표본"
+        : "공식 감사 안전장치를 통과한 학급 표본",
   };
 }
 const output = JSON.stringify({

@@ -13,7 +13,8 @@ export function isKnownFixtureText(value) {
 
 export function resolveStoredAuditScope({ env = process.env, classroom, students, comments = [], behaviors = [] }) {
   const requestedMode = env.AUDIT_MODE;
-  const mode = requestedMode === "official" || requestedMode === "teacher-review" ? requestedMode : "diagnostic";
+  const allowedModes = ["official", "official-fixture-excluded", "teacher-review"];
+  const mode = allowedModes.includes(requestedMode) ? requestedMode : "diagnostic";
   const expectedClassroomId = Number(env.AUDIT_CLASSROOM_ID);
   const hasExpectedClassroomId = Number.isInteger(expectedClassroomId) && expectedClassroomId > 0;
   const fixtureSignals = [];
@@ -35,10 +36,10 @@ export function resolveStoredAuditScope({ env = process.env, classroom, students
   if (hasExpectedClassroomId && Number(classroom?.id) !== expectedClassroomId) {
     throw new Error(`Audit classroom mismatch: expected ${expectedClassroomId}, active ${classroom?.id ?? "unknown"}`);
   }
-  if (["official", "teacher-review"].includes(mode) && !hasExpectedClassroomId) {
+  if (["official", "official-fixture-excluded", "teacher-review"].includes(mode) && !hasExpectedClassroomId) {
     throw new Error("AUDIT_CLASSROOM_ID is required for an official audit or teacher review");
   }
-  if (mode === "official" && fixtureSignals.length) {
+  if (["official", "official-fixture-excluded"].includes(mode) && fixtureSignals.length) {
     throw new Error(`Official audit blocked by fixture signals: ${fixtureSignals.join(", ")}`);
   }
   if (mode === "teacher-review" && fixtureSignals.some((signal) => signal !== "knownFixtureContent")) {
@@ -47,8 +48,8 @@ export function resolveStoredAuditScope({ env = process.env, classroom, students
 
   return {
     mode,
-    officialEligible: mode === "official" && fixtureSignals.length === 0,
-    teacherReviewEligible: mode === "official" ? fixtureSignals.length === 0
+    officialEligible: ["official", "official-fixture-excluded"].includes(mode) && fixtureSignals.length === 0,
+    teacherReviewEligible: ["official", "official-fixture-excluded"].includes(mode) ? fixtureSignals.length === 0
       : mode === "teacher-review" && fixtureSignals.every((signal) => signal === "knownFixtureContent"),
     partialReview: mode === "teacher-review",
     targetVerified: hasExpectedClassroomId,

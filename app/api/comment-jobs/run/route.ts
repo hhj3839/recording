@@ -4,6 +4,7 @@ import { getAiUsage, MONTHLY_AI_LIMIT, recordAiUsage } from "../../../ai-usage";
 import { selectMostDiverseComments } from "../../../comment-diversity";
 import { CommentEvidence, GeneratedComment, GeneratedCommentPart, generateCommentBatch, saveGeneratedCommentParts, saveGeneratedComments, signCommentJob, verifyCommentJob } from "../../../comment-generation";
 import { generationModel } from "../../../ai-model-policy";
+import { batchCommentRepairs, MAX_COMMENT_AI_CALLS_PER_BATCH } from "../../../comment-batching";
 
 export const maxDuration = 300;
 const MAX_GENERATION_ATTEMPTS = 4;
@@ -107,6 +108,8 @@ export async function POST(request: Request) {
     .filter((item) => !batchStudentIds.has(Number(item.student_id)))
     .map((item) => item.comment)
     .filter(Boolean);
+  let aiCallCount = 0;
+  let callLimitReached = false;
   for (let attempt = 0; attempt < MAX_GENERATION_ATTEMPTS && pending.length; attempt += 1) {
     const usage = await getAiUsage(job.owner_id);
     if (usage.monthly >= MONTHLY_AI_LIMIT) {
@@ -115,13 +118,19 @@ export async function POST(request: Request) {
     }
     const groups = attempt === 0
       ? [pending]
-      : pending.flatMap((item) => item.items.map((evidenceItem) => [{ ...item, items: [evidenceItem] }]));
+      : batchCommentRepairs(pending);
     for (const group of groups) {
+      if (aiCallCount >= MAX_COMMENT_AI_CALLS_PER_BATCH) {
+        callLimitReached = true;
+        errorMessage = `이 생성 묶음의 AI 요청 상한 ${MAX_COMMENT_AI_CALLS_PER_BATCH}회에 도달하여 남은 영역은 빈칸으로 두었습니다.`;
+        break;
+      }
       const groupUsage = await getAiUsage(job.owner_id);
       if (groupUsage.monthly >= MONTHLY_AI_LIMIT) {
         errorMessage = `월 AI 요청 한도 ${MONTHLY_AI_LIMIT}회를 사용하여 남은 항목의 자동 재시도를 중단했습니다.`;
         break;
       }
+      aiCallCount += 1;
       try {
         const generated = await generateCommentBatch(
           group,
@@ -161,7 +170,7 @@ export async function POST(request: Request) {
         !generatedParts.has(`${item.studentId}|${item.subject}|${evidenceItem.assessmentIndex}`));
       return missingItems.length ? [{ ...item, items: missingItems }] : [];
     });
-    if (nonRetryableFailure) break;
+    if (nonRetryableFailure || callLimitReached) break;
   }
   comments = batch.flatMap((item) => {
     const sentences = item.items.map((evidenceItem) =>
