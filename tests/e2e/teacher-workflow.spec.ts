@@ -68,8 +68,10 @@ test("로그인부터 명단·평가계획·평가수준·교과 평어 화면�
 
   let classroomId: number | undefined;
   try {
-    await navigate(page, "학급 관리", "classes");
-    const form = page.locator(".classroom-create-panel form");
+    await navigate(page, "대시보드", "dashboard");
+    await page.locator(".dashboard-classroom .class-button").click();
+    await page.getByRole("button", { name: "+ 새 학급" }).click();
+    const form = page.locator(".classroom-popover-form");
     await form.locator("input").nth(0).fill("기록샘E2E검증초");
     await form.locator("input").nth(1).fill(String(candidate!.schoolYear));
     await form.locator("select").nth(0).selectOption(String(candidate!.semester));
@@ -77,7 +79,7 @@ test("로그인부터 명단·평가계획·평가수준·교과 평어 화면�
     await form.locator("input").nth(2).fill(String(candidate!.classNumber));
     const createdResponse = page.waitForResponse((response) =>
       response.url().endsWith("/api/classrooms") && response.request().method() === "POST");
-    await form.getByRole("button", { name: "다른 학기·학급 추가" }).click();
+    await form.getByRole("button", { name: "새 학급 추가" }).click();
     expect((await createdResponse).ok()).toBeTruthy();
 
     const refreshedClassrooms = await (await page.request.get("/api/classrooms")).json() as {
