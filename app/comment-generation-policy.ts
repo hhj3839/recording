@@ -71,6 +71,14 @@ export const commentForbiddenExpressions = [
   "불성실함",
 ];
 
+export function hasNaturalNominalEnding(sentence: string) {
+  const normalized = sentence.trim().replace(/[.!?]+$/, "");
+  const last = normalized.at(-1);
+  if (!last) return false;
+  const code = last.charCodeAt(0);
+  return code >= 0xac00 && code <= 0xd7a3 && (code - 0xac00) % 28 === 16;
+}
+
 export function validateGeneratedComment(comment: string, expectedSentenceCount: number) {
   const normalized = comment.trim();
   const sentences = normalized
@@ -91,15 +99,15 @@ export function validateGeneratedComment(comment: string, expectedSentenceCount:
     sentences,
     lengths,
     sentenceCountOk: expectedSentenceCount > 0 && sentences.length === expectedSentenceCount,
-    lengthsOk: lengths.length > 0 && lengths.every((length) => length >= 50 && length <= 60),
-    endingsOk: sentences.length > 0 && sentences.every((sentence) => sentence.endsWith("함.")),
+    lengthsOk: lengths.length > 0 && lengths.every((length) => length >= 60 && length <= 80),
+    endingsOk: sentences.length > 0 && sentences.every(hasNaturalNominalEnding),
     naturalEndingsOk: awkwardEndings.length === 0,
     awkwardEndings,
     forbidden,
     valid: expectedSentenceCount > 0
       && sentences.length === expectedSentenceCount
-      && lengths.every((length) => length >= 50 && length <= 60)
-      && sentences.every((sentence) => sentence.endsWith("함."))
+      && lengths.every((length) => length >= 60 && length <= 80)
+      && sentences.every(hasNaturalNominalEnding)
       && awkwardEndings.length === 0
       && forbidden.length === 0,
   };
@@ -116,7 +124,7 @@ export function validateGeneratedCommentPart(comment: string) {
   const length = strict.lengths[0] ?? 0;
   const acceptedLength = length >= 35 && length <= 90;
   const warnings = [
-    ...(acceptedLength && !strict.lengthsOk ? [`권장 50~60자 범위를 벗어난 ${length}자 문장`] : []),
+    ...(acceptedLength && !strict.lengthsOk ? [`권장 60~80자 범위를 벗어난 ${length}자 문장`] : []),
   ];
   return {
     ...strict,
@@ -198,7 +206,7 @@ export function evidenceBlockingIssues(comment: string, evidence: string) {
 }
 
 export function isCommentLengthReviewIssue(issue: string) {
-  return /^권장 50~60자 범위를 벗어난 \d+자 문장$/.test(issue.trim());
+  return /^권장 (?:50~60|60~80)자 범위를 벗어난 \d+자 문장$/.test(issue.trim());
 }
 
 export function commentAreaIssuesForDisplay(status: string, issues: string[]) {

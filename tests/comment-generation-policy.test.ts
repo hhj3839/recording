@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { commentAreaIssuesForDisplay, commentEvidenceInstructions, composeGeneratedCommentCandidate, evidenceBlockingIssues, evidenceGroundingWarnings, generatedCommentFailureMessage, hasCompleteEvidenceCoverage, normalizeGeneratedCommentCandidate, normalizeGeneratedCommentWhitespace, openingRepetitionRate, replaceSelectedCommentText, resolveGeneratedEvidenceItemId, validateGeneratedComment, validateGeneratedCommentPart } from "../app/comment-generation-policy.ts";
+import { commentAreaIssuesForDisplay, commentEvidenceInstructions, composeGeneratedCommentCandidate, evidenceBlockingIssues, evidenceGroundingWarnings, generatedCommentFailureMessage, hasCompleteEvidenceCoverage, hasNaturalNominalEnding, normalizeGeneratedCommentCandidate, normalizeGeneratedCommentWhitespace, openingRepetitionRate, replaceSelectedCommentText, resolveGeneratedEvidenceItemId, validateGeneratedComment, validateGeneratedCommentPart } from "../app/comment-generation-policy.ts";
 import { behaviorRepairInstruction, behaviorRepairPlan, behaviorRepairTargets } from "../app/behavior-repair-policy.ts";
 import { assertStrictGeneratedBehaviors, selectBehaviorCandidate } from "../app/behavior-persistence-policy.ts";
 import { validateRecord } from "../app/record-validation.ts";
@@ -101,11 +101,20 @@ test("flattens AI line breaks when a complete comment is regenerated", () => {
   );
 });
 
-test("accepts one 50 to 60 character sentence per assessment area ending in 함", () => {
-  const sentence = "글의 중심 생각을 정확하게 파악하고 중요한 내용을 근거와 함께 정리하여 발표 활동에 꾸준히 참여함.";
-  assert.equal(Array.from(sentence).length >= 50 && Array.from(sentence).length <= 60, true);
+test("accepts one 60 to 80 character sentence per assessment area with a nominal ending", () => {
+  const sentence = "작품 속 인물의 상황을 살펴 알맞은 표정과 몸짓, 목소리와 말투를 선택하고 대화의 흐름에 맞추어 인물의 마음이 드러나도록 표현함.";
+  assert.equal(Array.from(sentence).length >= 60 && Array.from(sentence).length <= 80, true);
   const result = validateGeneratedComment(`${sentence} ${sentence}`, 2);
   assert.equal(result.valid, true);
+});
+
+test("accepts natural school-record nominal endings instead of literal 함 only", () => {
+  for (const sentence of ["문제를 해결하는 능력이 뛰어남.", "학습 내용을 적용하는 태도가 돋보임.", "꾸준히 성장하는 모습이 인상적임."]) {
+    assert.equal(hasNaturalNominalEnding(sentence), true);
+  }
+  for (const sentence of ["문제를 해결하였다.", "학습 태도가 좋습니다.", "학습 내용을 적용할 수 있다."]) {
+    assert.equal(hasNaturalNominalEnding(sentence), false);
+  }
 });
 
 test("keeps natural comments in the broad display range without inventing prefixes", () => {
@@ -119,12 +128,12 @@ test("keeps natural comments in the broad display range without inventing prefix
 });
 
 test("stores a natural long subject comment while keeping length as a recommendation", () => {
-  const long = "작품 속 인물의 상황을 살펴 알맞은 표정과 몸짓, 목소리와 말투를 선택하고 대화의 흐름에 맞추어 인물의 마음이 드러나도록 표현함.";
+  const long = "작품 속 인물의 상황을 살펴 알맞은 표정과 몸짓, 목소리와 말투를 선택하고 대화의 흐름과 장면의 분위기에 맞추어 인물의 마음이 분명하게 드러나도록 표현함.";
   const result = validateGeneratedCommentPart(long);
-  assert.equal(Array.from(long).length > 60, true);
+  assert.equal(Array.from(long).length > 80, true);
   assert.equal(result.acceptedLength, true);
   assert.equal(result.valid, true);
-  assert.equal(result.warnings.some((issue) => issue.includes("권장 50~60자")), true);
+  assert.equal(result.warnings.some((issue) => issue.includes("권장 60~80자")), true);
 });
 
 test("rejects missing areas, invalid length, endings, and forbidden expressions", () => {
@@ -192,13 +201,13 @@ test("rejects dangling connective bodies before composing a generated ending", (
   assert.equal(composeGeneratedCommentCandidate("자료의 특징을 기준에 따라 정확하게", "분류함."), "자료의 특징을 기준에 따라 정확하게 분류함.");
 });
 
-test("shows near-miss lengths while keeping them as teacher-review warnings", () => {
+test("shows out-of-target lengths while keeping them as teacher-review warnings", () => {
   const base = "글의 중심 생각을 정확하게 파악하고 중요한 내용을 근거와 함께 정리하여 발표 활동에 꾸준히 참여함.";
   const sentence49 = Array.from(base).slice(0, 46).join("").replace(/[.]*$/, "") + " 참여함.";
   const result = validateGeneratedCommentPart(sentence49);
-  if (Array.from(sentence49).length >= 48 && Array.from(sentence49).length <= 62) {
+  if (Array.from(sentence49).length >= 35 && Array.from(sentence49).length <= 90) {
     assert.equal(result.valid, true);
-    assert.equal(result.warnings.length > 0, Array.from(sentence49).length < 50 || Array.from(sentence49).length > 60);
+    assert.equal(result.warnings.length > 0, Array.from(sentence49).length < 60 || Array.from(sentence49).length > 80);
   }
 });
 
@@ -318,12 +327,12 @@ test("grounds attitude concepts across common Korean spacing and inflection vari
 
 test("does not show sentence length as an area review issue", () => {
   assert.deepEqual(
-    commentAreaIssuesForDisplay("warning", ["권장 50~60자 범위를 벗어난 49자 문장"]),
+    commentAreaIssuesForDisplay("warning", ["권장 60~80자 범위를 벗어난 59자 문장"]),
     [],
   );
   assert.deepEqual(
     commentAreaIssuesForDisplay("warning", [
-      "권장 50~60자 범위를 벗어난 61자 문장",
+      "권장 60~80자 범위를 벗어난 81자 문장",
       "평가 근거에 없는 ‘적극적으로’ 표현 확인 필요",
     ]),
     ["평가 근거에 없는 ‘적극적으로’ 표현 확인 필요"],

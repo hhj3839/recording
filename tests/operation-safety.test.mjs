@@ -50,11 +50,11 @@ test("job status polling wakes queued background generation without creating a n
   }
 });
 
-test("comment prompt forces natural 함 endings for reading summaries", () => {
+test("comment prompt uses 60 to 80 characters and natural nominal endings", () => {
   const source = readFileSync("app/comment-generation.ts", "utf8");
-  assert.match(source, /마지막 두 글자는 반드시 ‘함\.’/);
-  assert.match(source, /‘간추림\.’, ‘할 수 있음\.’, ‘모습임\.’, ‘하려 함\.’으로 끝내지 않는다/);
-  assert.match(source, /중요한 내용을 간추려 정리함\./);
+  assert.match(source, /text는 60~80자를 목표/);
+  assert.match(source, /‘능력이 뛰어남\.’, ‘태도가 돋보임\.’, ‘모습이 인상적임\.’/);
+  assert.match(source, /‘하였다\.’, ‘입니다\.’, ‘할 수 있다\.’ 같은 서술형 종결은 사용하지 않는다/);
 });
 
 test("always refreshes generated result counts without browser caching", () => {
