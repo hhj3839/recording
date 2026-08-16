@@ -5,7 +5,7 @@ import { behaviorRepairInstruction, behaviorRepairPlan, behaviorRepairTargets } 
 import { assertStrictGeneratedBehaviors, selectBehaviorCandidate } from "../app/behavior-persistence-policy.ts";
 import { validateRecord } from "../app/record-validation.ts";
 import { generationModel } from "../app/ai-model-policy.ts";
-import { batchCommentRepairs, batchCommentsBySubject, COMMENT_BATCH_SIZE, COMMENT_REPAIR_EVIDENCE_BATCH_SIZE, MAX_COMMENT_AI_CALLS_PER_BATCH } from "../app/comment-batching.ts";
+import { batchCommentRepairs, batchCommentsBySubject, COMMENT_BATCH_SIZE, COMMENT_REPAIR_EVIDENCE_BATCH_SIZE, MAX_COMMENT_AI_CALLS_PER_BATCH, MAX_COMMENT_DIVERSITY_CALLS_PER_BATCH } from "../app/comment-batching.ts";
 import { batchBehaviors, BEHAVIOR_BATCH_SIZE } from "../app/behavior-batching.ts";
 import { estimateAiCostUsd } from "../app/ai-pricing.ts";
 
@@ -44,7 +44,8 @@ test("groups missing comment evidence into at most five areas per repair call", 
   }));
   const groups = batchCommentRepairs(pending);
   assert.equal(COMMENT_REPAIR_EVIDENCE_BATCH_SIZE, 5);
-  assert.equal(MAX_COMMENT_AI_CALLS_PER_BATCH, 4);
+  assert.equal(MAX_COMMENT_AI_CALLS_PER_BATCH, 5);
+  assert.equal(MAX_COMMENT_DIVERSITY_CALLS_PER_BATCH, 1);
   assert.deepEqual(groups.map((group) => group.reduce((count, entry) => count + entry.items.length, 0)), [5, 5]);
   assert.equal(groups.flatMap((group) => group).flatMap((entry) => entry.items).length, 10);
   assert.equal(groups.every((group) => new Set(group.map((entry) => `${entry.studentId}|${entry.subject}`)).size === group.length), true);

@@ -1,6 +1,7 @@
 export const COMMENT_BATCH_SIZE = 5;
 export const COMMENT_REPAIR_EVIDENCE_BATCH_SIZE = 5;
-export const MAX_COMMENT_AI_CALLS_PER_BATCH = 4;
+export const MAX_COMMENT_AI_CALLS_PER_BATCH = 5;
+export const MAX_COMMENT_DIVERSITY_CALLS_PER_BATCH = 1;
 
 export function batchCommentsBySubject<T extends { subject: string }>(items: T[], size = COMMENT_BATCH_SIZE) {
   if (!Number.isInteger(size) || size < 1) throw new Error("배치 크기는 1 이상의 정수여야 합니다.");

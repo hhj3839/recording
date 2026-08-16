@@ -10,6 +10,7 @@ import { isStrongPassword } from "../app/password-policy.ts";
 import { validateSignupProfile } from "../app/signup-policy.ts";
 import { assessmentPlanWarnings, validateAssessmentPlanRow } from "../app/assessment-plan-policy.ts";
 import { CLASS_DATA_TABLES } from "../app/class-data-tables.ts";
+import { commentAreaOverlapReasons, findCommentAreaOverlaps } from "../app/comment-area-diversity.ts";
 
 test("requires the same strong password policy for signup and password changes", () => {
   assert.equal(isStrongPassword("shortA1"), false);
@@ -103,6 +104,28 @@ test("selects the least repetitive AI comment candidate", () => {
   }], [repeated]);
   assert.equal(selected.comment, distinct);
   assert.equal(selected.candidates[0], distinct);
+});
+
+test("detects repeated openings and style similarity only within the same area and level", () => {
+  const evidence = "1단원 | 듣기·말하기 | 목표: 상황에 맞게 표현하기 | 수준: 상 | 기준: 표정과 말투로 대화를 표현할 수 있다.";
+  const first = { studentId: 1, subject: "국어", assessmentIndex: 0, evidence, text: "인물의 상황을 파악하여 알맞은 표정과 말투로 대화를 실감 나게 표현함." };
+  const repeated = { studentId: 2, subject: "국어", assessmentIndex: 0, evidence, text: "인물의 상황을 파악하여 알맞은 몸짓과 목소리로 대화를 실감 나게 표현함." };
+  assert.equal(commentAreaOverlapReasons(repeated, first).includes("첫 12자 중복"), true);
+  const differentLevel = { ...repeated, evidence: evidence.replace("수준: 상", "수준: 중") };
+  assert.deepEqual(commentAreaOverlapReasons(differentLevel, first), []);
+  const differentArea = { ...repeated, assessmentIndex: 1 };
+  assert.deepEqual(commentAreaOverlapReasons(differentArea, first), []);
+});
+
+test("marks only later overlapping area sentences for one diversity repair", () => {
+  const evidence = "1단원 | 문법 | 목표: 문장 짜임 이해 | 수준: 중 | 기준: 문장을 짜임에 따라 나눌 수 있다.";
+  const parts = [
+    { studentId: 1, subject: "국어", assessmentIndex: 0, evidence, text: "문장의 짜임을 살펴 주어진 문장을 기준에 따라 나누고 그 특징을 구체적으로 설명함." },
+    { studentId: 2, subject: "국어", assessmentIndex: 0, evidence, text: "문장의 짜임을 살펴 제시된 문장을 기준에 따라 나누고 그 특징을 구체적으로 설명함." },
+    { studentId: 3, subject: "국어", assessmentIndex: 0, evidence, text: "주어진 문장의 구조를 구분하고 각 성분이 이루는 관계를 알맞은 말로 정리하여 발표함." },
+  ];
+  const overlaps = findCommentAreaOverlaps({ candidates: parts, references: [] });
+  assert.deepEqual(overlaps.map((item) => item.key), ["2|국어|0"]);
 });
 
 test("accepts a valid school-record comment", () => {

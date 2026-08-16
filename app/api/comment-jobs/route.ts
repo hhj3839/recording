@@ -114,8 +114,12 @@ export async function POST(request: Request) {
       }
     }
     if (!evidence.length) return Response.json({ error: "전 과목 중 평가 수준을 한 개 이상 입력해 주세요." }, { status: 400 });
-    const variations = createCommentVariations(evidence.length);
-    evidence.forEach((item, index) => { item.variation = variations[index]; });
+    const variations = createCommentVariations(evidence.reduce((count, item) => count + item.items.length, 0));
+    let variationIndex = 0;
+    evidence.forEach((item) => {
+      item.itemVariations = Object.fromEntries(item.items.map((entry) => [entry.assessmentIndex, variations[variationIndex++]]));
+      item.variation = item.itemVariations[item.items[0]?.assessmentIndex];
+    });
     await requireOwnedStudentIds(evidence.map((item) => item.studentId), user.id, classId);
 
     const batches = batchCommentsBySubject(evidence);
