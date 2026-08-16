@@ -108,6 +108,8 @@ export async function POST(request: Request) {
           const criterion = level === "상" ? item.high : level === "중" ? item.middle : item.low;
           return [{
             assessmentIndex: index,
+            level,
+            criterion,
             text: `${item.unit} | ${item.domain} | 목표: ${item.goal} | 관점: ${item.perspective} | 수준: ${level} | 기준: ${criterion}`,
           }];
         });

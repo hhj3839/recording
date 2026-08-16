@@ -38,6 +38,29 @@ export function normalizeGeneratedCommentWhitespace(comment: string) {
   return comment.replace(/\s+/g, " ").trim();
 }
 
+export function commentEvidenceInstructions(evidence: string) {
+  const normalized = normalizeGeneratedCommentWhitespace(evidence);
+  const required = [
+    ...(/교사.{0,8}도움|도움.{0,8}교사/.test(normalized) ? ["교사의 도움을 받아 수행함"] : []),
+    ...(/일부/.test(normalized) ? ["수행 범위가 일부임"] : []),
+    ...(/노력|익혀\s*가|과정/.test(normalized) ? ["노력하거나 익혀 가는 과정임"] : []),
+  ];
+  const guarded = [
+    { label: "정확하게", pattern: /정확(?:하게|히)/ },
+    { label: "실감 나게", pattern: /실감\s*나게/ },
+    { label: "다양한 방법", pattern: /다양한\s*방법/ },
+    { label: "이해하기 쉽게", pattern: /이해하기\s*쉽게/ },
+  ].filter((item) => !item.pattern.test(normalized)).map((item) => item.label);
+  return {
+    required,
+    forbiddenUnlessPresent: guarded,
+    instruction: [
+      required.length ? `반드시 보존할 의미: ${required.join(", ")}` : "별도 필수 과정 표현 없음",
+      guarded.length ? `근거에 없으므로 쓰지 말 의미: ${guarded.join(", ")}` : "",
+    ].filter(Boolean).join(" / "),
+  };
+}
+
 export const commentForbiddenExpressions = [
   "부족함",
   "미흡함",
@@ -167,6 +190,8 @@ export function evidenceBlockingIssues(comment: string, evidence: string) {
     .map(({ label }) => `평가 근거에 없는 ‘${label}’ 표현`);
   const required = [
     { evidence: /교사.{0,5}도움|도움.{0,5}교사/, comment: /교사|도움/, label: "교사의 도움" },
+    { evidence: /일부/, comment: /일부|몇몇|한부분|부분적으로/, label: "일부 수행" },
+    { evidence: /노력|익혀가|과정/, comment: /노력|애씀|힘씀|익혀가|배워가|과정/, label: "노력·성장 과정" },
   ].filter((item) => item.evidence.test(normalizedEvidence) && !item.comment.test(normalizedComment))
     .map((item) => `평가 기준의 필수 조건 ‘${item.label}’ 누락`);
   return [...unsupported, ...required];
