@@ -4,7 +4,8 @@ import { getAiUsage, MONTHLY_AI_LIMIT, recordAiUsage } from "../../../ai-usage";
 import { selectMostDiverseComments } from "../../../comment-diversity";
 import { CommentEvidence, GeneratedComment, GeneratedCommentPart, generateCommentBatch, saveGeneratedCommentParts, saveGeneratedComments, signCommentJob, verifyCommentJob } from "../../../comment-generation";
 import { generationModel } from "../../../ai-model-policy";
-import { batchCommentRepairs, MAX_COMMENT_AI_CALLS_PER_BATCH } from "../../../comment-batching";
+import { batchCommentRepairs, MAX_COMMENT_AI_CALLS_PER_BATCH, MAX_COMMENT_DIVERSITY_CALLS_PER_BATCH } from "../../../comment-batching";
+import { CommentAreaPart, findCommentAreaOverlaps } from "../../../comment-area-diversity";
 
 export const maxDuration = 300;
 const MAX_GENERATION_ATTEMPTS = 4;
@@ -75,6 +76,7 @@ export async function POST(request: Request) {
 
   let comments: GeneratedComment[] = [];
   const generatedParts = new Map<string, GeneratedCommentPart>();
+  const generatedThisRun = new Set<string>();
   let errorMessage = "";
   let pending = batch;
   let nonRetryableFailure = false;
@@ -139,7 +141,9 @@ export async function POST(request: Request) {
           generationModel(attempt, MAX_GENERATION_ATTEMPTS),
         );
         for (const part of generated.parts) {
-          generatedParts.set(`${part.studentId}|${part.subject}|${part.assessmentIndex}`, part);
+          const key = `${part.studentId}|${part.subject}|${part.assessmentIndex}`;
+          generatedParts.set(key, part);
+          generatedThisRun.add(key);
         }
         await saveGeneratedCommentParts({
           ownerId: job.owner_id,
@@ -171,6 +175,97 @@ export async function POST(request: Request) {
       return missingItems.length ? [{ ...item, items: missingItems }] : [];
     });
     if (nonRetryableFailure || callLimitReached) break;
+  }
+
+  const diversityCandidates = [...generatedParts.entries()]
+    .filter(([key]) => generatedThisRun.has(key))
+    .map(([, part]) => part satisfies CommentAreaPart);
+  const diversityReferences = savedParts.flatMap((saved) => {
+    const key = `${saved.student_id}|${saved.subject}|${saved.assessment_index}`;
+    return generatedThisRun.has(key) || !saved.sentence ? [] : [{
+      studentId: Number(saved.student_id), subject: saved.subject,
+      assessmentIndex: Number(saved.assessment_index), evidence: saved.evidence, text: saved.sentence,
+    } satisfies CommentAreaPart];
+  });
+  const overlaps = findCommentAreaOverlaps({ candidates: diversityCandidates, references: diversityReferences });
+  const overlapKeys = new Set(overlaps.map((item) => item.key));
+  const diversityTargets = batch.flatMap((item) => {
+    const items = item.items.filter((entry) => overlapKeys.has(`${item.studentId}|${item.subject}|${entry.assessmentIndex}`));
+    return items.length ? [{ ...item, items }] : [];
+  });
+  if (diversityTargets.length && MAX_COMMENT_DIVERSITY_CALLS_PER_BATCH > 0) {
+    const markDiversityReview = async (message: string) => {
+      const reviewParts = [...overlapKeys].flatMap((key) => {
+        const current = generatedParts.get(key);
+        if (!current) return [];
+        const updated = { ...current, warnings: [...new Set([...current.warnings, message])] };
+        generatedParts.set(key, updated);
+        return [{ ...updated, attempts: Math.max(1, aiCallCount), status: "warning" as const, issues: updated.warnings }];
+      });
+      if (reviewParts.length) {
+        await saveGeneratedCommentParts({
+          ownerId: job.owner_id, ownerEmail: job.owner_email, classId: Number(job.class_id), parts: reviewParts,
+        });
+      }
+    };
+    const usage = await getAiUsage(job.owner_id);
+    if (aiCallCount >= MAX_COMMENT_AI_CALLS_PER_BATCH || usage.monthly >= MONTHLY_AI_LIMIT) {
+      await markDiversityReview("같은 평가영역·수준에서 유사한 표현이 있어 교사 확인이 필요함");
+    } else {
+      aiCallCount += 1;
+      const fixedReferences = [
+        ...diversityReferences,
+        ...diversityCandidates.filter((part) => !overlapKeys.has(`${part.studentId}|${part.subject}|${part.assessmentIndex}`)),
+      ];
+      try {
+        const regenerated = await generateCommentBatch(
+          diversityTargets,
+          [...avoidComments, ...fixedReferences.map((part) => part.text), ...diversityCandidates.map((part) => part.text)],
+          true,
+          generationModel(1, MAX_GENERATION_ATTEMPTS),
+        );
+        const returnedKeys = new Set(regenerated.parts.map((part) => `${part.studentId}|${part.subject}|${part.assessmentIndex}`));
+        const remainingOverlaps = findCommentAreaOverlaps({ candidates: regenerated.parts, references: fixedReferences });
+        const remainingKeys = new Set(remainingOverlaps.map((item) => item.key));
+        const repairedParts = regenerated.parts.map((part) => {
+          const key = `${part.studentId}|${part.subject}|${part.assessmentIndex}`;
+          return remainingKeys.has(key)
+            ? { ...part, warnings: [...new Set([...part.warnings, "재생성 후에도 유사한 표현이 있어 교사 확인이 필요함"])] }
+            : part;
+        });
+        for (const part of repairedParts) {
+          generatedParts.set(`${part.studentId}|${part.subject}|${part.assessmentIndex}`, part);
+        }
+        for (const key of overlapKeys) {
+          if (returnedKeys.has(key)) continue;
+          const current = generatedParts.get(key);
+          if (current) generatedParts.set(key, {
+            ...current, warnings: [...new Set([...current.warnings, "유사 표현 재생성이 완료되지 않아 교사 확인이 필요함"])],
+          });
+        }
+        const savedRepairs = [...overlapKeys].flatMap((key) => {
+          const part = generatedParts.get(key);
+          return part ? [{
+            ...part, attempts: aiCallCount,
+            status: part.warnings.length ? "warning" as const : "complete" as const,
+            issues: part.warnings,
+          }] : [];
+        });
+        await saveGeneratedCommentParts({
+          ownerId: job.owner_id, ownerEmail: job.owner_email, classId: Number(job.class_id), parts: savedRepairs,
+        });
+        await recordAiUsage({
+          ownerId: job.owner_id, ownerEmail: job.owner_email, classId: Number(job.class_id),
+          feature: "all-comments-diversity-retry", ...regenerated.usage,
+        });
+      } catch {
+        await markDiversityReview("유사 표현 재생성이 완료되지 않아 교사 확인이 필요함");
+        await recordAiUsage({
+          ownerId: job.owner_id, ownerEmail: job.owner_email, classId: Number(job.class_id),
+          feature: "all-comments-diversity-retry", model: generationModel(1, MAX_GENERATION_ATTEMPTS),
+        });
+      }
+    }
   }
   comments = batch.flatMap((item) => {
     const sentences = item.items.map((evidenceItem) =>
