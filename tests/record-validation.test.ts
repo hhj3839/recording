@@ -195,6 +195,12 @@ test("blocks prohibited and sensitive observation data before AI generation", ()
   const sensitive = validateBehaviorSource("보호자 연락처는 010-1234-5678임.");
   assert.equal(sensitive.valid, false);
   assert.deepEqual(sensitive.sensitive, ["휴대전화 번호"]);
+  for (const term of ["학교폭력", "징계", "질병", "진단명", "신체조건"]) {
+    const source = validateBehaviorSource(`${term} 관련 내용`);
+    assert.equal(source.valid, false);
+    assert.deepEqual(source.sensitive, [`민감 내용: ${term}`]);
+    assert.deepEqual(validateRecord(`${term} 관련 내용임.`, true).forbidden, [term]);
+  }
 });
 
 test("counts labeled behavior characteristics and detects fewer than four", () => {
