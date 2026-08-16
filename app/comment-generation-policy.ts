@@ -90,7 +90,7 @@ export function composeGeneratedCommentCandidate(body: string, ending: string) {
 export function validateGeneratedCommentPart(comment: string) {
   const strict = validateGeneratedComment(comment, 1);
   const length = strict.lengths[0] ?? 0;
-  const acceptedLength = length >= 48 && length <= 62;
+  const acceptedLength = length >= 35 && length <= 90;
   const warnings = [
     ...(acceptedLength && !strict.lengthsOk ? [`권장 50~60자 범위를 벗어난 ${length}자 문장`] : []),
   ];

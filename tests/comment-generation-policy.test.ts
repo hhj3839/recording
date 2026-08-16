@@ -106,14 +106,23 @@ test("accepts one 50 to 60 character sentence per assessment area ending in 함"
   assert.equal(result.valid, true);
 });
 
-test("keeps only natural candidates in the accepted 48 to 62 character range without inventing prefixes", () => {
+test("keeps natural comments in the broad display range without inventing prefixes", () => {
   const strict = "글의 중심 생각을 정확하게 파악하고 중요한 내용을 근거와 함께 정리하여 발표 활동에 꾸준히 참여함.";
   assert.equal(normalizeGeneratedCommentCandidate(strict), strict);
   const nearMiss = Array.from(strict).slice(2).join("");
   if (Array.from(nearMiss.trim()).length >= 48) assert.equal(normalizeGeneratedCommentCandidate(nearMiss), nearMiss.trim());
-  const tooShort = Array.from(strict).slice(12).join("");
+  const tooShort = "평가함.";
   assert.equal(normalizeGeneratedCommentCandidate(tooShort), "");
   assert.equal(normalizeGeneratedCommentCandidate(tooShort).startsWith("수업에서 "), false);
+});
+
+test("stores a natural long subject comment while keeping length as a recommendation", () => {
+  const long = "작품 속 인물의 상황을 살펴 알맞은 표정과 몸짓, 목소리와 말투를 선택하고 대화의 흐름에 맞추어 인물의 마음이 드러나도록 표현함.";
+  const result = validateGeneratedCommentPart(long);
+  assert.equal(Array.from(long).length > 60, true);
+  assert.equal(result.acceptedLength, true);
+  assert.equal(result.valid, true);
+  assert.equal(result.warnings.some((issue) => issue.includes("권장 50~60자")), true);
 });
 
 test("rejects missing areas, invalid length, endings, and forbidden expressions", () => {
