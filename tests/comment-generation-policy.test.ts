@@ -140,6 +140,10 @@ test("rejects mechanically duplicated nominal endings", () => {
   }
 });
 
+test("rejects duplicated nominal endings such as 보임함", () => {
+  assert.equal(validateGeneratedCommentPart("중심 문장과 뒷받침 문장을 찾아 글의 내용을 알맞게 간추리는 모습을 보임함.").valid, false);
+});
+
 test("rejects unnatural predicate combinations found in the paid sample", () => {
   for (const sentence of [
     "문장의 짜임을 살펴 자료의 내용을 일부 나누고 문장 구조에 맞게 표현하는 모습을 보 이해함.",
