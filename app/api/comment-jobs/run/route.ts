@@ -89,8 +89,9 @@ export async function POST(request: Request) {
   }) : [];
   for (const saved of savedParts) {
     if (!batchStudentIds.has(Number(saved.student_id)) || !["complete", "warning"].includes(saved.status) || !saved.sentence) continue;
-    const expected = batch.find((item) => item.studentId === Number(saved.student_id))
-      ?.items.find((item) => item.assessmentIndex === Number(saved.assessment_index));
+    const studentEvidence = batch.find((item) => item.studentId === Number(saved.student_id));
+    const expected = (studentEvidence?.subjectItems ?? studentEvidence?.items ?? [])
+      .find((item) => item.assessmentIndex === Number(saved.assessment_index));
     if (!expected || expected.text !== saved.evidence) continue;
     generatedParts.set(`${saved.student_id}|${saved.subject}|${saved.assessment_index}`, {
       studentId: Number(saved.student_id), subject: saved.subject,
@@ -268,7 +269,7 @@ export async function POST(request: Request) {
     }
   }
   comments = batch.flatMap((item) => {
-    const sentences = item.items.map((evidenceItem) =>
+    const sentences = (item.subjectItems ?? item.items).map((evidenceItem) =>
       generatedParts.get(`${item.studentId}|${item.subject}|${evidenceItem.assessmentIndex}`)?.text ?? "");
     const available = sentences.filter(Boolean);
     return available.length
@@ -315,7 +316,7 @@ export async function POST(request: Request) {
   const failedInBatch = batch.filter((item) => item.items.some((evidenceItem) =>
     !generatedParts.has(`${item.studentId}|${item.subject}|${evidenceItem.assessmentIndex}`))).length;
   if (failedInBatch) {
-    const detail = `${subject} 배치 ${batchIndex + 1}: ${failedInBatch}명의 일부 영역이 3회 생성 후에도 검수를 통과하지 못해 확인 필요로 표시했습니다. 성공한 영역은 저장되었습니다.`;
+    const detail = `${subject} 평가영역 배치 ${batchIndex + 1}: ${failedInBatch}개 문장이 생성 후에도 검수를 통과하지 못해 확인 필요로 표시했습니다. 성공한 문장은 저장되었습니다.`;
     errorMessage = [job.error_message, errorMessage, detail].filter(Boolean).join(" ").slice(-1800);
   }
   const nextBatch = batchIndex + 1;

@@ -14,8 +14,17 @@ const paidModeApproval = paidModeApprovals[mode];
 if (paidModeApproval && process.env[paidModeApproval[0]] !== "YES") {
   throw new Error(`${paidModeApproval[1]}는 ${paidModeApproval[0]}=YES로 명시적으로 승인해야 합니다.`);
 }
-const commentBatchSize = 5;
+const commentBatchSize = 25;
 const commentForbiddenExpressions = ["부족함", "미흡함", "못함", "어려워함", "이해하지 못함", "소극적임", "불성실함"];
+
+function estimateAreaBatches(scores) {
+  return Object.values(scores).reduce((total, students) => {
+    const areaCount = Math.max(0, ...students.map((student) => student.levels.length));
+    return total + Array.from({ length: areaCount }, (_, assessmentIndex) =>
+      Math.ceil(students.filter((student) => ["상", "중", "하"].includes(student.levels[assessmentIndex])).length / commentBatchSize))
+      .reduce((sum, count) => sum + count, 0);
+  }, 0);
+}
 
 function validateComment(comment, expectedSentenceCount) {
   const sentences = comment.trim().split(/(?<=\.)\s+/).map((item) => item.trim()).filter(Boolean);
@@ -123,7 +132,7 @@ if (mode === "missing-start") {
   const selectedStudentIds = [...new Set(Object.values(scores).flat().map((item) => item.studentId))];
   const missingItems = Object.values(scores).flat().length;
   if (!missingItems) throw new Error("No missing comments found");
-  const estimatedBatches = Object.values(scores).reduce((total, students) => total + Math.ceil(students.length / commentBatchSize), 0);
+  const estimatedBatches = estimateAreaBatches(scores);
   if (usage.monthly + estimatedBatches > usage.limit) throw new Error("Monthly AI limit is insufficient for missing comments");
   const result = await request("/api/comment-jobs", {
     method: "POST",
@@ -155,11 +164,7 @@ if (mode === "start" || mode === "subject" || mode === "sample" || mode === "pre
   if (expectedItems !== selectedStudents.length * selectedSubjects.length) {
     throw new Error(`Expected ${selectedStudents.length * selectedSubjects.length} student-subject inputs, found ${expectedItems}`);
   }
-  const estimatedBatches = selectedSubjects.reduce(
-    (total, subject) => total + Math.ceil(scores[subject].filter((student) =>
-      student.levels.some((level) => ["상", "중", "하"].includes(level))).length / commentBatchSize),
-    0,
-  );
+  const estimatedBatches = estimateAreaBatches(scores);
   if (mode === "preflight") {
     const usage = await request("/api/usage");
     process.stdout.write(`${JSON.stringify({

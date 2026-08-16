@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
-import { countBehaviorCharacteristics, recordSimilarityDetails, validateBehaviorSource, validateRecord } from "./record-validation";
+import { recordSimilarityDetails, validateBehaviorSource, validateRecord } from "./record-validation";
 import { parseStudentRosterText } from "./student-roster-parser";
 import { parseAssessmentPlanText } from "./assessment-plan-parser";
 import { assessmentPlanWarnings, validateAssessmentPlanRow } from "./assessment-plan-policy";
@@ -1042,7 +1042,7 @@ function Comments({ assessmentDataBySubject, plan, roster }: { assessmentDataByS
           setLoading(false);
           setGenerationProgress("");
           await loadGeneratedComments();
-          if (result.job.failedItems) setError(result.job.error || `${result.job.failedItems}명이 생성되지 않았습니다. 과목 AI 평어 생성을 다시 실행해 주세요.`);
+          if (result.job.failedItems) setError(result.job.error || `${result.job.failedItems}개 평가영역 문장이 생성되지 않았습니다. 과목 AI 평어 생성을 다시 실행해 주세요.`);
           else setError("");
           const generatedAt = result.job.completedAt || new Date().toISOString();
           if (result.job.subject) setSubjectGeneratedAt((current) => ({ ...current, [result.job!.subject]: generatedAt }));
@@ -1371,11 +1371,6 @@ function Behavior({ roster }: { roster: AssessmentStudent[] }) {
         return;
       }
     }
-    const insufficient = inputs.filter((item) => countBehaviorCharacteristics(item.characteristic) < 4);
-    if (insufficient.length) {
-      const numbers = insufficient.map((item) => roster.find((student) => student.id === item.studentId)?.number ?? item.studentId);
-      return setError(`${numbers.join(", ")}번 학생은 특성이 4개 미만입니다. 학생별로 4~5가지를 입력해 주세요.`);
-    }
     const blocked = inputs.filter((item) => !validateBehaviorSource(item.characteristic).valid);
     if (blocked.length) {
       const numbers = blocked.map((item) => roster.find((student) => student.id === item.studentId)?.number ?? item.studentId);
@@ -1470,11 +1465,7 @@ function Behavior({ roster }: { roster: AssessmentStudent[] }) {
     const characteristic = records[student.id]?.characteristic?.trim() ?? "";
     return characteristic && !validateBehaviorSource(characteristic).valid;
   }).length;
-  const incompleteSourceCount = roster.filter((student) => {
-    const characteristic = records[student.id]?.characteristic?.trim() ?? "";
-    return characteristic && countBehaviorCharacteristics(characteristic) < 4;
-  }).length;
-  const inputIssueCount = blockedSourceCount + incompleteSourceCount;
+  const inputIssueCount = blockedSourceCount;
   return (
     <section>
       <div className="page-heading">
@@ -1499,12 +1490,10 @@ function Behavior({ roster }: { roster: AssessmentStudent[] }) {
                 })).sort((left, right) => right.score - left.score);
                 const similarStudents = comparisons.filter((item) => item.score >= 0.82);
                 const closest = comparisons[0];
-                const characteristicCount = countBehaviorCharacteristics(record.characteristic);
                 const behaviorReviewIssues = record.behavior ? [
                   ...(validation.bytes < 500 ? [`500B 미만 · 현재 ${validation.bytes}B`] : []),
                   ...(validation.bytes > 600 ? [`600B 초과 · 현재 ${validation.bytes}B`] : []),
                   ...(!validation.endingsOk ? ["음·임 종결 확인"] : []),
-                  ...(!validation.growthIncluded ? ["성장 표현 확인"] : []),
                   ...(validation.forbidden.length > 0 ? [`금지어 확인: ${validation.forbidden.join(" · ")}`] : []),
                   ...(!validation.spellingOk ? validation.spellingIssues.map((issue) => `맞춤법: ${issue}`) : []),
                   ...(validation.repeated.length > 0 ? ["반복 표현 확인"] : []),
@@ -1514,7 +1503,7 @@ function Behavior({ roster }: { roster: AssessmentStudent[] }) {
                   : "";
                 return <tr className={activeStudentId === student.id ? "active-reference-row" : ""} key={student.id}>
                   <td>{student.number ?? student.id}</td><td><strong>{student.name}</strong></td>
-                  <td className="behavior-source-pane"><textarea className={sourceIssues.length ? "input-blocked" : ""} value={record.characteristic} onFocus={() => setActiveStudentId(student.id)} onChange={(event) => updateRecord(student.id, { characteristic: event.target.value })} onBlur={() => void saveRecord(student.id, records[student.id] ?? record)} placeholder={"관찰한 내용을 키워드·메모·문장 중 편한 방식으로 작성하세요.\n예: 질문을 자주 함 · 친구 말을 잘 들어줌 · 맡은 역할을 끝까지 함 · 발표에 자신감이 생김"} />{sourceIssues.length > 0 && <small className="source-warning">AI 전송 불가: {sourceIssues.join(" · ")}</small>}{record.characteristic.trim() && characteristicCount < 4 && <small className="source-warning characteristic-warning">특징을 {4 - characteristicCount}개 더 입력해 주세요.</small>}</td>
+                  <td className="behavior-source-pane"><textarea className={sourceIssues.length ? "input-blocked" : ""} value={record.characteristic} onFocus={() => setActiveStudentId(student.id)} onChange={(event) => updateRecord(student.id, { characteristic: event.target.value })} onBlur={() => void saveRecord(student.id, records[student.id] ?? record)} placeholder={"관찰한 내용을 키워드·메모·문장 중 편한 방식으로 작성하세요.\n예: 질문을 자주 함 · 친구 말을 잘 들어줌 · 맡은 역할을 끝까지 함 · 발표에 자신감이 생김"} />{sourceIssues.length > 0 && <small className="source-warning">AI 전송 불가: {sourceIssues.join(" · ")}</small>}</td>
                   <td className="behavior-result-pane"><textarea value={record.behavior} onChange={(event) => updateRecord(student.id, { behavior: event.target.value })} onBlur={() => void saveRecord(student.id, records[student.id] ?? record)} placeholder={record.characteristic ? "행동특성을 생성하면 이곳에 결과가 표시됩니다." : "왼쪽에 관찰 키워드나 메모를 먼저 입력해 주세요."} /></td>
                   <td className="validation-cell behavior-validation issue-only-validation behavior-review-cell">
                     <ReviewWarning issues={behaviorReviewIssues} />
@@ -1527,7 +1516,7 @@ function Behavior({ roster }: { roster: AssessmentStudent[] }) {
             </table>
           </div>
           <aside className="behavior-reference-drawer">
-            <div className="reference-guide compact-reference-guide"><div><strong>작성 참고자료</strong><span>현재 학생: {activeStudentId ? `${roster.find((student) => student.id === activeStudentId)?.number ?? roster.find((student) => student.id === activeStudentId)?.id}번 ${roster.find((student) => student.id === activeStudentId)?.name}` : "특성 입력칸을 선택하세요"}</span></div><details><summary>사용 방법</summary><ol><li>형식에 맞추지 않아도 됩니다. 관찰한 내용을 문장·메모·키워드 중 편한 방식으로 작성하세요.</li><li>학습 태도, 교우관계, 책임감, 생활 습관, 성장 모습 등 서로 다른 특징을 4가지 이상 입력하세요.</li><li>참고자료의 키워드를 선택한 뒤 실제 관찰 내용에 맞게 다듬어도 됩니다.</li><li>학생 이름이나 민감한 개인정보는 입력하지 마세요.</li></ol></details></div>
+            <div className="reference-guide compact-reference-guide"><div><strong>작성 참고자료</strong><span>현재 학생: {activeStudentId ? `${roster.find((student) => student.id === activeStudentId)?.number ?? roster.find((student) => student.id === activeStudentId)?.id}번 ${roster.find((student) => student.id === activeStudentId)?.name}` : "특성 입력칸을 선택하세요"}</span></div><details><summary>사용 방법</summary><ol><li>형식에 맞추지 않아도 됩니다. 관찰한 내용을 문장·메모·키워드 중 편한 방식으로 작성하세요.</li><li>한 가지 키워드만 입력해도 되지만, 구체적인 관찰 메모가 많을수록 결과가 자연스러워집니다.</li><li>참고자료의 키워드를 선택한 뒤 실제 관찰 내용에 맞게 다듬어도 됩니다.</li><li>학생 이름이나 민감한 개인정보는 입력하지 마세요.</li></ol></details></div>
             <div className="reference-tabs">{behaviorReferences.map((group) => <button className={activeCategory === group.category ? "active" : ""} onClick={() => setActiveCategory(group.category)} key={group.category}>{group.category}</button>)}</div>
             {behaviorReferences.filter((group) => group.category === activeCategory).map((group) => <div className="reference-groups" key={group.category}>
               <section><h3>강점 키워드</h3><div>{group.strengths.map((phrase) => <button onClick={() => addReferencePhrase(phrase)} key={phrase}>{phrase}</button>)}</div></section>

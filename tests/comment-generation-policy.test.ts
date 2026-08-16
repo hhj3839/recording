@@ -5,7 +5,7 @@ import { behaviorRepairInstruction, behaviorRepairPlan, behaviorRepairTargets } 
 import { assertStrictGeneratedBehaviors, selectBehaviorCandidate } from "../app/behavior-persistence-policy.ts";
 import { validateRecord } from "../app/record-validation.ts";
 import { generationModel } from "../app/ai-model-policy.ts";
-import { batchCommentRepairs, batchCommentsBySubject, COMMENT_BATCH_SIZE, COMMENT_REPAIR_EVIDENCE_BATCH_SIZE, MAX_COMMENT_AI_CALLS_PER_BATCH, MAX_COMMENT_DIVERSITY_CALLS_PER_BATCH } from "../app/comment-batching.ts";
+import { batchCommentRepairs, batchCommentsByAssessmentArea, COMMENT_BATCH_SIZE, COMMENT_REPAIR_EVIDENCE_BATCH_SIZE, MAX_COMMENT_AI_CALLS_PER_BATCH, MAX_COMMENT_DIVERSITY_CALLS_PER_BATCH } from "../app/comment-batching.ts";
 import { batchBehaviors, BEHAVIOR_BATCH_SIZE } from "../app/behavior-batching.ts";
 import { estimateAiCostUsd } from "../app/ai-pricing.ts";
 
@@ -25,15 +25,17 @@ test("estimates token cost with cached input pricing", () => {
   assert.equal(estimateAiCostUsd({ model: "unknown", inputTokens: 100 }), null);
 });
 
-test("batches at most five students without mixing subjects", () => {
+test("batches up to 25 students by subject and assessment area", () => {
   const inputs = [
-    ...Array.from({ length: 12 }, (_, index) => ({ subject: "국어", studentId: index + 1 })),
-    ...Array.from({ length: 6 }, (_, index) => ({ subject: "수학", studentId: index + 1 })),
+    ...Array.from({ length: 30 }, (_, index) => ({ subject: "국어", studentId: index + 1, items: [{ assessmentIndex: 0 }, { assessmentIndex: 1 }] })),
+    ...Array.from({ length: 6 }, (_, index) => ({ subject: "수학", studentId: index + 1, items: [{ assessmentIndex: 0 }] })),
   ];
-  const batches = batchCommentsBySubject(inputs);
-  assert.equal(COMMENT_BATCH_SIZE, 5);
-  assert.deepEqual(batches.map((batch) => batch.length), [5, 5, 2, 5, 1]);
+  const batches = batchCommentsByAssessmentArea(inputs);
+  assert.equal(COMMENT_BATCH_SIZE, 25);
+  assert.deepEqual(batches.map((batch) => batch.length), [25, 5, 25, 5, 6]);
   assert.equal(batches.every((batch) => new Set(batch.map((item) => item.subject)).size === 1), true);
+  assert.equal(batches.every((batch) => new Set(batch.flatMap((item) => item.items.map((entry) => entry.assessmentIndex))).size === 1), true);
+  assert.equal(batches.every((batch) => batch.every((item) => item.subjectItems.length >= item.items.length)), true);
 });
 
 test("groups missing comment evidence into at most ten areas per repair call", () => {
@@ -175,12 +177,12 @@ test("blocks evaluative or negatively framed behavior expressions", () => {
   }
 });
 
-test("requires exactly four sentences before persisting a behavior", () => {
+test("accepts a natural behavior paragraph without fixing the sentence count", () => {
   let three = "학습에 꾸준히 참여함. 친구의 말을 경청하며 협력함. 맡은 역할을 책임감 있게 수행하며 성장함.";
   while (new TextEncoder().encode(three).length < 500) three = three.replace("학습에 ", "학습에 차분하고 성실한 태도로 ");
   const result = validateRecord(three, true);
-  assert.equal(result.sentenceCountOk, false);
-  assert.equal(result.valid, false);
+  assert.equal(result.sentenceCountOk, true);
+  assert.equal(result.valid, true);
 });
 
 test("rejects dangling connective bodies before composing a generated ending", () => {

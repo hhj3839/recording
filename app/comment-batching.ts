@@ -1,16 +1,23 @@
-export const COMMENT_BATCH_SIZE = 5;
+export const COMMENT_BATCH_SIZE = 25;
 export const COMMENT_REPAIR_EVIDENCE_BATCH_SIZE = 10;
 export const MAX_COMMENT_AI_CALLS_PER_BATCH = 5;
 export const MAX_COMMENT_DIVERSITY_CALLS_PER_BATCH = 1;
 
-export function batchCommentsBySubject<T extends { subject: string }>(items: T[], size = COMMENT_BATCH_SIZE) {
+export function batchCommentsByAssessmentArea<
+  TItem extends { assessmentIndex: number },
+  T extends { subject: string; items: TItem[] },
+>(items: T[], size = COMMENT_BATCH_SIZE) {
   if (!Number.isInteger(size) || size < 1) throw new Error("배치 크기는 1 이상의 정수여야 합니다.");
   return [...new Set(items.map((item) => item.subject))].flatMap((subject) => {
     const subjectItems = items.filter((item) => item.subject === subject);
-    return Array.from(
-      { length: Math.ceil(subjectItems.length / size) },
-      (_, index) => subjectItems.slice(index * size, index * size + size),
-    );
+    const assessmentIndexes = [...new Set(subjectItems.flatMap((item) => item.items.map((entry) => entry.assessmentIndex)))].sort((a, b) => a - b);
+    return assessmentIndexes.flatMap((assessmentIndex) => {
+      const areaItems = subjectItems.flatMap((item) => {
+        const target = item.items.find((entry) => entry.assessmentIndex === assessmentIndex);
+        return target ? [{ ...item, items: [target], subjectItems: item.items }] : [];
+      });
+      return Array.from({ length: Math.ceil(areaItems.length / size) }, (_, index) => areaItems.slice(index * size, index * size + size));
+    });
   });
 }
 

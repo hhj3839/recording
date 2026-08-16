@@ -11,6 +11,7 @@ export type CommentEvidence = {
   studentId: number;
   subject: string;
   items: CommentEvidenceItem[];
+  subjectItems?: CommentEvidenceItem[];
   variation?: CommentVariation;
   itemVariations?: Record<number, CommentVariation>;
 };
