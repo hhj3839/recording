@@ -50,6 +50,13 @@ test("job status polling wakes queued background generation without creating a n
   }
 });
 
+test("comment prompt forces natural 함 endings for reading summaries", () => {
+  const source = readFileSync("app/comment-generation.ts", "utf8");
+  assert.match(source, /마지막 두 글자는 반드시 ‘함\.’/);
+  assert.match(source, /‘간추림\.’, ‘할 수 있음\.’, ‘모습임\.’, ‘하려 함\.’으로 끝내지 않는다/);
+  assert.match(source, /중요한 내용을 간추려 정리함\./);
+});
+
 test("always refreshes generated result counts without browser caching", () => {
   const page = readFileSync("app/page.tsx", "utf8");
   assert.equal((page.match(/fetch\("\/api\/generated-comments", \{ cache: "no-store" \}\)/g) ?? []).length, 4);
