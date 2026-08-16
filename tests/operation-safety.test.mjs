@@ -76,7 +76,8 @@ test("keeps the simplified teacher-facing guidance", () => {
   assert.match(page, /관찰 키워드·메모/);
   assert.match(page, /생성 결과/);
   assert.match(page, /behavior-split-table/);
-  assert.match(page, /inputs\.filter\(\(item\) => countBehaviorCharacteristics\(item\.characteristic\) < 4\)/);
+  assert.doesNotMatch(page, /countBehaviorCharacteristics\(item\.characteristic\) < 4/);
+  assert.match(page, /한 가지 키워드만 입력해도 되지만/);
 });
 
 test("keeps wide comment tables inside their responsive container", () => {

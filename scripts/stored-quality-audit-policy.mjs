@@ -77,7 +77,8 @@ export function validateStoredBehavior(text) {
     growth: /(성장|변화|발전|향상|노력|기르|익히|꾸준|가능성|나아)/.test(normalized),
     spelling: spellingIssueCount === 0,
   };
-  return { bytes, checks, strict: Object.values(checks).every(Boolean), forbidden, repeated, spellingIssueCount };
+  const strict = checks.length && checks.endings && checks.forbidden && checks.repeated && checks.spelling;
+  return { bytes, checks, strict, forbidden, repeated, spellingIssueCount };
 }
 
 export function auditStoredResults({ students, plan, levels, comments, parts, behaviors }) {

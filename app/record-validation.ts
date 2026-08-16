@@ -75,7 +75,7 @@ export function validateRecord(text: string, behavior = false): ValidationResult
   const repeated = [...counts.entries()].filter(([, count]) => count > 1).map(([sentence]) => sentence.slice(0, 30));
   const endingsOk = !!sentences.length && sentences.every((sentence) =>
     behavior ? hasNominalMieumEnding(sentence) : sentenceEnd.test(sentence));
-  const sentenceCountOk = !behavior || sentences.length === 4;
+  const sentenceCountOk = !behavior || sentences.length > 0;
   const lengthOk = behavior ? bytes >= 500 && bytes <= 600 : bytes > 0 && bytes <= 1500;
   const growthIncluded = !behavior || /(성장|변화|발전|향상|노력|기르|익히|꾸준|가능성|나아)/.test(normalized);
   const spellingIssues = spellingRules.filter((rule) => rule.pattern.test(normalized)).map((rule) => rule.message);
@@ -95,7 +95,7 @@ export function validateRecord(text: string, behavior = false): ValidationResult
     spellingOk,
     spellingIssues,
     valid: lengthOk && sentenceCountOk && endingsOk && !forbidden.length && !styleIssues.length
-      && !repeated.length && growthIncluded && spellingOk,
+      && !repeated.length && spellingOk,
   };
 }
 

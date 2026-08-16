@@ -7,7 +7,7 @@ export function selectBehaviorCandidate(candidates: unknown[]) {
   const ranked = unique.map((behavior) => {
     const validation = validateRecord(behavior, true);
     const byteDistance = validation.bytes < 500 ? 500 - validation.bytes : validation.bytes > 600 ? validation.bytes - 600 : 0;
-    const nonLengthFailures = [validation.sentenceCountOk, validation.endingsOk, validation.growthIncluded, validation.spellingOk,
+    const nonLengthFailures = [validation.sentenceCountOk, validation.endingsOk, validation.spellingOk,
       !validation.forbidden.length, !validation.styleIssues.length, !validation.repeated.length]
       .filter((passed) => !passed).length;
     return { behavior, validation, score: nonLengthFailures * 10_000 + byteDistance };

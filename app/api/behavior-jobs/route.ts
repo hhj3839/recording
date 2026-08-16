@@ -6,7 +6,7 @@ import { BehaviorInput, BehaviorOptions } from "../../behavior-generation";
 import { createBehaviorVariations } from "../../behavior-variation";
 import { signCommentJob } from "../../comment-generation";
 import { dataError, getDataScope, requireOwnedStudentIds } from "../../data-scope";
-import { countBehaviorCharacteristics, validateBehaviorSource } from "../../record-validation";
+import { validateBehaviorSource } from "../../record-validation";
 
 type JobRow = {
   id: string; status: string; current_batch: number; total_batches: number; total_items: number;
@@ -41,7 +41,7 @@ export async function POST(request: Request) {
     const body = await request.json() as { students?: unknown; options?: unknown };
     if (!Array.isArray(body.students)) return Response.json({ error: "학생 특성을 다시 확인해 주세요." }, { status: 400 });
     const options: BehaviorOptions = {
-      sentenceCount: 4,
+      sentenceCount: 0,
       maxBytes: 550,
       emphasis: "balanced",
     };
@@ -53,11 +53,6 @@ export async function POST(request: Request) {
       return Number.isInteger(studentId) && characteristic ? [{ studentId, characteristic, options }] : [];
     });
     if (!inputs.length) return Response.json({ error: "한 명 이상의 특성을 입력해 주세요." }, { status: 400 });
-    const insufficient = inputs.filter((item) => countBehaviorCharacteristics(item.characteristic) < 4);
-    if (insufficient.length) return Response.json({
-      error: `${insufficient.length}명의 학생 특성이 4개 미만입니다. 학생별로 관찰한 특성을 4~5가지 입력해 주세요.`,
-      studentIds: insufficient.map((item) => item.studentId),
-    }, { status: 400 });
     const blocked = inputs.flatMap((item) => {
       const validation = validateBehaviorSource(item.characteristic);
       return validation.valid ? [] : [{ studentId: item.studentId, issues: [...validation.forbidden, ...validation.sensitive] }];
