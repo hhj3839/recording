@@ -1509,12 +1509,16 @@ function Behavior({ roster }: { roster: AssessmentStudent[] }) {
                   ...(!validation.spellingOk ? validation.spellingIssues.map((issue) => `맞춤법: ${issue}`) : []),
                   ...(validation.repeated.length > 0 ? ["반복 표현 확인"] : []),
                 ] : [];
+                const preferredLengthAdvisory = record.behavior && validation.bytes > 550 && validation.bytes <= 600
+                  ? `권장 550B 초과 · 현재 ${validation.bytes}B`
+                  : "";
                 return <tr className={activeStudentId === student.id ? "active-reference-row" : ""} key={student.id}>
                   <td>{student.number ?? student.id}</td><td><strong>{student.name}</strong></td>
                   <td className="behavior-source-pane"><textarea className={sourceIssues.length ? "input-blocked" : ""} value={record.characteristic} onFocus={() => setActiveStudentId(student.id)} onChange={(event) => updateRecord(student.id, { characteristic: event.target.value })} onBlur={() => void saveRecord(student.id, records[student.id] ?? record)} placeholder={"관찰한 내용을 키워드·메모·문장 중 편한 방식으로 작성하세요.\n예: 질문을 자주 함 · 친구 말을 잘 들어줌 · 맡은 역할을 끝까지 함 · 발표에 자신감이 생김"} />{sourceIssues.length > 0 && <small className="source-warning">AI 전송 불가: {sourceIssues.join(" · ")}</small>}{record.characteristic.trim() && characteristicCount < 4 && <small className="source-warning characteristic-warning">특징을 {4 - characteristicCount}개 더 입력해 주세요.</small>}</td>
                   <td className="behavior-result-pane"><textarea value={record.behavior} onChange={(event) => updateRecord(student.id, { behavior: event.target.value })} onBlur={() => void saveRecord(student.id, records[student.id] ?? record)} placeholder={record.characteristic ? "행동특성을 생성하면 이곳에 결과가 표시됩니다." : "왼쪽에 관찰 키워드나 메모를 먼저 입력해 주세요."} /></td>
                   <td className="validation-cell behavior-validation issue-only-validation behavior-review-cell">
                     <ReviewWarning issues={behaviorReviewIssues} />
+                    {preferredLengthAdvisory && <small className="behavior-length-advisory">{preferredLengthAdvisory}</small>}
                     {similarStudents.length > 0 && closest && <div className="similarity-detail"><strong>{closest.student.name} 학생과 {Math.round(closest.score * 100)}%</strong>{closest.overlaps.length > 0 && <span>겹치는 표현: {closest.overlaps.join(" · ")}</span>}</div>}
                     <div className="comment-row-actions review-cell-actions"><button disabled={!record.characteristic || !sourceValidation.valid || !!rewriteBusyKey} onMouseDown={(event) => event.preventDefault()} onClick={() => void rewriteBehavior(student.id, record, "regenerate")}>{rewriteBusyKey === `${student.id}|regenerate` ? "생성 중…" : "다시 생성"}</button></div>
                   </td>

@@ -11,6 +11,7 @@ export type ValidationResult = {
 };
 
 const forbiddenTerms = ["수상", "대회 실적", "사교육", "학원", "공인시험", "부모 직업", "가정형편", "사회경제적"];
+const behaviorSensitiveTerms = ["학교폭력", "징계", "질병", "진단명", "신체조건"];
 const sensitiveInputPatterns: Array<{ pattern: RegExp; label: string }> = [
   { pattern: /\b\d{6}-?[1-4]\d{6}\b/, label: "주민등록번호 형식" },
   { pattern: /\b01[016789][-\s]?\d{3,4}[-\s]?\d{4}\b/, label: "휴대전화 번호" },
@@ -52,7 +53,8 @@ export function validateRecord(text: string, behavior = false): ValidationResult
   const normalized = text.trim();
   const bytes = new TextEncoder().encode(normalized).length;
   const sentences = normalized.split(/(?<=[.!?])\s+|\n+/).map((sentence) => sentence.trim()).filter(Boolean);
-  const forbidden = forbiddenTerms.filter((term) => normalized.includes(term));
+  const forbidden = [...forbiddenTerms, ...(behavior ? behaviorSensitiveTerms : [])]
+    .filter((term) => normalized.includes(term));
   const counts = new Map<string, number>();
   sentences.forEach((sentence) => {
     const key = sentence.replace(/[.!?\s]/g, "");
@@ -84,7 +86,10 @@ export function validateRecord(text: string, behavior = false): ValidationResult
 export function validateBehaviorSource(text: string) {
   const normalized = text.trim();
   const forbidden = forbiddenTerms.filter((term) => normalized.includes(term));
-  const sensitive = sensitiveInputPatterns.filter((item) => item.pattern.test(normalized)).map((item) => item.label);
+  const sensitive = [
+    ...sensitiveInputPatterns.filter((item) => item.pattern.test(normalized)).map((item) => item.label),
+    ...behaviorSensitiveTerms.filter((term) => normalized.includes(term)).map((term) => `민감 내용: ${term}`),
+  ];
   return { valid: Boolean(normalized) && !forbidden.length && !sensitive.length, forbidden, sensitive };
 }
 

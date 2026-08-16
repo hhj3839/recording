@@ -20,6 +20,8 @@ export type GeneratedBehavior = BehaviorInput & { behavior: string };
 export type BehaviorFailure = BehaviorInput & { behavior: string; issues: string[]; bytes: number; recoverable: boolean };
 export type BehaviorBatchResult = { behaviors: GeneratedBehavior[]; failures: BehaviorFailure[]; usage: AiTokenUsage };
 
+const behaviorSystemPrompt = "너는 대한민국 초등학교 담임교사이며 학기말 학교생활기록부의 행동특성 및 종합의견을 작성하는 전문가이다. 교사가 입력한 학습 태도, 교우관계, 생활 습관, 수업 참여, 책임감, 협력성, 자기관리, 의사소통, 성장 모습 등 학교생활 관찰 사실만 활용하여 학생의 학교생활 전반이 종합적으로 이해되게 작성한다. 장점, 노력, 변화, 성장 가능성이 긍정적이고 균형 있게 드러나게 하되, 입력에 없는 장점·노력·변화를 절대 만들지 않는다. 부정적인 내용은 사실을 바꾸지 않는 범위에서 성장 중심으로 순화하고 과장·단정·학생 간 비교를 피한다. 학생 이름과 성별을 쓰지 않는다. 성적·등수·수상 실적·대회·사교육·공인시험·특정 기관명·가정환경·부모 직업·사회경제적 배경·신체조건·학교폭력·징계·질병을 포함하지 않는다. 활동을 나열하지 말고 행동의 특징, 과정, 변화를 자연스럽게 연결한다. variation의 문장 구조·시작 방식·특성 순서를 따르고 같은 묶음 학생 및 avoidBehaviors와 첫 구절, 핵심 동사, 문장 구조가 겹치지 않게 분산한다. 각 후보는 정확히 4문장인 한 문단으로 작성하며 줄바꿈 없이 문장 사이를 한 칸으로 구분한다. UTF-8 510~540바이트를 목표로 작성하되 서버 허용 범위는 500~600바이트이다. 모든 문장은 ‘참여함.’, ‘향상됨.’, ‘돋보임.’처럼 자연스러운 명사형 종결어미로 끝낸다. 출력 전 분량, 종결어미, 표현 반복, 입력 사실과의 일치, 변화·성장, 금지 내용, 맞춤법과 띄어쓰기를 스스로 검수한다. 반드시 JSON 배열만 출력하며 각 원소는 studentId와 candidates 필드를 가지고 candidates에는 서로 다른 완성 문장 2개를 넣는다.";
+
 function outputText(payload: unknown) {
   if (!payload || typeof payload !== "object") return "";
   const response = payload as { output_text?: unknown; output?: Array<{ content?: Array<{ type?: string; text?: string }> }> };
@@ -45,8 +47,8 @@ export async function generateBehaviorBatch(inputs: BehaviorInput[], avoidBehavi
       store: false,
       max_output_tokens: Math.min(7000, Math.max(2400, inputs.length * 1200)),
       input: [
-        { role: "system", content: [{ type: "input_text", text: "너는 대한민국 초등학교 담임교사이며 학생별 행동특성 및 발달상황을 작성한다. 교사가 입력한 학습 태도, 교우관계, 책임감, 생활 습관, 의사소통, 협력, 자기관리, 성장 모습 등의 관찰 사실만 활용한다. 학생의 장점과 발전 가능성이 구체적으로 드러나게 하고, 부정적인 내용은 사실을 바꾸지 않는 범위에서 변화와 성장 중심으로 순화한다. 활동을 단순 나열하지 말고 행동의 특징·과정·변화를 자연스럽게 연결한다. 입력된 사실을 과장하거나 새로운 사실을 만들지 않으며 학생 이름·성별·학생 간 비교를 쓰지 않는다. 대회·수상 실적, 사교육, 공인시험, 특정 기관명, 부모 직업·사회경제적 배경 등 기재 금지 내용을 포함하지 않는다. variation의 문장 구조·시작 방식·특성 순서를 따르고 같은 묶음 학생 및 avoidBehaviors와 첫 구절, 핵심 동사, 문장 구조가 겹치지 않게 분산한다. 각 후보는 정확히 4문장으로 작성한다. UTF-8 500~600바이트 범위에서 자연스럽게 작성하고 군더더기 수식어를 넣지 않는다. 모든 문장은 ‘참여함.’, ‘향상됨.’, ‘돋보임.’처럼 자연스러운 명사형 종결어미로 끝낸다. 출력 전 분량, 종결어미, 표현 반복, 구체적인 변화·성장, 금지 내용, 맞춤법과 띄어쓰기를 스스로 검수한다. 반드시 JSON 배열만 출력하며 각 원소는 studentId와 candidates 필드를 가지고 candidates에는 서로 다른 완성 문장 2개를 넣는다." }] },
-        { role: "user", content: [{ type: "input_text", text: `다음 학생 식별번호별 특성을 바탕으로 각각 행동특성 후보를 정확히 2개 작성해 줘. 최초 생성은 첫 후보 525~545바이트, 둘째 후보 550~570바이트를 목표로 한다. repairTargets가 있으면 최초 목표보다 repairTargets의 두 숫자를 각각 후보 1·2의 정확한 목표로 우선 적용한다. repairHint와 previousBehavior가 있으면 previousBehavior를 그대로 바탕으로 목표까지 필요한 부분만 서로 다르게 최소 수정하고, 전체를 새로 쓰지 않는다. 각 후보의 UTF-8 바이트를 따로 계산하고 500~600바이트가 아니면 출력 전에 미세 조정한다. 부족하면 이미 언급된 행동의 방법·과정만 구체화하고, 길면 중복 연결어와 수식어만 줄인다. 문장 수와 핵심 사실은 유지하며 새로운 사실은 절대 추가하지 않는다. 최종 네 문장 각각의 마침표 직전 글자가 받침 ㅁ인 ‘음/임/함/됨’ 형태인지 검사한다.\n입력: ${JSON.stringify(inputs)}\n피해야 할 기존 시작 표현: ${JSON.stringify(avoidanceHints)}` }] },
+        { role: "system", content: [{ type: "input_text", text: behaviorSystemPrompt }] },
+        { role: "user", content: [{ type: "input_text", text: `다음 학생 식별번호별 특성을 바탕으로 각각 행동특성 후보를 정확히 2개 작성해 줘. 최초 생성은 첫 후보 510~525바이트, 둘째 후보 526~540바이트를 목표로 한다. repairTargets가 있으면 최초 목표보다 repairTargets의 두 숫자를 각각 후보 1·2의 정확한 목표로 우선 적용한다. repairHint와 previousBehavior가 있으면 previousBehavior를 그대로 바탕으로 목표까지 필요한 부분만 서로 다르게 최소 수정하고, 전체를 새로 쓰지 않는다. 각 후보의 UTF-8 바이트를 따로 계산하고 500~600바이트가 아니면 출력 전에 미세 조정한다. 부족하면 이미 언급된 행동의 방법·과정만 구체화하고, 길면 중복 연결어와 수식어만 줄인다. 문장 수와 핵심 사실은 유지하며 새로운 사실은 절대 추가하지 않는다. 정확히 네 문장을 줄바꿈 없는 한 문단으로 만들고, 각 문장의 마침표 직전 글자가 받침 ㅁ인 ‘음/임/함/됨’ 형태인지 검사한다.\n입력: ${JSON.stringify(inputs)}\n피해야 할 기존 시작 표현: ${JSON.stringify(avoidanceHints)}` }] },
       ],
       text: { verbosity: "low" },
     }),
