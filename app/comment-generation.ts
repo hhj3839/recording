@@ -86,6 +86,9 @@ export async function generateCommentBatch(evidence: CommentEvidence[], avoidCom
     }];
   }));
   const avoidanceHints = [...new Set(avoidComments.map((item) => item.split(/[.!?]/)[0]?.trim().slice(0, 90)).filter(Boolean))].slice(0, 20);
+  const repairInstruction = repair
+    ? "이전 응답에서 저장되지 않은 영역만 보완한다. 표현 다양화보다 평가기준의 수행 수준과 필수 조건을 빠짐없이 보존하는 것을 우선한다. 특히 평가기준에 교사의 도움, 노력, 일부 수행이 있으면 그 의미를 반드시 문장에 포함한다. 평가기준을 한 문장의 자연스러운 학교생활기록부 문체로 가깝게 바꾸어 쓰고, 입력에 없는 태도나 활동은 덧붙이지 않는다. 길이는 35~90자 안에서 자연스러움을 우선하며 itemId마다 정확히 한 문장을 반환한다."
+    : "각 문장은 52~58자를 목표로 하되 자연스러운 완성 문장을 우선한다. 각 영역의 itemVariations를 표현 방식으로만 적용하고 같은 요청 안에서 첫 10~15자를 반복하지 않는다.";
   const response = await fetch("https://api.openai.com/v1/responses", {
     method: "POST",
     headers: { Authorization: `Bearer ${apiKey}`, "Content-Type": "application/json" },
@@ -101,7 +104,7 @@ export async function generateCommentBatch(evidence: CommentEvidence[], avoidCom
         },
         {
           role: "user",
-          content: [{ type: "input_text", text: `${repair ? "이전 응답에서 누락되거나 검수를 통과하지 못한 영역만 다시 요청한다. itemId를 절대 생략하지 말고 각 itemId에 정확히 한 문장을 작성해 줘.\n" : ""}근거 사전과 학생별 근거 ID를 연결하여 각각 교과 평어를 작성해 줘. 각 text는 52~58자의 완성 문장으로 작성하고 반드시 자연스러운 ‘함.’으로 끝내. 글자 수를 센 뒤 범위가 아니면 출력 전에 문장 전체를 자연스럽게 고쳐. 작성 후 각 문장의 행동·태도·과정·수행 정도를 연결된 근거와 대조하고 근거에서 확인할 수 없는 표현은 삭제해. 각 영역의 itemVariations를 표현 방식으로만 적용하고 그 지시문 자체는 결과에 쓰지 마. 같은 요청 안에서 첫 10~15자를 반복하지 마.\n근거 사전: ${JSON.stringify(evidenceDictionary)}\n학생 입력: ${JSON.stringify(requestEvidence)}\n피해야 할 기존 시작 표현: ${JSON.stringify(avoidanceHints)}` }],
+          content: [{ type: "input_text", text: `${repairInstruction}\n근거 사전과 학생별 근거 ID를 연결하여 각각 교과 평어를 작성해 줘. 모든 text는 반드시 자연스러운 ‘함.’으로 끝내고, 작성 후 행동·태도·과정·수행 정도를 연결된 근거와 대조하여 근거에서 확인할 수 없는 표현은 삭제해. itemVariations의 지시문 자체는 결과에 쓰지 마.\n근거 사전: ${JSON.stringify(evidenceDictionary)}\n학생 입력: ${JSON.stringify(requestEvidence)}\n피해야 할 기존 시작 표현: ${JSON.stringify(avoidanceHints)}` }],
         },
       ],
       text: {

@@ -36,17 +36,17 @@ test("batches at most five students without mixing subjects", () => {
   assert.equal(batches.every((batch) => new Set(batch.map((item) => item.subject)).size === 1), true);
 });
 
-test("groups missing comment evidence into at most five areas per repair call", () => {
+test("groups missing comment evidence into at most ten areas per repair call", () => {
   const pending = Array.from({ length: 5 }, (_, index) => ({
     studentId: index + 1,
     subject: "국어",
     items: [{ assessmentIndex: 0 }, { assessmentIndex: 1 }],
   }));
   const groups = batchCommentRepairs(pending);
-  assert.equal(COMMENT_REPAIR_EVIDENCE_BATCH_SIZE, 5);
+  assert.equal(COMMENT_REPAIR_EVIDENCE_BATCH_SIZE, 10);
   assert.equal(MAX_COMMENT_AI_CALLS_PER_BATCH, 5);
   assert.equal(MAX_COMMENT_DIVERSITY_CALLS_PER_BATCH, 1);
-  assert.deepEqual(groups.map((group) => group.reduce((count, entry) => count + entry.items.length, 0)), [5, 5]);
+  assert.deepEqual(groups.map((group) => group.reduce((count, entry) => count + entry.items.length, 0)), [10]);
   assert.equal(groups.flatMap((group) => group).flatMap((entry) => entry.items).length, 10);
   assert.equal(groups.every((group) => new Set(group.map((entry) => `${entry.studentId}|${entry.subject}`)).size === group.length), true);
 });
