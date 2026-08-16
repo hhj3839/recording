@@ -1,6 +1,6 @@
 import { createHmac, timingSafeEqual } from "node:crypto";
 import { upsertRows } from "../db/supabase";
-import { composeGeneratedCommentCandidate, evidenceGroundingWarnings, generatedCommentFailureMessage, hasCompleteEvidenceCoverage, normalizeGeneratedCommentCandidate, resolveGeneratedEvidenceItemId, validateGeneratedComment, validateGeneratedCommentPart } from "./comment-generation-policy";
+import { composeGeneratedCommentCandidate, evidenceBlockingIssues, evidenceGroundingWarnings, generatedCommentFailureMessage, hasCompleteEvidenceCoverage, normalizeGeneratedCommentCandidate, resolveGeneratedEvidenceItemId, validateGeneratedComment, validateGeneratedCommentPart } from "./comment-generation-policy";
 import { CommentVariation } from "./comment-variation";
 import { archiveComment } from "./record-revisions";
 import { primaryAiModel } from "./ai-model-policy";
@@ -168,11 +168,14 @@ export async function generateCommentBatch(evidence: CommentEvidence[], avoidCom
           return text && itemId ? [{ itemId, text, candidateLengths: candidates.map((candidate) => Array.from(candidate).length) }] : [];
         })
       : [];
-    const complete = hasCompleteEvidenceCoverage(expectedIds, sentenceRows.map((row) => row.itemId));
+    const acceptedSentenceRows: typeof sentenceRows = [];
     for (const row of sentenceRows) {
       const evidenceEntry = source?.items.find((entry) =>
         evidenceIds.get(`${studentId}|${subject}|${entry.assessmentIndex}`) === row.itemId);
       if (evidenceEntry) {
+        const blockingIssues = evidenceBlockingIssues(row.text, evidenceEntry.text);
+        if (blockingIssues.length) continue;
+        acceptedSentenceRows.push(row);
         parts.push({
           studentId,
           subject,
@@ -183,13 +186,14 @@ export async function generateCommentBatch(evidence: CommentEvidence[], avoidCom
         });
       }
     }
-    const ordered = expectedIds.map((id) => sentenceRows.find((row) => row.itemId === id)?.text ?? "");
+    const complete = hasCompleteEvidenceCoverage(expectedIds, acceptedSentenceRows.map((row) => row.itemId));
+    const ordered = expectedIds.map((id) => acceptedSentenceRows.find((row) => row.itemId === id)?.text ?? "");
     const sentenceFormatsOk = ordered.length > 0
       && ordered.every((sentence) => validateGeneratedCommentPart(sentence).valid);
     if (!complete || !sentenceFormatsOk) {
       failureMessages.push(generatedCommentFailureMessage({
         expectedIds,
-        returnedIds: sentenceRows.map((row) => row.itemId),
+        returnedIds: acceptedSentenceRows.map((row) => row.itemId),
         invalidSentenceCount: ordered.filter((sentence) => !sentence || !validateGeneratedCommentPart(sentence).valid).length,
       }));
     }

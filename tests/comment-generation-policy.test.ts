@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { commentAreaIssuesForDisplay, composeGeneratedCommentCandidate, evidenceGroundingWarnings, generatedCommentFailureMessage, hasCompleteEvidenceCoverage, normalizeGeneratedCommentCandidate, normalizeGeneratedCommentWhitespace, openingRepetitionRate, replaceSelectedCommentText, resolveGeneratedEvidenceItemId, validateGeneratedComment, validateGeneratedCommentPart } from "../app/comment-generation-policy.ts";
+import { commentAreaIssuesForDisplay, composeGeneratedCommentCandidate, evidenceBlockingIssues, evidenceGroundingWarnings, generatedCommentFailureMessage, hasCompleteEvidenceCoverage, normalizeGeneratedCommentCandidate, normalizeGeneratedCommentWhitespace, openingRepetitionRate, replaceSelectedCommentText, resolveGeneratedEvidenceItemId, validateGeneratedComment, validateGeneratedCommentPart } from "../app/comment-generation-policy.ts";
 import { behaviorRepairInstruction, behaviorRepairPlan, behaviorRepairTargets } from "../app/behavior-repair-policy.ts";
 import { assertStrictGeneratedBehaviors, selectBehaviorCandidate } from "../app/behavior-persistence-policy.ts";
 import { generationModel } from "../app/ai-model-policy.ts";
@@ -128,6 +128,17 @@ test("rejects mechanically duplicated nominal endings", () => {
   }
 });
 
+test("rejects unnatural predicate combinations found in the paid sample", () => {
+  for (const sentence of [
+    "문장의 짜임을 살펴 자료의 내용을 일부 나누고 문장 구조에 맞게 표현하는 모습을 보 이해함.",
+    "자료의 내용을 문장의 짜임에 맞게 표현 수행함.",
+    "마음을 전하는 글쓰는 방법을 알고 내용을 정리하여 작성함.",
+  ]) {
+    assert.equal(validateGeneratedCommentPart(sentence).naturalEndingsOk, false);
+    assert.equal(validateGeneratedCommentPart(sentence).valid, false);
+  }
+});
+
 test("rejects dangling connective bodies before composing a generated ending", () => {
   for (const body of ["자료를 정확하게 분류하고", "의견을 자연스럽게 나타내며", "작품에 마음을 담아", "배운 내용을 익혀 감", "활동에 참여함"]) {
     assert.equal(composeGeneratedCommentCandidate(body, "설명함."), "");
@@ -166,6 +177,30 @@ test("warns about unsupported attitude claims without discarding the sentence", 
     evidenceGroundingWarnings(
       "글의 의미를 파악하고 모둠원과 협력하여 설명함.",
       "글의 의미를 파악하고 모둠원과 협력하여 설명할 수 있다.",
+    ),
+    [],
+  );
+});
+
+test("blocks invented stock openings and required assistance omissions", () => {
+  assert.deepEqual(
+    evidenceBlockingIssues(
+      "자료를 관찰하고 분석하며 작품 속 인물의 대화를 알맞게 표현함.",
+      "인물의 상황에 맞는 표정과 몸짓으로 대화를 표현할 수 있다.",
+    ),
+    ["평가 근거에 없는 ‘자료 관찰·탐색·분석’ 표현"],
+  );
+  assert.deepEqual(
+    evidenceBlockingIssues(
+      "설명하는 글의 중심 문장과 뒷받침 문장을 찾아 내용을 정리함.",
+      "교사의 도움을 받아 중심 문장과 뒷받침 문장을 찾아 간추릴 수 있다.",
+    ),
+    ["평가 기준의 필수 조건 ‘교사의 도움’ 누락"],
+  );
+  assert.deepEqual(
+    evidenceBlockingIssues(
+      "교사의 도움을 받아 중심 문장과 뒷받침 문장을 찾아 내용을 정리함.",
+      "교사의 도움을 받아 중심 문장과 뒷받침 문장을 찾아 간추릴 수 있다.",
     ),
     [],
   );

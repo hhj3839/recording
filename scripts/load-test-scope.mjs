@@ -6,6 +6,10 @@ export function selectCommentLoadScope(mode, students, subjects) {
   };
 }
 
+export function commentLoadOverwriteExisting(mode) {
+  return mode === "sample";
+}
+
 export function selectBehaviorLoadScope(mode, readyStudents, approvedStudentIds = []) {
   if (approvedStudentIds.length) {
     const approved = new Set(approvedStudentIds.map(Number));

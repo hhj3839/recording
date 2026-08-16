@@ -1,6 +1,6 @@
 import { readFile, readdir } from "node:fs/promises";
 import path from "node:path";
-import { selectCommentLoadScope } from "./load-test-scope.mjs";
+import { commentLoadOverwriteExisting, selectCommentLoadScope } from "./load-test-scope.mjs";
 
 const baseUrl = (process.env.LOAD_TEST_BASE_URL || "https://giroksam-recording.vercel.app").replace(/\/$/, "");
 const mode = process.argv[2] || "status";
@@ -20,13 +20,20 @@ const commentForbiddenExpressions = ["부족함", "미흡함", "못함", "어려
 function validateComment(comment, expectedSentenceCount) {
   const sentences = comment.trim().split(/(?<=\.)\s+/).map((item) => item.trim()).filter(Boolean);
   const lengths = sentences.map((sentence) => Array.from(sentence).length);
+  const awkwardEndings = sentences.filter((sentence) =>
+    /(?:고|며|아|어|감|함)\s*함\.$/.test(sentence)
+    || /(?:표현|설명|정리|이해|구별|활용|실천|수행)\s+(?:표현|설명|정리|이해|구별|활용|실천|수행)함\.$/.test(sentence)
+    || /(?:모습을\s+보|힘을\s+(?:기|파)|글을\s+써|뜻을\s+담아\s+내)\s+(?:표현|설명|정리|이해|구별|활용|실천|수행)함\.$/.test(sentence)
+    || /(?:글의\s+쓰는|글쓰는)\s+방법/.test(sentence));
   return {
     valid: sentences.length === expectedSentenceCount
       && lengths.every((length) => length >= 50 && length <= 60)
       && sentences.every((sentence) => sentence.endsWith("함."))
+      && awkwardEndings.length === 0
       && !commentForbiddenExpressions.some((expression) => comment.includes(expression)),
     sentenceCount: sentences.length,
     lengths,
+    awkwardEndings,
   };
 }
 
@@ -177,6 +184,7 @@ if (mode === "start" || mode === "subject" || mode === "sample" || mode === "pre
     body: JSON.stringify({
       scores,
       selectedStudentIds: selectedStudents.map((student) => student.id),
+      overwriteExisting: commentLoadOverwriteExisting(mode),
     }),
   });
   process.stdout.write(`${JSON.stringify({
