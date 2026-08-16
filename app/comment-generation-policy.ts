@@ -58,6 +58,7 @@ export function validateGeneratedComment(comment: string, expectedSentenceCount:
   const forbidden = commentForbiddenExpressions.filter((expression) => normalized.includes(expression));
   const awkwardEndings = sentences.filter((sentence) =>
     /(?:고|며|아|어|감|함)\s*함\.$/.test(sentence)
+    || /(?:보임|됨)함\.$/.test(sentence)
     || /(?:표현|설명|정리|이해|구별|활용|실천|수행)\s+(?:표현|설명|정리|이해|구별|활용|실천|수행)함\.$/.test(sentence)
     || /(?:모습을\s+보|힘을\s+(?:기|파)|글을\s+써|뜻을\s+담아\s+내)\s+(?:표현|설명|정리|이해|구별|활용|실천|수행)함\.$/.test(sentence)
     || /(?:글의\s+쓰는|글쓰는)\s+방법/.test(sentence)
