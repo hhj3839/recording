@@ -1,8 +1,10 @@
 export type ValidationResult = {
   bytes: number;
   lengthOk: boolean;
+  sentenceCountOk: boolean;
   endingsOk: boolean;
   forbidden: string[];
+  styleIssues: string[];
   repeated: string[];
   growthIncluded: boolean;
   spellingOk: boolean;
@@ -12,6 +14,13 @@ export type ValidationResult = {
 
 const forbiddenTerms = ["수상", "대회 실적", "사교육", "학원", "공인시험", "부모 직업", "가정형편", "사회경제적"];
 const behaviorSensitiveTerms = ["학교폭력", "징계", "질병", "진단명", "신체조건"];
+const behaviorStyleRules: Array<{ pattern: RegExp; message: string }> = [
+  { pattern: /가능성이\s*(?:크|높).{0,8}(?:보임|판단|생각)/, message: "근거 없이 가능성을 단정하는 표현이 있음" },
+  { pattern: /(?:공동|학급|모둠).{0,12}흐름을\s*해치지\s*않/, message: "부정 행동의 부재를 우회적으로 평가하는 표현이 있음" },
+  { pattern: /문제\s*행동을?\s*보이지\s*않/, message: "문제 행동의 부재를 평가하는 표현이 있음" },
+  { pattern: /(?:항상|완벽하게|누구보다|친구들보다|최고(?:로|의)?)/, message: "과장하거나 학생을 비교하는 표현이 있음" },
+  { pattern: /(?:매우\s*)?우수함/, message: "관찰 행동보다 포괄적인 평가 표현이 있음" },
+];
 const sensitiveInputPatterns: Array<{ pattern: RegExp; label: string }> = [
   { pattern: /\b\d{6}-?[1-4]\d{6}\b/, label: "주민등록번호 형식" },
   { pattern: /\b01[016789][-\s]?\d{3,4}[-\s]?\d{4}\b/, label: "휴대전화 번호" },
@@ -55,6 +64,9 @@ export function validateRecord(text: string, behavior = false): ValidationResult
   const sentences = normalized.split(/(?<=[.!?])\s+|\n+/).map((sentence) => sentence.trim()).filter(Boolean);
   const forbidden = [...forbiddenTerms, ...(behavior ? behaviorSensitiveTerms : [])]
     .filter((term) => normalized.includes(term));
+  const styleIssues = behavior
+    ? behaviorStyleRules.filter((rule) => rule.pattern.test(normalized)).map((rule) => rule.message)
+    : [];
   const counts = new Map<string, number>();
   sentences.forEach((sentence) => {
     const key = sentence.replace(/[.!?\s]/g, "");
@@ -63,6 +75,7 @@ export function validateRecord(text: string, behavior = false): ValidationResult
   const repeated = [...counts.entries()].filter(([, count]) => count > 1).map(([sentence]) => sentence.slice(0, 30));
   const endingsOk = !!sentences.length && sentences.every((sentence) =>
     behavior ? hasNominalMieumEnding(sentence) : sentenceEnd.test(sentence));
+  const sentenceCountOk = !behavior || sentences.length === 4;
   const lengthOk = behavior ? bytes >= 500 && bytes <= 600 : bytes > 0 && bytes <= 1500;
   const growthIncluded = !behavior || /(성장|변화|발전|향상|노력|기르|익히|꾸준|가능성|나아)/.test(normalized);
   const spellingIssues = spellingRules.filter((rule) => rule.pattern.test(normalized)).map((rule) => rule.message);
@@ -73,13 +86,16 @@ export function validateRecord(text: string, behavior = false): ValidationResult
   return {
     bytes,
     lengthOk,
+    sentenceCountOk,
     endingsOk,
     forbidden,
+    styleIssues,
     repeated,
     growthIncluded,
     spellingOk,
     spellingIssues,
-    valid: lengthOk && endingsOk && !forbidden.length && !repeated.length && growthIncluded && spellingOk,
+    valid: lengthOk && sentenceCountOk && endingsOk && !forbidden.length && !styleIssues.length
+      && !repeated.length && growthIncluded && spellingOk,
   };
 }
 

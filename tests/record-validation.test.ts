@@ -151,16 +151,17 @@ test("detects repeated sentences", () => {
 });
 
 test("checks behavior byte length and growth expression", () => {
-  let text = "꾸준한 노력으로 성장하는 모습을 보이며 ";
-  while (new TextEncoder().encode(`${text}책임감 있는 태도가 돋보임.`).length < 500) {
-    text += "학습 활동에 성실하게 참여하고 친구의 의견을 존중하며 ";
+  let first = "꾸준한 노력으로 성장하며 학습 활동에 성실하게 참여함.";
+  const tail = " 친구의 의견을 존중하며 대화함. 맡은 역할을 책임감 있게 수행함. 준비물을 스스로 점검하는 습관을 기름.";
+  while (new TextEncoder().encode(`${first}${tail}`).length < 500) {
+    first = first.replace("학습 활동에 ", "학습 활동에 차분하고 성실한 태도로 ");
   }
-  text += "책임감 있는 태도가 돋보임.";
+  const text = `${first}${tail}`;
   const result = validateRecord(text, true);
   assert.equal(result.bytes >= 500 && result.bytes <= 600, true);
   assert.equal(result.growthIncluded, true);
   assert.equal(result.valid, true);
-  const looseEnding = validateRecord(text.replace(/돋보임\.$/, "생활한다."), true);
+  const looseEnding = validateRecord(text.replace(/기름\.$/, "생활한다."), true);
   assert.equal(looseEnding.endingsOk, false);
 });
 

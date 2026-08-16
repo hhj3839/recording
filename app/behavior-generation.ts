@@ -20,7 +20,7 @@ export type GeneratedBehavior = BehaviorInput & { behavior: string };
 export type BehaviorFailure = BehaviorInput & { behavior: string; issues: string[]; bytes: number; recoverable: boolean };
 export type BehaviorBatchResult = { behaviors: GeneratedBehavior[]; failures: BehaviorFailure[]; usage: AiTokenUsage };
 
-const behaviorSystemPrompt = "너는 대한민국 초등학교 담임교사이며 학기말 학교생활기록부의 행동특성 및 종합의견을 작성하는 전문가이다. 교사가 입력한 학습 태도, 교우관계, 생활 습관, 수업 참여, 책임감, 협력성, 자기관리, 의사소통, 성장 모습 등 학교생활 관찰 사실만 활용하여 학생의 학교생활 전반이 종합적으로 이해되게 작성한다. 장점, 노력, 변화, 성장 가능성이 긍정적이고 균형 있게 드러나게 하되, 입력에 없는 장점·노력·변화를 절대 만들지 않는다. 부정적인 내용은 사실을 바꾸지 않는 범위에서 성장 중심으로 순화하고 과장·단정·학생 간 비교를 피한다. 학생 이름과 성별을 쓰지 않는다. 성적·등수·수상 실적·대회·사교육·공인시험·특정 기관명·가정환경·부모 직업·사회경제적 배경·신체조건·학교폭력·징계·질병을 포함하지 않는다. 활동을 나열하지 말고 행동의 특징, 과정, 변화를 자연스럽게 연결한다. variation의 문장 구조·시작 방식·특성 순서를 따르고 같은 묶음 학생 및 avoidBehaviors와 첫 구절, 핵심 동사, 문장 구조가 겹치지 않게 분산한다. 각 후보는 정확히 4문장인 한 문단으로 작성하며 줄바꿈 없이 문장 사이를 한 칸으로 구분한다. UTF-8 510~540바이트를 목표로 작성하되 서버 허용 범위는 500~600바이트이다. 모든 문장은 ‘참여함.’, ‘향상됨.’, ‘돋보임.’처럼 자연스러운 명사형 종결어미로 끝낸다. 출력 전 분량, 종결어미, 표현 반복, 입력 사실과의 일치, 변화·성장, 금지 내용, 맞춤법과 띄어쓰기를 스스로 검수한다. 반드시 JSON 배열만 출력하며 각 원소는 studentId와 candidates 필드를 가지고 candidates에는 서로 다른 완성 문장 2개를 넣는다.";
+const behaviorSystemPrompt = "너는 대한민국 초등학교 담임교사이며 학기말 학교생활기록부의 행동특성 및 종합의견을 작성하는 전문가이다. 교사가 입력한 학습 태도, 교우관계, 생활 습관, 수업 참여, 책임감, 협력성, 자기관리, 의사소통, 성장 모습 등 학교생활 관찰 사실만 활용하여 학생의 학교생활 전반이 종합적으로 이해되게 작성한다. 장점, 노력, 변화가 긍정적이고 균형 있게 드러나게 하되 입력에 없는 장점·노력·변화·발전 가능성을 절대 만들지 않는다. 정확히 4문장으로 구성한다. 1문장은 입력 근거에 있는 학습 태도나 수업 참여, 2문장은 교우관계나 협력, 3문장은 책임감·생활 습관·자기관리, 4문장은 입력된 변화·성장 또는 남은 핵심 특성을 다룬다. 특정 영역의 입력 근거가 없으면 그 영역을 추측하지 말고 입력된 다른 특성을 배치한다. 각 문장은 최소 한 가지 입력 사실에 직접 대응해야 한다. 부정적인 내용은 사실을 바꾸지 않는 범위에서 관찰 가능한 노력과 변화 중심으로 순화하고 과장·단정·학생 간 비교를 피한다. ‘가능성이 크다고 보임’, ‘흐름을 해치지 않음’, ‘문제 행동을 보이지 않음’, ‘항상’, ‘완벽하게’, ‘매우 우수함’ 같은 평가적·우회적 표현을 쓰지 않는다. 학생 이름과 성별을 쓰지 않는다. 성적·등수·수상 실적·대회·사교육·공인시험·특정 기관명·가정환경·부모 직업·사회경제적 배경·신체조건·학교폭력·징계·질병을 포함하지 않는다. 활동을 나열하지 말고 행동의 특징, 과정, 변화를 자연스럽게 연결한다. variation의 문장 구조·시작 방식·특성 순서를 따르고 같은 묶음 학생 및 avoidBehaviors와 첫 구절, 핵심 동사, 문장 구조가 겹치지 않게 분산한다. 각 후보는 정확히 4문장인 한 문단으로 작성하며 줄바꿈 없이 문장 사이를 한 칸으로 구분한다. UTF-8 510~540바이트를 목표로 작성하되 서버 허용 범위는 500~600바이트이다. 모든 문장은 ‘참여함.’, ‘향상됨.’, ‘돋보임.’처럼 자연스러운 명사형 종결어미로 끝낸다. 출력 전 분량, 문장 수, 종결어미, 표현 반복, 입력 사실과의 일치, 변화·성장, 금지 내용, 맞춤법과 띄어쓰기를 스스로 검수한다. 반드시 JSON 배열만 출력하며 각 원소는 studentId와 candidates 필드를 가지고 candidates에는 서로 다른 완성 문장 2개를 넣는다.";
 
 function outputText(payload: unknown) {
   if (!payload || typeof payload !== "object") return "";
@@ -78,9 +78,11 @@ export async function generateBehaviorBatch(inputs: BehaviorInput[], avoidBehavi
     if (validation.valid) return [{ ...source, behavior }];
     const issues = [
       ...(!validation.lengthOk ? [`현재 ${validation.bytes}바이트이며 500~600바이트로 조정 필요`] : []),
+      ...(!validation.sentenceCountOk ? ["정확히 4문장으로 조정 필요"] : []),
       ...(!validation.endingsOk ? ["모든 문장을 음 또는 임으로 종결 필요"] : []),
       ...(!validation.growthIncluded ? ["입력된 성장·변화 사실을 결과에 반영 필요"] : []),
       ...validation.forbidden.map((term) => `금지 표현 '${term}' 제거 필요`),
+      ...validation.styleIssues,
       ...validation.repeated.map(() => "반복 문장 제거 필요"),
       ...validation.spellingIssues,
     ];
@@ -90,8 +92,9 @@ export async function generateBehaviorBatch(inputs: BehaviorInput[], avoidBehavi
       issues,
       bytes: validation.bytes,
       recoverable: validation.bytes >= 350 && validation.bytes <= 700
-        && validation.endingsOk && validation.growthIncluded
-        && !validation.forbidden.length && !validation.repeated.length && validation.spellingOk,
+        && validation.sentenceCountOk && validation.endingsOk && validation.growthIncluded
+        && !validation.forbidden.length && !validation.styleIssues.length
+        && !validation.repeated.length && validation.spellingOk,
     });
     return [];
   }) : [];
