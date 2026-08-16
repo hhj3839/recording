@@ -42,6 +42,14 @@ test("blocks behavior data writes and paid generation modes without explicit app
   }
 });
 
+test("job status polling wakes queued background generation without creating a new job", () => {
+  for (const route of ["app/api/comment-jobs/route.ts", "app/api/behavior-jobs/route.ts"]) {
+    const source = readFileSync(route, "utf8");
+    assert.match(source, /export async function GET\(request: Request\)/);
+    assert.match(source, /\["queued", "running"\]\.includes\(.+\.status\).*startRunner\(request,/s);
+  }
+});
+
 test("always refreshes generated result counts without browser caching", () => {
   const page = readFileSync("app/page.tsx", "utf8");
   assert.equal((page.match(/fetch\("\/api\/generated-comments", \{ cache: "no-store" \}\)/g) ?? []).length, 4);

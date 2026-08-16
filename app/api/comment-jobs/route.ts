@@ -48,7 +48,7 @@ function startRunner(request: Request, jobId: string) {
   );
 }
 
-export async function GET() {
+export async function GET(request: Request) {
   try {
     const { user, classId } = await getDataScope();
     const jobs = await selectRows<JobRow>("generation_jobs", {
@@ -58,6 +58,7 @@ export async function GET() {
       order: "created_at.desc",
       limit: 1,
     });
+    if (jobs[0] && ["queued", "running"].includes(jobs[0].status)) startRunner(request, jobs[0].id);
     return Response.json({ job: jobs[0] ? present(jobs[0]) : null });
   } catch (error) {
     return dataError(error, "교과 평어 생성 상태를 불러오지 못했습니다.");
