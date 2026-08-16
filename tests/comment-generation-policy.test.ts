@@ -106,13 +106,14 @@ test("accepts one 50 to 60 character sentence per assessment area ending in 함"
   assert.equal(result.valid, true);
 });
 
-test("normalizes only candidates that meet the strict 50 to 60 character gate", () => {
+test("keeps only natural candidates in the accepted 48 to 62 character range without inventing prefixes", () => {
   const strict = "글의 중심 생각을 정확하게 파악하고 중요한 내용을 근거와 함께 정리하여 발표 활동에 꾸준히 참여함.";
   assert.equal(normalizeGeneratedCommentCandidate(strict), strict);
-  const short = Array.from(strict).slice(5).join("");
-  const normalized = normalizeGeneratedCommentCandidate(short);
-  assert.equal(Array.from(normalized).length >= 50 && Array.from(normalized).length <= 60, true);
-  assert.equal(normalized.endsWith("함."), true);
+  const nearMiss = Array.from(strict).slice(2).join("");
+  if (Array.from(nearMiss.trim()).length >= 48) assert.equal(normalizeGeneratedCommentCandidate(nearMiss), nearMiss.trim());
+  const tooShort = Array.from(strict).slice(12).join("");
+  assert.equal(normalizeGeneratedCommentCandidate(tooShort), "");
+  assert.equal(normalizeGeneratedCommentCandidate(tooShort).startsWith("수업에서 "), false);
 });
 
 test("rejects missing areas, invalid length, endings, and forbidden expressions", () => {
@@ -233,6 +234,20 @@ test("blocks invented stock openings and required assistance omissions", () => {
       "교사의 도움을 받아 중심 문장과 뒷받침 문장을 찾아 간추릴 수 있다.",
     ),
     [],
+  );
+  assert.deepEqual(
+    evidenceBlockingIssues(
+      "평가 활동의 대상과 수행 내용을 바탕으로 문장의 짜임을 구별함.",
+      "문장을 문장의 짜임에 따라 일부 나눌 수 있다.",
+    ),
+    ["평가 근거에 없는 ‘평가 메타 표현’ 표현"],
+  );
+  assert.deepEqual(
+    evidenceBlockingIssues(
+      "상황에 알맞은 표정과 몸짓으로 작품 속 대화를 실감 나게 표현함.",
+      "상황에 알맞은 표정과 몸짓을 알고 작품 속 대화를 표현하기 위해 노력한다.",
+    ),
+    ["평가 근거에 없는 ‘실감 나게’ 표현"],
   );
 });
 

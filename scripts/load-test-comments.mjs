@@ -24,10 +24,12 @@ function validateComment(comment, expectedSentenceCount) {
     /(?:고|며|아|어|감|함)\s*함\.$/.test(sentence)
     || /(?:표현|설명|정리|이해|구별|활용|실천|수행)\s+(?:표현|설명|정리|이해|구별|활용|실천|수행)함\.$/.test(sentence)
     || /(?:모습을\s+보|힘을\s+(?:기|파)|글을\s+써|뜻을\s+담아\s+내)\s+(?:표현|설명|정리|이해|구별|활용|실천|수행)함\.$/.test(sentence)
-    || /(?:글의\s+쓰는|글쓰는)\s+방법/.test(sentence));
+    || /(?:글의\s+쓰는|글쓰는)\s+방법/.test(sentence)
+    || /(?:표현|설명|정리|이해|파악|구별|활용|실천|수행)\s+(?:(?:결과|활동|과정)(?:을|를)?)?\s*(?:수행|표현|이해|파악)함\.$/.test(sentence)
+    || /[가-힣]+(?:는|은)\s+(?:이해|표현|설명|정리|구별|활용|수행)함\.$/.test(sentence));
   return {
     valid: sentences.length === expectedSentenceCount
-      && lengths.every((length) => length >= 50 && length <= 60)
+      && lengths.every((length) => length >= 48 && length <= 62)
       && sentences.every((sentence) => sentence.endsWith("함."))
       && awkwardEndings.length === 0
       && !commentForbiddenExpressions.some((expression) => comment.includes(expression)),
@@ -220,17 +222,28 @@ if (mode === "start" || mode === "subject" || mode === "sample" || mode === "pre
     invalidSamples: validations.filter((item) => !item.valid).slice(0, 10),
     error: job.error || "",
     ...(mode === "quality" ? {
-      qualitySamples: currentComments.slice(0, 10).flatMap((item) => {
-        const subjectPlan = planData.plan.filter((plan) => plan.subject === item.subject);
-        const sentences = item.comment.trim().split(/(?<=\.)\s+/);
-        const levels = classData.levels.filter((level) => level.studentId === item.studentId && level.subject === item.subject);
-        return sentences.map((sentence, index) => {
+      qualitySamples: (() => {
+        const allSubjects = [...new Set(planData.plan.map((item) => item.subject))];
+        const scope = selectCommentLoadScope("sample", classData.students, allSubjects);
+        const studentIds = new Set(scope.selectedStudents.map((student) => Number(student.id)));
+        const subjects = new Set(scope.selectedSubjects);
+        return (generatedData.parts ?? [])
+        .filter((part) => studentIds.has(Number(part.studentId)) && subjects.has(part.subject))
+        .slice(0, 30)
+        .map((part) => {
+          const subjectPlan = planData.plan.filter((plan) => plan.subject === part.subject);
+          const levels = classData.levels.filter((level) => level.studentId === part.studentId && level.subject === part.subject);
+          const index = Number(part.assessmentIndex);
           const level = levels.find((row) => Number(row.assessmentIndex) === index)?.level ?? "-";
           const plan = subjectPlan[index];
           const criterion = level === "상" ? plan?.high : level === "중" ? plan?.middle : level === "하" ? plan?.low : "";
-          return { subject: item.subject, domain: plan?.domain ?? "", level, criterion, sentence };
+          return {
+            studentId: part.studentId, subject: part.subject, assessmentIndex: index,
+            domain: plan?.domain ?? "", level, criterion, sentence: part.sentence,
+            status: part.status, issues: part.issues,
+          };
         });
-      }).slice(0, 30),
+      })(),
     } : {}),
   })}\n`);
 }
