@@ -104,7 +104,7 @@ export async function POST(request: Request) {
         if (!Number.isInteger(student.studentId) || !Array.isArray(student.levels) || student.levels.length !== subjectPlan.length) continue;
         const items = subjectPlan.flatMap((item, index) => {
           const level = student.levels[index];
-          if (!["상", "중", "하"].includes(level)) return [];
+          if (level !== "상" && level !== "중" && level !== "하") return [];
           const criterion = level === "상" ? item.high : level === "중" ? item.middle : item.low;
           return [{
             assessmentIndex: index,
