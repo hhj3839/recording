@@ -3,6 +3,7 @@ import test from "node:test";
 import { commentAreaIssuesForDisplay, composeGeneratedCommentCandidate, evidenceBlockingIssues, evidenceGroundingWarnings, generatedCommentFailureMessage, hasCompleteEvidenceCoverage, normalizeGeneratedCommentCandidate, normalizeGeneratedCommentWhitespace, openingRepetitionRate, replaceSelectedCommentText, resolveGeneratedEvidenceItemId, validateGeneratedComment, validateGeneratedCommentPart } from "../app/comment-generation-policy.ts";
 import { behaviorRepairInstruction, behaviorRepairPlan, behaviorRepairTargets } from "../app/behavior-repair-policy.ts";
 import { assertStrictGeneratedBehaviors, selectBehaviorCandidate } from "../app/behavior-persistence-policy.ts";
+import { validateRecord } from "../app/record-validation.ts";
 import { generationModel } from "../app/ai-model-policy.ts";
 import { batchCommentRepairs, batchCommentsBySubject, COMMENT_BATCH_SIZE, COMMENT_REPAIR_EVIDENCE_BATCH_SIZE, MAX_COMMENT_AI_CALLS_PER_BATCH } from "../app/comment-batching.ts";
 import { batchBehaviors, BEHAVIOR_BATCH_SIZE } from "../app/behavior-batching.ts";
@@ -133,10 +134,38 @@ test("rejects unnatural predicate combinations found in the paid sample", () => 
     "문장의 짜임을 살펴 자료의 내용을 일부 나누고 문장 구조에 맞게 표현하는 모습을 보 이해함.",
     "자료의 내용을 문장의 짜임에 맞게 표현 수행함.",
     "마음을 전하는 글쓰는 방법을 알고 내용을 정리하여 작성함.",
+    "자료의 내용을 문장 구조에 맞게 표현 결과를 수행함.",
   ]) {
     assert.equal(validateGeneratedCommentPart(sentence).naturalEndingsOk, false);
     assert.equal(validateGeneratedCommentPart(sentence).valid, false);
   }
+});
+
+test("blocks evaluative or negatively framed behavior expressions", () => {
+  const fourSentences = (last: string) => [
+    "수업에서 궁금한 내용을 질문하며 배움을 꾸준히 이어 가는 모습이 나타남.",
+    "친구의 이야기를 끝까지 듣고 서로의 생각을 존중하며 대화에 참여함.",
+    "맡은 역할을 책임감 있게 마무리하고 준비물을 스스로 점검하는 습관을 기름.",
+    last,
+  ].join(" ");
+  const padded = (last: string) => {
+    let value = fourSentences(last);
+    while (new TextEncoder().encode(value).length < 500) value = value.replace("배움을 ", "배움을 차분히 ");
+    return value;
+  };
+  for (const phrase of ["앞으로 발전할 가능성이 크다고 보임.", "공동의 흐름을 해치지 않음.", "문제 행동을 보이지 않음."]) {
+    const result = validateRecord(padded(phrase), true);
+    assert.equal(result.styleIssues.length > 0, true);
+    assert.equal(result.valid, false);
+  }
+});
+
+test("requires exactly four sentences before persisting a behavior", () => {
+  let three = "학습에 꾸준히 참여함. 친구의 말을 경청하며 협력함. 맡은 역할을 책임감 있게 수행하며 성장함.";
+  while (new TextEncoder().encode(three).length < 500) three = three.replace("학습에 ", "학습에 차분하고 성실한 태도로 ");
+  const result = validateRecord(three, true);
+  assert.equal(result.sentenceCountOk, false);
+  assert.equal(result.valid, false);
 });
 
 test("rejects dangling connective bodies before composing a generated ending", () => {
@@ -331,9 +360,10 @@ test("limits behavior length repair to fact-preserving local edits", () => {
 
 test("blocks behavior candidates outside the strict byte range from persistence", () => {
   const behaviorAtLeast = (targetBytes: number) => {
-    let text = "성장";
-    while (new TextEncoder().encode(`${text}함.`).length < targetBytes) text += "가";
-    return `${text}함.`;
+    let first = "학습에서 꾸준히 성장";
+    const tail = " 친구와 협력하며 참여함. 맡은 역할을 책임감 있게 수행함. 스스로 점검하며 발전함.";
+    while (new TextEncoder().encode(`${first}함.${tail}`).length < targetBytes) first += "가";
+    return `${first}함.${tail}`;
   };
   const strict = { studentId: 17, characteristic: "성장 모습: 꾸준히 노력함", behavior: behaviorAtLeast(525) };
   const tooLong = { studentId: 21, characteristic: "성장 모습: 꾸준히 노력함", behavior: behaviorAtLeast(606) };
@@ -347,9 +377,10 @@ test("blocks behavior candidates outside the strict byte range from persistence"
 
 test("selects a strict behavior candidate before the closest repair fallback", () => {
   const behaviorAtLeast = (targetBytes: number) => {
-    let text = "성장";
-    while (new TextEncoder().encode(`${text}함.`).length < targetBytes) text += "가";
-    return `${text}함.`;
+    let first = "학습에서 꾸준히 성장";
+    const tail = " 친구와 협력하며 참여함. 맡은 역할을 책임감 있게 수행함. 스스로 점검하며 발전함.";
+    while (new TextEncoder().encode(`${first}함.${tail}`).length < targetBytes) first += "가";
+    return `${first}함.${tail}`;
   };
   const short = behaviorAtLeast(493);
   const strict = behaviorAtLeast(525);
