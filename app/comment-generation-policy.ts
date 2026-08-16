@@ -61,7 +61,8 @@ export function validateGeneratedComment(comment: string, expectedSentenceCount:
     || /(?:표현|설명|정리|이해|구별|활용|실천|수행)\s+(?:표현|설명|정리|이해|구별|활용|실천|수행)함\.$/.test(sentence)
     || /(?:모습을\s+보|힘을\s+(?:기|파)|글을\s+써|뜻을\s+담아\s+내)\s+(?:표현|설명|정리|이해|구별|활용|실천|수행)함\.$/.test(sentence)
     || /(?:글의\s+쓰는|글쓰는)\s+방법/.test(sentence)
-    || /(?:표현|설명|정리|이해|파악|구별|활용|실천|수행)\s+(?:(?:결과|활동|과정)(?:을|를)?)?\s*(?:수행|표현|이해|파악)함\.$/.test(sentence));
+    || /(?:표현|설명|정리|이해|파악|구별|활용|실천|수행)\s+(?:(?:결과|활동|과정)(?:을|를)?)?\s*(?:수행|표현|이해|파악)함\.$/.test(sentence)
+    || /[가-힣]+(?:는|은)\s+(?:이해|표현|설명|정리|구별|활용|수행)함\.$/.test(sentence));
   return {
     sentences,
     lengths,
@@ -106,31 +107,8 @@ export function validateGeneratedCommentPart(comment: string) {
 }
 
 export function normalizeGeneratedCommentCandidate(candidate: string) {
-  const isStrict = (value: string) => {
-    const validation = validateGeneratedCommentPart(value);
-    const length = Array.from(value).length;
-    return validation.valid && length >= 50 && length <= 60;
-  };
-  if (isStrict(candidate)) return candidate;
-  const length = Array.from(candidate).length;
-  if (length >= 45 && length < 50 && !candidate.startsWith("수업에서 ")) {
-    const contextualized = `수업에서 ${candidate}`;
-    if (isStrict(contextualized)) return contextualized;
-  }
-  if (length > 60 && length <= 75) {
-    const optionalModifiers = [
-      "자기 주도적으로 ", "적극적으로 ", "구체적으로 ", "논리적으로 ",
-      "자연스럽게 ", "효과적으로 ", "능동적으로 ", "정확하게 ",
-      "성실하게 ", "꾸준하게 ", "꾸준히 ", "알맞게 ",
-    ];
-    let compacted = candidate;
-    for (const modifier of optionalModifiers) {
-      if (!compacted.includes(modifier)) continue;
-      compacted = compacted.replace(modifier, "");
-      if (isStrict(compacted)) return compacted;
-    }
-  }
-  return "";
+  const normalized = normalizeGeneratedCommentWhitespace(candidate);
+  return validateGeneratedCommentPart(normalized).valid ? normalized : "";
 }
 
 const unsupportedGroundingConcepts = [
@@ -155,6 +133,11 @@ const unsupportedGroundingConcepts = [
   { label: "과제 수행", pattern: /과제.{0,6}수행/, blocking: true },
   { label: "주어진 내용의 표현·구성·재구성", pattern: /주어진내용.{0,12}(?:표현|구성|재구성)/, blocking: true },
   { label: "여러 방법 비교·판단", pattern: /여러방법.{0,10}(?:비교|판단|선택)/, blocking: true },
+  { label: "평가 메타 표현", pattern: /(?:평가활동|평가요소|평가근거|성취기준|수준기준)/, blocking: true },
+  { label: "정확하게", pattern: /정확(?:하게|히)/, blocking: true },
+  { label: "실감 나게", pattern: /실감나게/, blocking: true },
+  { label: "다양한 방법", pattern: /다양한방법/, blocking: true },
+  { label: "이해하기 쉽게", pattern: /이해하기쉽게/, blocking: true },
 ];
 
 function normalizeGroundingText(text: string) {
