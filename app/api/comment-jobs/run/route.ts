@@ -77,6 +77,7 @@ export async function POST(request: Request) {
   let comments: GeneratedComment[] = [];
   const generatedParts = new Map<string, GeneratedCommentPart>();
   const generatedThisRun = new Set<string>();
+  const rejectionIssues = new Map<string, Set<string>>();
   let errorMessage = "";
   let pending = batch;
   let nonRetryableFailure = false;
@@ -145,6 +146,13 @@ export async function POST(request: Request) {
           const key = `${part.studentId}|${part.subject}|${part.assessmentIndex}`;
           generatedParts.set(key, part);
           generatedThisRun.add(key);
+          rejectionIssues.delete(key);
+        }
+        for (const rejection of generated.rejections) {
+          const key = `${rejection.studentId}|${rejection.subject}|${rejection.assessmentIndex}`;
+          const issues = rejectionIssues.get(key) ?? new Set<string>();
+          rejection.issues.forEach((issue) => issues.add(issue));
+          rejectionIssues.set(key, issues);
         }
         await saveGeneratedCommentParts({
           ownerId: job.owner_id,
@@ -293,7 +301,9 @@ export async function POST(request: Request) {
       warnings: [],
       attempts: MAX_GENERATION_ATTEMPTS,
       status: "needs_review" as const,
-      issues: ["AI 생성이 완료되지 않아 교사 확인이 필요함"],
+      issues: rejectionIssues.has(key)
+        ? [...rejectionIssues.get(key)!]
+        : ["AI가 해당 평가 영역의 문장을 반환하지 않아 교사 확인이 필요함"],
     }];
   }));
   if (unresolvedParts.length) {

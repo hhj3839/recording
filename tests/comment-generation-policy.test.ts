@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { commentAreaIssuesForDisplay, composeGeneratedCommentCandidate, evidenceBlockingIssues, evidenceGroundingWarnings, generatedCommentFailureMessage, hasCompleteEvidenceCoverage, normalizeGeneratedCommentCandidate, normalizeGeneratedCommentWhitespace, openingRepetitionRate, replaceSelectedCommentText, resolveGeneratedEvidenceItemId, validateGeneratedComment, validateGeneratedCommentPart } from "../app/comment-generation-policy.ts";
+import { commentAreaIssuesForDisplay, commentEvidenceInstructions, composeGeneratedCommentCandidate, evidenceBlockingIssues, evidenceGroundingWarnings, generatedCommentFailureMessage, hasCompleteEvidenceCoverage, normalizeGeneratedCommentCandidate, normalizeGeneratedCommentWhitespace, openingRepetitionRate, replaceSelectedCommentText, resolveGeneratedEvidenceItemId, validateGeneratedComment, validateGeneratedCommentPart } from "../app/comment-generation-policy.ts";
 import { behaviorRepairInstruction, behaviorRepairPlan, behaviorRepairTargets } from "../app/behavior-repair-policy.ts";
 import { assertStrictGeneratedBehaviors, selectBehaviorCandidate } from "../app/behavior-persistence-policy.ts";
 import { validateRecord } from "../app/record-validation.ts";
@@ -255,14 +255,36 @@ test("blocks invented stock openings and required assistance omissions", () => {
       "평가 활동의 대상과 수행 내용을 바탕으로 문장의 짜임을 구별함.",
       "문장을 문장의 짜임에 따라 일부 나눌 수 있다.",
     ),
-    ["평가 근거에 없는 ‘평가 메타 표현’ 표현"],
+    ["평가 근거에 없는 ‘평가 메타 표현’ 표현", "평가 기준의 필수 조건 ‘일부 수행’ 누락"],
   );
   assert.deepEqual(
     evidenceBlockingIssues(
       "상황에 알맞은 표정과 몸짓으로 작품 속 대화를 실감 나게 표현함.",
       "상황에 알맞은 표정과 몸짓을 알고 작품 속 대화를 표현하기 위해 노력한다.",
     ),
-    ["평가 근거에 없는 ‘실감 나게’ 표현"],
+    ["평가 근거에 없는 ‘실감 나게’ 표현", "평가 기준의 필수 조건 ‘노력·성장 과정’ 누락"],
+  );
+});
+
+test("builds explicit level instructions and blocks omitted low-level meaning", () => {
+  assert.deepEqual(
+    commentEvidenceInstructions("교사의 도움을 받아 글의 중요한 내용을 일부 찾으며 표현하기 위해 노력한다."),
+    {
+      required: ["교사의 도움을 받아 수행함", "수행 범위가 일부임", "노력하거나 익혀 가는 과정임"],
+      forbiddenUnlessPresent: ["정확하게", "실감 나게", "다양한 방법", "이해하기 쉽게"],
+      instruction: "반드시 보존할 의미: 교사의 도움을 받아 수행함, 수행 범위가 일부임, 노력하거나 익혀 가는 과정임 / 근거에 없으므로 쓰지 말 의미: 정확하게, 실감 나게, 다양한 방법, 이해하기 쉽게",
+    },
+  );
+  assert.deepEqual(
+    evidenceBlockingIssues(
+      "글의 중요한 내용을 찾아 자신의 생각으로 표현함.",
+      "교사의 도움을 받아 글의 중요한 내용을 일부 찾으며 표현하기 위해 노력한다.",
+    ),
+    [
+      "평가 기준의 필수 조건 ‘교사의 도움’ 누락",
+      "평가 기준의 필수 조건 ‘일부 수행’ 누락",
+      "평가 기준의 필수 조건 ‘노력·성장 과정’ 누락",
+    ],
   );
 });
 

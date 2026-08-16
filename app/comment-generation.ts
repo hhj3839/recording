@@ -1,12 +1,12 @@
 import { createHmac, timingSafeEqual } from "node:crypto";
 import { upsertRows } from "../db/supabase";
-import { evidenceBlockingIssues, evidenceGroundingWarnings, generatedCommentFailureMessage, hasCompleteEvidenceCoverage, normalizeGeneratedCommentCandidate, resolveGeneratedEvidenceItemId, validateGeneratedComment, validateGeneratedCommentPart } from "./comment-generation-policy";
+import { commentEvidenceInstructions, evidenceBlockingIssues, evidenceGroundingWarnings, generatedCommentFailureMessage, hasCompleteEvidenceCoverage, normalizeGeneratedCommentWhitespace, resolveGeneratedEvidenceItemId, validateGeneratedComment, validateGeneratedCommentPart } from "./comment-generation-policy";
 import { CommentVariation } from "./comment-variation";
 import { archiveComment } from "./record-revisions";
 import { primaryAiModel } from "./ai-model-policy";
 import { AiTokenUsage } from "./ai-usage";
 
-export type CommentEvidenceItem = { assessmentIndex: number; text: string };
+export type CommentEvidenceItem = { assessmentIndex: number; text: string; level?: "상" | "중" | "하"; criterion?: string };
 export type CommentEvidence = {
   studentId: number;
   subject: string;
@@ -17,7 +17,8 @@ export type CommentEvidence = {
 };
 export type GeneratedComment = { studentId: number; subject: string; comment: string; candidates: string[] };
 export type GeneratedCommentPart = { studentId: number; subject: string; assessmentIndex: number; evidence: string; text: string; warnings: string[] };
-export type CommentBatchResult = { comments: GeneratedComment[]; parts: GeneratedCommentPart[]; usage: AiTokenUsage };
+export type GeneratedCommentRejection = { studentId: number; subject: string; assessmentIndex: number; issues: string[] };
+export type CommentBatchResult = { comments: GeneratedComment[]; parts: GeneratedCommentPart[]; rejections: GeneratedCommentRejection[]; usage: AiTokenUsage };
 function extractOutputText(payload: unknown): string {
   if (!payload || typeof payload !== "object") return "";
   const response = payload as { output_text?: unknown; output?: Array<{ content?: Array<{ type?: string; text?: string }> }> };
@@ -33,7 +34,12 @@ export async function generateCommentBatch(evidence: CommentEvidence[], avoidCom
   const evidenceItems = evidence.flatMap((item) => item.items.map((entry) => ({
     ...entry, key: `${item.studentId}|${item.subject}|${entry.assessmentIndex}`,
   })));
-  const evidenceDictionary = Object.fromEntries(evidenceItems.map((item, index) => [`e${index + 1}`, item.text]));
+  const evidenceDictionary = Object.fromEntries(evidenceItems.map((item, index) => [`e${index + 1}`, {
+    evidence: item.text,
+    level: item.level,
+    criterion: item.criterion,
+    levelRules: commentEvidenceInstructions(item.criterion ?? item.text).instruction,
+  }]));
   const evidenceIds = new Map(evidenceItems.map((item, index) => [item.key, `e${index + 1}`]));
   const requestEvidence = evidence.map((item) => ({
     studentId: item.studentId,
@@ -148,6 +154,7 @@ export async function generateCommentBatch(evidence: CommentEvidence[], avoidCom
   const allowed = new Set(evidence.map((item) => `${item.studentId}|${item.subject}`));
   const failureMessages: string[] = [];
   const parts: GeneratedCommentPart[] = [];
+  const rejections: GeneratedCommentRejection[] = [];
   const comments = Array.isArray(parsed) ? parsed.flatMap((item) => {
     const studentId = Number(item.studentId);
     const subject = typeof item.subject === "string" ? item.subject : "";
@@ -166,7 +173,7 @@ export async function generateCommentBatch(evidence: CommentEvidence[], avoidCom
             const generated = candidate as { text?: unknown };
             return typeof generated.text === "string" ? [generated.text] : [];
           });
-          const text = candidates.map(normalizeGeneratedCommentCandidate).find(Boolean);
+          const text = candidates.map(normalizeGeneratedCommentWhitespace).find(Boolean);
           const itemId = resolveGeneratedEvidenceItemId(expectedIds, value.itemId, rawSentences.length);
           return text && itemId ? [{ itemId, text, candidateLengths: candidates.map((candidate) => Array.from(candidate).length) }] : [];
         })
@@ -176,8 +183,26 @@ export async function generateCommentBatch(evidence: CommentEvidence[], avoidCom
       const evidenceEntry = source?.items.find((entry) =>
         evidenceIds.get(`${studentId}|${subject}|${entry.assessmentIndex}`) === row.itemId);
       if (evidenceEntry) {
-        const blockingIssues = evidenceBlockingIssues(row.text, evidenceEntry.text);
-        if (blockingIssues.length) continue;
+        const format = validateGeneratedCommentPart(row.text);
+        if (!format.valid) {
+          rejections.push({
+            studentId,
+            subject,
+            assessmentIndex: evidenceEntry.assessmentIndex,
+            issues: [
+              ...(!format.acceptedLength ? [`허용 길이 35~90자를 벗어난 ${format.lengths[0] ?? 0}자 문장`] : []),
+              ...(!format.endingsOk ? ["‘함.’ 종결 형식 미준수"] : []),
+              ...(!format.naturalEndingsOk ? ["부자연스러운 문장 종결"] : []),
+              ...(format.forbidden.length ? [`금지 표현 포함: ${format.forbidden.join(", ")}`] : []),
+            ],
+          });
+          continue;
+        }
+        const blockingIssues = evidenceBlockingIssues(row.text, evidenceEntry.criterion ?? evidenceEntry.text);
+        if (blockingIssues.length) {
+          rejections.push({ studentId, subject, assessmentIndex: evidenceEntry.assessmentIndex, issues: blockingIssues });
+          continue;
+        }
         acceptedSentenceRows.push(row);
         parts.push({
           studentId,
@@ -207,7 +232,7 @@ export async function generateCommentBatch(evidence: CommentEvidence[], avoidCom
       : [];
   }) : [];
   if (!comments.length && !parts.length) {
-    throw new Error(failureMessages[0] ?? "AI 결과를 확인하지 못했습니다. 기존 결과는 유지하며 완료되지 않은 영역만 다시 생성합니다.");
+    if (!rejections.length) throw new Error(failureMessages[0] ?? "AI 결과를 확인하지 못했습니다. 기존 결과는 유지하며 완료되지 않은 영역만 다시 생성합니다.");
   }
   const responseUsage = payload && typeof payload === "object"
     ? (payload as { usage?: { input_tokens?: unknown; output_tokens?: unknown; total_tokens?: unknown; input_tokens_details?: { cached_tokens?: unknown } } }).usage
@@ -215,6 +240,7 @@ export async function generateCommentBatch(evidence: CommentEvidence[], avoidCom
   return {
     comments,
     parts,
+    rejections,
     usage: {
       model,
       inputTokens: Number(responseUsage?.input_tokens) || 0,
