@@ -9,10 +9,20 @@ import { batchCommentRepairs, batchCommentsByAssessmentArea, COMMENT_BATCH_SIZE,
 import { batchBehaviors, BEHAVIOR_BATCH_SIZE } from "../app/behavior-batching.ts";
 import { estimateAiCostUsd } from "../app/ai-pricing.ts";
 import { assignUniquePoolCandidates, buildCommentPoolGroups, buildPublicCommentPoolRequests, commentPoolCandidateCount } from "../app/comment-pool-generation.ts";
+import { readApiJson } from "../app/api-response.ts";
 
 test("uses the same low-cost model for the initial request and retry", () => {
   assert.equal(generationModel(0, 2), "gpt-5.4-mini");
   assert.equal(generationModel(1, 2), "gpt-5.4-mini");
+});
+
+test("turns an HTML gateway response into a safe Korean API error", async () => {
+  const result = await readApiJson<{ job?: unknown }>(
+    new Response("<!DOCTYPE html><html><body>Gateway Timeout</body></html>", { status: 504, headers: { "Content-Type": "text/html" } }),
+    "교과 평어 생성을 시작하지 못했습니다.",
+  );
+  assert.match(result.error ?? "", /서버 응답 시간이 초과/);
+  assert.doesNotMatch(result.error ?? "", /DOCTYPE|Unexpected token/);
 });
 
 test("estimates token cost with cached input pricing", () => {
