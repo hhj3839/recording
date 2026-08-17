@@ -79,6 +79,13 @@ test("behavior preflight uses the same five-student scope as the paid sample", (
   assert.match(source, /selectBehaviorLoadScope\(mode, ready, approvedStudentIds\)/);
 });
 
+test("behavior prompt reframes negative observations through a positive growth lens", () => {
+  const source = readFileSync("app/behavior-generation.ts", "utf8");
+  assert.match(source, /교사의 교육적인 긍정 관점에서 다시 해석/);
+  assert.match(source, /긍정적 측면과 교육적 성장 방향/);
+  assert.match(source, /관찰되지 않은 개선 성과나 새로운 사건은 만들지 않는다/);
+});
+
 test("keeps the simplified teacher-facing guidance", () => {
   const page = readFileSync("app/page.tsx", "utf8");
   assert.match(page, /같은 반은 1년 동안 계속 사용할 수 있습니다/);
