@@ -213,8 +213,14 @@ if (mode === "repair-parts") {
   if (!subject) throw new Error("Repair subject is missing");
   const subjectPlan = planData.plan.filter((item) => item.subject === subject);
   const activeIds = new Set(classData.students.map((student) => Number(student.id)));
+  const approvedRepairIds = new Set(String(process.env.COMMENT_REPAIR_STUDENT_IDS || "")
+    .split(",").map((value) => Number(value.trim())).filter((value) => Number.isInteger(value) && value > 0));
+  if ([...approvedRepairIds].some((studentId) => !activeIds.has(studentId))) {
+    throw new Error("Approved repair student is not active in the classroom");
+  }
   const failedParts = (generatedData.parts ?? []).filter((part) =>
     part.subject === subject && activeIds.has(Number(part.studentId))
+    && (!approvedRepairIds.size || approvedRepairIds.has(Number(part.studentId)))
     && (part.status === "needs_review" || !String(part.sentence || "").trim()));
   const targetAssessmentIndexes = {};
   for (const part of failedParts) {
