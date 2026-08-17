@@ -192,6 +192,8 @@ const unsupportedGroundingConcepts: Array<{
   { label: "이해하기 쉽게", pattern: /이해하기쉽게/, blocking: true },
   { label: "입력에 없는 구체적 표현 방법", pattern: /(?:그림|시)(?:이나|나|와|과|으로|로)/, blocking: true },
   { label: "말하기·발표 활동", pattern: /(?:말로풀어|말로표현|말하기|발표|구술)/, evidencePattern: /(?:말|대화|목소리|말투|발표|구술|듣기)/, blocking: true },
+  { label: "내용 간추리기·정리하기", pattern: /(?:내용|흐름).{0,10}(?:간추|요약|정리)/, evidencePattern: /(?:간추|요약|정리)/, blocking: true },
+  { label: "관찰되지 않은 태도 수식어", pattern: /(?:차분|안정적|알차|고르게|꾸준)/, evidencePattern: /(?:차분|안정적|알차|고르게|꾸준)/, blocking: true },
   { label: "학습 태도", pattern: /태도/, evidencePattern: /태도|적극적|성실|꾸준|자기주도|주도적|능동적/, blocking: true },
 ];
 
