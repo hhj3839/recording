@@ -147,6 +147,24 @@ test("creates distinct grounded fallbacks for a group collaboration criterion", 
   );
 });
 
+test("creates fact-preserving free variants for repeated social-study criteria", () => {
+  const discussion = "내가 생각하는 살기 좋은 곳의 조건과 그 이유를 한 가지 말하고, 친구들의 생각을 들으며 바른 자세로 토의에 임한다.";
+  const discussionCandidates = criterionToSafeNominalCandidates(discussion);
+  assert.equal(discussionCandidates.length, 3);
+  discussionCandidates.forEach((candidate) => {
+    assert.equal(validateGeneratedCommentPart(candidate, discussion).valid, true);
+    assert.deepEqual(criterionSemanticIssues(candidate, discussion), []);
+  });
+
+  const localHistory = "지역 이름의 유래와 옛이야기를 조사하여 정리하고 글로 표현한다.";
+  const historyCandidates = criterionToSafeNominalCandidates(localHistory);
+  assert.equal(historyCandidates.length, 3);
+  historyCandidates.forEach((candidate) => {
+    assert.equal(validateGeneratedCommentPart(candidate, localHistory).valid, true);
+    assert.deepEqual(criterionSemanticIssues(candidate, localHistory), []);
+  });
+});
+
 test("blocks unsupported strong praise for middle and low levels", () => {
   assert.deepEqual(levelAppropriatenessIssues("생활용품을 설계하는 수행이 돋보임.", "중"), ["평가수준보다 과도한 우수 표현"]);
   assert.deepEqual(levelAppropriatenessIssues("생활용품 설계 활동에 참여하는 모습이 인상적임.", "하"), ["평가수준보다 과도한 우수 표현"]);
