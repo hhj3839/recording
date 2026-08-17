@@ -9,6 +9,7 @@ const paidModeApprovals = {
   subject: ["RUN_COMMENT_25_TEST", "25명·1과목 실제 AI 검사"],
   start: ["RUN_FULL_225_TEST", "225건 전체 실제 AI 검사"],
   "missing-start": ["RUN_MISSING_COMMENT_TEST", "누락 교과 평어 실제 AI 검사"],
+  "repair-parts": ["RUN_MISSING_COMMENT_TEST", "실패 평가영역 부분 재생성 검사"],
 };
 const paidModeApproval = paidModeApprovals[mode];
 if (paidModeApproval && process.env[paidModeApproval[0]] !== "YES") {
@@ -154,6 +155,46 @@ if (mode === "missing-start") {
   process.stdout.write(`${JSON.stringify({
     mode, jobId: result.job.id, status: result.job.status, alreadyRunning: Boolean(result.alreadyRunning),
     subjects: Object.keys(scores), missingItems, estimatedBatches, monthlyUsageBefore: usage.monthly,
+  })}\n`);
+  process.exit(0);
+}
+
+if (mode === "repair-parts") {
+  const [classData, planData, generatedData, usage] = await Promise.all([
+    request("/api/class-data"), request("/api/assessment-plan"), request("/api/generated-comments"), request("/api/usage"),
+  ]);
+  const subject = process.env.COMMENT_REPAIR_SUBJECT || planData.plan[0]?.subject;
+  if (!subject) throw new Error("Repair subject is missing");
+  const subjectPlan = planData.plan.filter((item) => item.subject === subject);
+  const activeIds = new Set(classData.students.map((student) => Number(student.id)));
+  const failedParts = (generatedData.parts ?? []).filter((part) =>
+    part.subject === subject && activeIds.has(Number(part.studentId))
+    && (part.status === "needs_review" || !String(part.sentence || "").trim()));
+  const targetAssessmentIndexes = {};
+  for (const part of failedParts) {
+    const key = `${part.studentId}|${subject}`;
+    targetAssessmentIndexes[key] = [...new Set([...(targetAssessmentIndexes[key] ?? []), Number(part.assessmentIndex)])];
+  }
+  const selectedStudentIds = [...new Set(failedParts.map((part) => Number(part.studentId)))];
+  if (!selectedStudentIds.length) throw new Error("No failed comment parts found");
+  const levelLookup = new Map(classData.levels.map((item) => [`${item.studentId}|${item.subject}|${item.assessmentIndex}`, item.level]));
+  const scores = {
+    [subject]: selectedStudentIds.map((studentId) => ({
+      studentId,
+      levels: subjectPlan.map((_, index) => levelLookup.get(`${studentId}|${subject}|${index}`) ?? "-"),
+    })),
+  };
+  const estimatedBatches = new Set(failedParts.map((part) => Number(part.assessmentIndex))).size;
+  if (usage.monthly + estimatedBatches > usage.limit) throw new Error("Monthly AI limit is insufficient for failed parts");
+  const result = await request("/api/comment-jobs", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ scores, selectedStudentIds, overwriteExisting: false, targetAssessmentIndexes }),
+  });
+  process.stdout.write(`${JSON.stringify({
+    mode, subject, jobId: result.job.id, status: result.job.status,
+    students: selectedStudentIds.length, failedParts: failedParts.length,
+    estimatedBatches, monthlyUsageBefore: usage.monthly,
   })}\n`);
   process.exit(0);
 }

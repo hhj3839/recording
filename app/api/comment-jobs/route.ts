@@ -67,7 +67,12 @@ export async function GET(request: Request) {
 
 export async function POST(request: Request) {
   try {
-    const body = await request.json() as { scores?: unknown; selectedStudentIds?: unknown; overwriteExisting?: unknown };
+    const body = await request.json() as {
+      scores?: unknown;
+      selectedStudentIds?: unknown;
+      overwriteExisting?: unknown;
+      targetAssessmentIndexes?: unknown;
+    };
     if (!body.scores || typeof body.scores !== "object" || Array.isArray(body.scores)) {
       return Response.json({ error: "평가 수준을 다시 확인해 주세요." }, { status: 400 });
     }
@@ -96,13 +101,17 @@ export async function POST(request: Request) {
       perspective: String(row.perspective), high: String(row.high), middle: String(row.middle), low: String(row.low),
     }));
     const scores = body.scores as Record<string, ScoreStudent[]>;
+    const targetAssessmentIndexes = body.targetAssessmentIndexes && typeof body.targetAssessmentIndexes === "object"
+      && !Array.isArray(body.targetAssessmentIndexes)
+      ? body.targetAssessmentIndexes as Record<string, unknown>
+      : null;
     const evidence: CommentEvidence[] = [];
     for (const subject of [...new Set(plan.map((item) => item.subject))]) {
       const subjectPlan = plan.filter((item) => item.subject === subject);
       for (const student of Array.isArray(scores[subject]) ? scores[subject] : []) {
         if (!selectedStudentIds.includes(student.studentId)) continue;
         if (!Number.isInteger(student.studentId) || !Array.isArray(student.levels) || student.levels.length !== subjectPlan.length) continue;
-        const items = subjectPlan.flatMap((item, index) => {
+        const subjectItems = subjectPlan.flatMap((item, index) => {
           const level = student.levels[index];
           if (level !== "상" && level !== "중" && level !== "하") return [];
           const criterion = level === "상" ? item.high : level === "중" ? item.middle : item.low;
@@ -113,7 +122,12 @@ export async function POST(request: Request) {
             text: `${item.unit} | ${item.domain} | 목표: ${item.goal} | 관점: ${item.perspective} | 수준: ${level} | 기준: ${criterion}`,
           }];
         });
-        if (items.length) evidence.push({ studentId: student.studentId, subject, items });
+        const requestedIndexes = targetAssessmentIndexes?.[`${student.studentId}|${subject}`];
+        const targetSet = Array.isArray(requestedIndexes)
+          ? new Set(requestedIndexes.map(Number).filter((index) => Number.isInteger(index) && index >= 0 && index < subjectPlan.length))
+          : null;
+        const items = targetSet ? subjectItems.filter((item) => targetSet.has(item.assessmentIndex)) : subjectItems;
+        if (items.length) evidence.push({ studentId: student.studentId, subject, items, subjectItems });
       }
     }
     if (!evidence.length) return Response.json({ error: "전 과목 중 평가 수준을 한 개 이상 입력해 주세요." }, { status: 400 });
