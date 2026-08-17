@@ -72,11 +72,24 @@ export const commentForbiddenExpressions = [
 ];
 
 export function hasNaturalNominalEnding(sentence: string) {
-  const normalized = sentence.trim().replace(/[.!?]+$/, "");
+  const trimmed = sentence.trim();
+  if (!trimmed.endsWith(".")) return false;
+  const normalized = trimmed.replace(/[.!?]+$/, "");
   const last = normalized.at(-1);
   if (!last) return false;
   const code = last.charCodeAt(0);
   return code >= 0xac00 && code <= 0xd7a3 && (code - 0xac00) % 28 === 16;
+}
+
+export function ensureGeneratedCommentPeriod(sentence: string) {
+  const normalized = normalizeGeneratedCommentWhitespace(sentence);
+  if (!normalized || /[.!?]$/.test(normalized)) return normalized;
+  const last = normalized.at(-1);
+  if (!last) return normalized;
+  const code = last.charCodeAt(0);
+  return code >= 0xac00 && code <= 0xd7a3 && (code - 0xac00) % 28 === 16
+    ? `${normalized}.`
+    : normalized;
 }
 
 export function validateGeneratedComment(comment: string, expectedSentenceCount: number) {
@@ -90,6 +103,7 @@ export function validateGeneratedComment(comment: string, expectedSentenceCount:
   const awkwardEndings = sentences.filter((sentence) =>
     /(?:고|며|아|어|감|함)\s*함\.$/.test(sentence)
     || /(?:보임|됨)함\.$/.test(sentence)
+    || /(?:려는|하고자\s*하는)\s+노력함\.$/.test(sentence)
     || /(?:표현|설명|정리|이해|구별|활용|실천|수행)\s+(?:표현|설명|정리|이해|구별|활용|실천|수행)함\.$/.test(sentence)
     || /(?:모습을\s+보|힘을\s+(?:기|파)|글을\s+써|뜻을\s+담아\s+내)\s+(?:표현|설명|정리|이해|구별|활용|실천|수행)함\.$/.test(sentence)
     || /(?:글의\s+쓰는|글쓰는)\s+방법/.test(sentence)
@@ -143,7 +157,13 @@ export function normalizeGeneratedCommentCandidate(candidate: string) {
   return validateGeneratedCommentPart(normalized).valid ? normalized : "";
 }
 
-const unsupportedGroundingConcepts = [
+const unsupportedGroundingConcepts: Array<{
+  label: string;
+  pattern: RegExp;
+  evidencePattern?: RegExp;
+  exclude?: RegExp;
+  blocking: boolean;
+}> = [
   { label: "자신 있게", pattern: /자신(?:감)?있|자신감을?(?:가지|보이)/, blocking: false },
   { label: "적극적으로", pattern: /적극적/, blocking: false },
   { label: "자기주도적으로", pattern: /자기주도적/, blocking: false },
@@ -170,6 +190,8 @@ const unsupportedGroundingConcepts = [
   { label: "실감 나게", pattern: /실감나게/, blocking: true },
   { label: "다양한 방법", pattern: /다양한방법/, blocking: true },
   { label: "이해하기 쉽게", pattern: /이해하기쉽게/, blocking: true },
+  { label: "입력에 없는 구체적 표현 방법", pattern: /(?:그림|시)(?:이나|나|와|과|으로|로)/, blocking: true },
+  { label: "학습 태도", pattern: /태도/, evidencePattern: /태도|적극적|성실|꾸준|자기주도|주도적|능동적/, blocking: true },
 ];
 
 function normalizeGroundingText(text: string) {
@@ -180,10 +202,10 @@ export function evidenceGroundingWarnings(comment: string, evidence: string) {
   const normalizedComment = normalizeGroundingText(comment);
   const normalizedEvidence = normalizeGroundingText(evidence);
   return unsupportedGroundingConcepts
-    .filter(({ pattern, exclude }) =>
+    .filter(({ pattern, evidencePattern, exclude }) =>
       pattern.test(normalizedComment)
       && !(exclude?.test(normalizedComment))
-      && !pattern.test(normalizedEvidence))
+      && !(evidencePattern ?? pattern).test(normalizedEvidence))
     .map(({ label }) => `평가 근거에 없는 ‘${label}’ 표현 확인 필요`);
 }
 
@@ -191,10 +213,10 @@ export function evidenceBlockingIssues(comment: string, evidence: string) {
   const normalizedComment = normalizeGroundingText(comment);
   const normalizedEvidence = normalizeGroundingText(evidence);
   const unsupported = unsupportedGroundingConcepts
-    .filter(({ pattern, exclude, blocking }) => blocking
+    .filter(({ pattern, evidencePattern, exclude, blocking }) => blocking
       && pattern.test(normalizedComment)
       && !(exclude?.test(normalizedComment))
-      && !pattern.test(normalizedEvidence))
+      && !(evidencePattern ?? pattern).test(normalizedEvidence))
     .map(({ label }) => `평가 근거에 없는 ‘${label}’ 표현`);
   const required = [
     { evidence: /교사.{0,5}도움|도움.{0,5}교사/, comment: /교사|도움/, label: "교사의 도움" },

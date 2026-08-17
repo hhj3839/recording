@@ -17,6 +17,16 @@ if (paidModeApproval && process.env[paidModeApproval[0]] !== "YES") {
 const commentBatchSize = 25;
 const commentForbiddenExpressions = ["부족함", "미흡함", "못함", "어려워함", "이해하지 못함", "소극적임", "불성실함"];
 
+function hasNaturalNominalEnding(sentence) {
+  const trimmed = sentence.trim();
+  if (!trimmed.endsWith(".")) return false;
+  const normalized = trimmed.replace(/[.!?]+$/, "");
+  const last = normalized.at(-1);
+  if (!last) return false;
+  const code = last.charCodeAt(0);
+  return code >= 0xac00 && code <= 0xd7a3 && (code - 0xac00) % 28 === 16;
+}
+
 function estimateAreaBatches(scores) {
   return Object.values(scores).reduce((total, students) => {
     const areaCount = Math.max(0, ...students.map((student) => student.levels.length));
@@ -32,6 +42,7 @@ function validateComment(comment, expectedSentenceCount) {
   const awkwardEndings = sentences.filter((sentence) =>
     /(?:고|며|아|어|감|함)\s*함\.$/.test(sentence)
     || /(?:보임|됨)함\.$/.test(sentence)
+    || /(?:려는|하고자\s*하는)\s+노력함\.$/.test(sentence)
     || /(?:표현|설명|정리|이해|구별|활용|실천|수행)\s+(?:표현|설명|정리|이해|구별|활용|실천|수행)함\.$/.test(sentence)
     || /(?:모습을\s+보|힘을\s+(?:기|파)|글을\s+써|뜻을\s+담아\s+내)\s+(?:표현|설명|정리|이해|구별|활용|실천|수행)함\.$/.test(sentence)
     || /(?:글의\s+쓰는|글쓰는)\s+방법/.test(sentence)
@@ -40,7 +51,7 @@ function validateComment(comment, expectedSentenceCount) {
   return {
     valid: sentences.length === expectedSentenceCount
       && lengths.every((length) => length >= 35 && length <= 90)
-      && sentences.every((sentence) => sentence.endsWith("함."))
+      && sentences.every(hasNaturalNominalEnding)
       && awkwardEndings.length === 0
       && !commentForbiddenExpressions.some((expression) => comment.includes(expression)),
     sentenceCount: sentences.length,

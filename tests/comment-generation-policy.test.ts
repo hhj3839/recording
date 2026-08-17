@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { commentAreaIssuesForDisplay, commentEvidenceInstructions, composeGeneratedCommentCandidate, evidenceBlockingIssues, evidenceGroundingWarnings, generatedCommentFailureMessage, hasCompleteEvidenceCoverage, hasNaturalNominalEnding, normalizeGeneratedCommentCandidate, normalizeGeneratedCommentWhitespace, openingRepetitionRate, replaceSelectedCommentText, resolveGeneratedEvidenceItemId, validateGeneratedComment, validateGeneratedCommentPart } from "../app/comment-generation-policy.ts";
+import { commentAreaIssuesForDisplay, commentEvidenceInstructions, composeGeneratedCommentCandidate, ensureGeneratedCommentPeriod, evidenceBlockingIssues, evidenceGroundingWarnings, generatedCommentFailureMessage, hasCompleteEvidenceCoverage, hasNaturalNominalEnding, normalizeGeneratedCommentCandidate, normalizeGeneratedCommentWhitespace, openingRepetitionRate, replaceSelectedCommentText, resolveGeneratedEvidenceItemId, validateGeneratedComment, validateGeneratedCommentPart } from "../app/comment-generation-policy.ts";
 import { behaviorRepairInstruction, behaviorRepairPlan, behaviorRepairTargets } from "../app/behavior-repair-policy.ts";
 import { assertStrictGeneratedBehaviors, selectBehaviorCandidate } from "../app/behavior-persistence-policy.ts";
 import { validateRecord } from "../app/record-validation.ts";
@@ -115,6 +115,8 @@ test("accepts natural school-record nominal endings instead of literal 함 only"
   for (const sentence of ["문제를 해결하였다.", "학습 태도가 좋습니다.", "학습 내용을 적용할 수 있다."]) {
     assert.equal(hasNaturalNominalEnding(sentence), false);
   }
+  assert.equal(hasNaturalNominalEnding("문제를 해결하는 능력이 뛰어남"), false);
+  assert.equal(ensureGeneratedCommentPeriod("문제를 해결하는 능력이 뛰어남"), "문제를 해결하는 능력이 뛰어남.");
 });
 
 test("keeps natural comments in the broad display range without inventing prefixes", () => {
@@ -143,7 +145,7 @@ test("rejects missing areas, invalid length, endings, and forbidden expressions"
 });
 
 test("rejects mechanically duplicated nominal endings", () => {
-  for (const ending of ["참여함함.", "표현하고함.", "표현하고 함.", "나타내며함.", "나타내며 함.", "마음을 담아함.", "내용을 익혀 감함."]) {
+  for (const ending of ["참여함함.", "표현하고함.", "표현하고 함.", "나타내며함.", "나타내며 함.", "마음을 담아함.", "내용을 익혀 감함.", "표현하려는 노력함."]) {
     const awkward = `수업에서 작품의 중심 내용을 정확하게 파악하고 중요한 근거를 찾아 발표 활동에 ${ending}`;
     const result = validateGeneratedComment(awkward, 1);
     assert.equal(result.naturalEndingsOk, false);
@@ -234,6 +236,17 @@ test("warns about unsupported attitude claims without discarding the sentence", 
       "글의 의미를 파악하고 모둠원과 협력하여 설명할 수 있다.",
     ),
     [],
+  );
+});
+
+test("blocks invented methods and attitudes that are absent from the criterion", () => {
+  assert.deepEqual(
+    evidenceBlockingIssues("재미와 감동을 느낀 부분을 그림이나 시로 표현함.", "재미와 감동을 느낀 부분을 다양한 방법으로 표현할 수 있다."),
+    ["평가 근거에 없는 ‘입력에 없는 구체적 표현 방법’ 표현"],
+  );
+  assert.deepEqual(
+    evidenceBlockingIssues("자료 내용을 문장의 짜임에 맞게 일부 표현하는 태도가 돋보임.", "자료 내용을 문장의 짜임에 맞게 일부 표현할 수 있다."),
+    ["평가 근거에 없는 ‘학습 태도’ 표현"],
   );
 });
 
