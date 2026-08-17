@@ -227,6 +227,8 @@ if (mode === "start" || mode === "subject" || mode === "sample" || mode === "pre
     subject: item.subject,
   }));
   const validComments = validations.filter((item) => item.valid).length;
+  const currentStudentIds = new Set(currentComments.map((item) => Number(item.studentId)));
+  const currentSubjects = new Set(currentComments.map((item) => item.subject));
   process.stdout.write(`${JSON.stringify({
     mode, jobId: job.id, status: job.status, totalItems: job.totalItems,
     completedItems: job.completedItems, failedItems: job.failedItems,
@@ -244,12 +246,8 @@ if (mode === "start" || mode === "subject" || mode === "sample" || mode === "pre
     error: job.error || "",
     ...(mode === "quality" ? {
       qualitySummary: (() => {
-        const allSubjects = [...new Set(planData.plan.map((item) => item.subject))];
-        const scope = selectCommentLoadScope("subject", classData.students, allSubjects);
-        const studentIds = new Set(scope.selectedStudents.map((student) => Number(student.id)));
-        const subjects = new Set(scope.selectedSubjects);
         const parts = (generatedData.parts ?? [])
-          .filter((part) => studentIds.has(Number(part.studentId)) && subjects.has(part.subject));
+          .filter((part) => currentStudentIds.has(Number(part.studentId)) && currentSubjects.has(part.subject));
         const issues = parts.flatMap((part) => Array.isArray(part.issues) ? part.issues : []);
         return {
           parts: parts.length,
@@ -262,12 +260,8 @@ if (mode === "start" || mode === "subject" || mode === "sample" || mode === "pre
         };
       })(),
       qualitySamples: (() => {
-        const allSubjects = [...new Set(planData.plan.map((item) => item.subject))];
-        const scope = selectCommentLoadScope("subject", classData.students, allSubjects);
-        const studentIds = new Set(scope.selectedStudents.map((student) => Number(student.id)));
-        const subjects = new Set(scope.selectedSubjects);
         return (generatedData.parts ?? [])
-        .filter((part) => studentIds.has(Number(part.studentId)) && subjects.has(part.subject))
+        .filter((part) => currentStudentIds.has(Number(part.studentId)) && currentSubjects.has(part.subject))
         .slice(0, 30)
         .map((part) => {
           const subjectPlan = planData.plan.filter((plan) => plan.subject === part.subject);

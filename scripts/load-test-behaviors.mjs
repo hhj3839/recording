@@ -92,20 +92,23 @@ if (["preflight", "seed", "sample", "full"].includes(mode)) {
     const emphases = ["꾸준함", "배려심", "책임감", "협력", "자기관리"];
     const templates = Array.from({ length: 25 }, (_, index) =>
       `${baseTemplates[index % baseTemplates.length]} · 특별히 강조할 점: ${emphases[Math.floor(index / baseTemplates.length) % emphases.length]}`);
-    const selected = classData.students.slice(0, templates.length);
+    const missingOnly = process.env.SEED_BEHAVIOR_MISSING_ONLY === "YES";
+    const selected = classData.students.slice(0, templates.length)
+      .filter((student) => !missingOnly || characteristicCount(behaviorByStudent.get(student.id)?.characteristic ?? "") < 4);
     for (let index = 0; index < selected.length; index += 1) {
+      const studentIndex = classData.students.findIndex((student) => student.id === selected[index].id);
       await request("/api/student-behaviors", {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           studentId: selected[index].id,
-          characteristic: templates[index],
+          characteristic: templates[studentIndex],
           behavior: behaviorByStudent.get(selected[index].id)?.behavior ?? "",
           confirmed: false,
         }),
       });
     }
-    process.stdout.write(`${JSON.stringify({ mode, seededStudents: selected.length, studentIds: selected.map((item) => item.id) })}\n`);
+    process.stdout.write(`${JSON.stringify({ mode, missingOnly, seededStudents: selected.length, studentIds: selected.map((item) => item.id) })}\n`);
     process.exit(0);
   }
   const ready = classData.students.map((student) => ({

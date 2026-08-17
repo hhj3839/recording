@@ -338,7 +338,10 @@ test("requires every independent performance element from the selected criterion
       "자료의 내용을 문장의 짜임에 맞추어 일부 표현하며 문장 구성의 기본을 익혀 가는 모습이 드러남.",
       criterion,
     ),
-    ["평가 기준의 필수 조건 ‘문장의 짜임에 따라 나누기’ 누락"],
+    [
+      "평가 근거에 없는 ‘입력에 없는 학습·성장 과정’ 표현",
+      "평가 기준의 필수 조건 ‘문장의 짜임에 따라 나누기’ 누락",
+    ],
   );
   assert.deepEqual(
     evidenceBlockingIssues(
@@ -388,6 +391,18 @@ test("blocks invented stock openings and required assistance omissions", () => {
       "상황에 알맞은 표정과 몸짓을 알고 작품 속 대화를 표현하기 위해 노력한다.",
     ),
     ["평가 근거에 없는 ‘실감 나게’ 표현", "평가 기준의 필수 조건 ‘노력·성장 과정’ 누락"],
+  );
+});
+
+test("blocks an invented learning process when the criterion already states the attained knowledge", () => {
+  const evidence = "마음을 전하는 글을 쓰는 방법을 알고, 마음을 전하는 글을 쓰기 위해 노력한다.";
+  assert.deepEqual(
+    evidenceBlockingIssues("마음을 전하는 글을 쓰는 방법을 알고, 그 방법을 익혀 가며 글을 쓰기 위해 노력함.", evidence),
+    ["평가 근거에 없는 ‘입력에 없는 학습·성장 과정’ 표현"],
+  );
+  assert.deepEqual(
+    evidenceBlockingIssues("교사의 도움을 받아 글 쓰는 방법을 익혀 가는 과정임.", "교사의 도움을 받아 글 쓰는 방법을 익혀 가는 과정이다."),
+    [],
   );
 });
 
