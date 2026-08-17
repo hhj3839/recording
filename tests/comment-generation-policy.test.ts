@@ -264,6 +264,18 @@ test("blocks an invented speaking activity when the evidence only supports writi
   assert.deepEqual(evidenceBlockingIssues(comment, speakingEvidence), []);
 });
 
+test("blocks changing sentence division into dividing the source material", () => {
+  const evidence = "문장을 문장의 짜임에 따라 일부 나눌 수 있고, 자료에 대한 내용을 문장의 짜임에 맞게 일부 표현할 수 있다.";
+  assert.equal(
+    evidenceBlockingIssues("문장의 짜임을 살펴 자료 내용을 일부 나누어 표현함.", evidence).some((issue) => issue.includes("자료 내용을 나누거나 구분하기")),
+    true,
+  );
+  assert.equal(
+    evidenceBlockingIssues("자료 내용을 일부 표현하고 문장을 짜임에 따라 나누어 봄.", evidence).some((issue) => issue.includes("자료 내용을 나누거나 구분하기")),
+    false,
+  );
+});
+
 test("blocks invented summarizing activities and demeanor fillers", () => {
   const writingEvidence = "작품에서 느낀 재미나 감동의 부분과 그 까닭을 쓸 수 있다.";
   assert.deepEqual(
