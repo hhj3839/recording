@@ -19,6 +19,7 @@ test("blocks every paid comment load-test mode before login without explicit app
     ["subject", "RUN_COMMENT_25_TEST"],
     ["start", "RUN_FULL_225_TEST"],
     ["missing-start", "RUN_MISSING_COMMENT_TEST"],
+    ["repair-parts", "RUN_MISSING_COMMENT_TEST"],
   ];
   for (const [mode, variable] of cases) {
     const result = runWithoutApproval("scripts/load-test-comments.mjs", mode, variable);
