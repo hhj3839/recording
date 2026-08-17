@@ -109,6 +109,20 @@ export function criterionToSafeNominalSentence(criterion: string) {
 export function criterionToSafeNominalCandidates(criterion: string) {
   const normalized = normalizeGeneratedCommentWhitespace(criterion);
   const candidates = [criterionToSafeNominalSentence(normalized)];
+  const discussion = normalized.match(/^(.+?)의 조건과 그 이유를 한 가지 말하고,?\s*친구들의 생각을 들으며 바른 자세로 토의에 임한다\.$/);
+  if (discussion) {
+    const subject = discussion[1].trim();
+    candidates.push(
+      `친구들의 생각을 들으며 바른 자세로 토의에 임하고, ${subject}의 조건과 그 이유를 한 가지 말함.`,
+      `바른 자세로 토의에 임하며 친구들의 생각을 듣고, ${subject}의 조건 한 가지와 그 이유를 말함.`,
+    );
+  }
+  if (/^지역 이름의 유래와 옛이야기를 조사하여 정리하고 글로 표현한다\.$/.test(normalized)) {
+    candidates.push(
+      "옛이야기와 지역 이름의 유래를 조사해 정리하고 글로 표현함.",
+      "지역 이름의 유래와 옛이야기를 조사하고, 정리한 내용을 글로 표현함.",
+    );
+  }
   const together = normalized.match(/^모둠\s*친구들과\s*함께\s+(.+?)한다\.$/);
   if (together) {
     const action = together[1].trim();

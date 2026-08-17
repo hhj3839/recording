@@ -262,9 +262,6 @@ export async function POST(request: Request) {
     });
   }
 
-  const diversityCandidates = [...generatedParts.entries()]
-    .filter(([key]) => generatedThisRun.has(key))
-    .map(([, part]) => part satisfies CommentAreaPart);
   const diversityReferences = savedParts.flatMap((saved) => {
     const key = `${saved.student_id}|${saved.subject}|${saved.assessment_index}`;
     return generatedThisRun.has(key) || !saved.sentence ? [] : [{
@@ -272,12 +269,93 @@ export async function POST(request: Request) {
       assessmentIndex: Number(saved.assessment_index), evidence: saved.evidence, text: saved.sentence,
     } satisfies CommentAreaPart];
   });
-  const overlaps = findCommentAreaOverlaps({ candidates: diversityCandidates, references: diversityReferences });
+  // 완전히 같은 문장은 AI를 다시 부르기 전에 평가기준에서 파생한 검증된
+  // 직접 문형으로 무료 분산한다. 사실을 추가하지 않는 후보만 사용한다.
+  const normalizedSentence = (value: string) => value.normalize("NFKC").replace(/\s+/g, "").replace(/[.!?。！？]/g, "");
+  const usedByGroup = new Map<string, Set<string>>();
+  const groupKey = (subjectName: string, assessmentIndex: number, level: string) => `${subjectName}|${assessmentIndex}|${level}`;
+  for (const reference of diversityReferences) {
+    const sourceEntry = batch.find((entry) => entry.studentId === reference.studentId);
+    const sourceItem = (sourceEntry?.subjectItems ?? sourceEntry?.items ?? [])
+      .find((item) => item.assessmentIndex === reference.assessmentIndex);
+    if (!sourceItem?.level) continue;
+    const key = groupKey(reference.subject, reference.assessmentIndex, sourceItem.level);
+    const used = usedByGroup.get(key) ?? new Set<string>();
+    used.add(normalizedSentence(reference.text));
+    usedByGroup.set(key, used);
+  }
+  const freeDiversified: Array<GeneratedCommentPart & { attempts: number; status: "complete" | "warning"; issues: string[] }> = [];
+  for (const entry of [...batch].sort((left, right) => left.studentId - right.studentId)) {
+    for (const item of entry.items) {
+      const key = `${entry.studentId}|${entry.subject}|${item.assessmentIndex}`;
+      const current = generatedParts.get(key);
+      if (!current || !item.level) continue;
+      const poolKey = groupKey(entry.subject, item.assessmentIndex, item.level);
+      const used = usedByGroup.get(poolKey) ?? new Set<string>();
+      const currentKey = normalizedSentence(current.text);
+      if (used.has(currentKey)) {
+        const generationCriterion = positiveGrowthCriterion(item.level, item.criterion ?? item.text);
+        const replacement = criterionToSafeNominalCandidates(generationCriterion).find((candidate) => {
+          const candidateKey = normalizedSentence(candidate);
+          return candidateKey && !used.has(candidateKey)
+            && validateGeneratedCommentPart(candidate, generationCriterion).valid
+            && levelAppropriatenessIssues(candidate, item.level, generationCriterion).length === 0
+            && evidenceBlockingIssues(candidate, `${item.text} | 생성용 기준: ${generationCriterion}`, generationCriterion).length === 0
+            && criterionSemanticIssues(candidate, generationCriterion, item.levelCriteria).length === 0;
+        });
+        if (replacement) {
+          const updated = {
+            ...current,
+            text: replacement,
+            warnings: current.warnings.filter((warning) => !/(?:완전히 같은 문장|유사한 표현|표현 중복)/.test(warning)),
+          };
+          generatedParts.set(key, updated);
+          used.add(normalizedSentence(replacement));
+          freeDiversified.push({
+            ...updated,
+            attempts: Math.max(1, aiCallCount),
+            status: updated.warnings.length ? "warning" : "complete",
+            issues: updated.warnings,
+          });
+          continue;
+        }
+      }
+      used.add(currentKey);
+      usedByGroup.set(poolKey, used);
+    }
+  }
+  if (freeDiversified.length) {
+    await saveGeneratedCommentParts({
+      ownerId: job.owner_id, ownerEmail: job.owner_email, classId: Number(job.class_id), parts: freeDiversified,
+    });
+  }
+  const refreshedDiversityCandidates = [...generatedParts.entries()]
+    .filter(([key]) => generatedThisRun.has(key))
+    .map(([, part]) => part satisfies CommentAreaPart);
+  const overlaps = findCommentAreaOverlaps({ candidates: refreshedDiversityCandidates, references: diversityReferences });
   const overlapKeys = new Set(overlaps.map((item) => item.key));
+  const exactOverlapKeys = new Set(overlaps
+    .filter((item) => item.reasons.includes("동일 문장 중복"))
+    .map((item) => item.key));
   const diversityTargets = batch.flatMap((item) => {
-    const items = item.items.filter((entry) => overlapKeys.has(`${item.studentId}|${item.subject}|${entry.assessmentIndex}`));
+    const items = item.items.filter((entry) => exactOverlapKeys.has(`${item.studentId}|${item.subject}|${entry.assessmentIndex}`));
     return items.length ? [{ ...item, items }] : [];
   });
+  const similarityOnlyKeys = new Set([...overlapKeys].filter((key) => !exactOverlapKeys.has(key)));
+  if (similarityOnlyKeys.size) {
+    const reviewParts = [...similarityOnlyKeys].flatMap((key) => {
+      const current = generatedParts.get(key);
+      if (!current) return [];
+      const updated = { ...current, warnings: [...new Set([...current.warnings, "같은 평가영역·수준에서 유사한 표현이 있어 교사 확인이 필요함"])] };
+      generatedParts.set(key, updated);
+      return [{ ...updated, attempts: Math.max(1, aiCallCount), status: "warning" as const, issues: updated.warnings }];
+    });
+    if (reviewParts.length) {
+      await saveGeneratedCommentParts({
+        ownerId: job.owner_id, ownerEmail: job.owner_email, classId: Number(job.class_id), parts: reviewParts,
+      });
+    }
+  }
   if (diversityTargets.length && MAX_COMMENT_DIVERSITY_CALLS_PER_BATCH > 0) {
     const markDiversityReview = async (message: string) => {
       const reviewParts = [...overlapKeys].flatMap((key) => {
@@ -300,14 +378,14 @@ export async function POST(request: Request) {
       aiCallCount += 1;
       const fixedReferences = [
         ...diversityReferences,
-        ...diversityCandidates.filter((part) => !overlapKeys.has(`${part.studentId}|${part.subject}|${part.assessmentIndex}`)),
+        ...refreshedDiversityCandidates.filter((part) => !exactOverlapKeys.has(`${part.studentId}|${part.subject}|${part.assessmentIndex}`)),
       ];
       try {
         const regenerated = await generateCommentPoolBatch(
           diversityTargets,
           [
             ...fixedReferences.map((part) => part.text),
-            ...diversityCandidates.map((part) => part.text),
+            ...refreshedDiversityCandidates.map((part) => part.text),
             ...avoidComments,
           ],
           true,

@@ -69,7 +69,9 @@ test("comment prompt uses adaptive lengths and natural nominal endings", () => {
 test("prioritizes current class sentences in the bounded duplicate-avoidance list", () => {
   const route = readFileSync("app/api/comment-jobs/run/route.ts", "utf8");
   assert.match(route, /\.\.\.\[\.\.\.generatedParts\.values\(\)\]\.map\(\(item\) => item\.text\), \.\.\.avoidComments/);
-  assert.match(route, /\.\.\.fixedReferences\.map[\s\S]*\.\.\.diversityCandidates\.map[\s\S]*\.\.\.avoidComments/);
+  assert.match(route, /\.\.\.fixedReferences\.map[\s\S]*\.\.\.refreshedDiversityCandidates\.map[\s\S]*\.\.\.avoidComments/);
+  assert.match(route, /완전히 같은 문장은 AI를 다시 부르기 전에/);
+  assert.match(route, /items = item\.items\.filter\(\(entry\) => exactOverlapKeys\.has/);
 });
 
 test("always refreshes generated result counts without browser caching", () => {
