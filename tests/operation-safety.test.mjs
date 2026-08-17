@@ -142,6 +142,31 @@ test("keeps the app shell keyboard and screen-reader friendly", () => {
   assert.match(css, /prefers-reduced-motion:reduce/);
 });
 
+test("sets browser security headers for every route", () => {
+  const config = readFileSync("next.config.ts", "utf8");
+  for (const header of [
+    "Content-Security-Policy",
+    "X-Content-Type-Options",
+    "X-Frame-Options",
+    "Referrer-Policy",
+    "Permissions-Policy",
+    "Cross-Origin-Opener-Policy",
+    "Cross-Origin-Resource-Policy",
+  ]) assert.match(config, new RegExp(header));
+  assert.match(config, /frame-ancestors 'none'/);
+  assert.match(config, /object-src 'none'/);
+});
+
+test("keeps the Supabase platform audit read-only and aggregate-only", () => {
+  const source = readFileSync("scripts/audit-supabase-platform.mjs", "utf8");
+  assert.match(source, /readOnly:\s*true/);
+  assert.match(source, /authUsers/);
+  assert.match(source, /storage\.buckets/);
+  assert.match(source, /pg_policies/);
+  assert.doesNotMatch(source, /createUser|deleteUser|updateUser|\.insert\(|\.update\(|\.delete\(/);
+  assert.doesNotMatch(source, /email|password_hash|encrypted_password/);
+});
+
 test("keeps the simplified plan, assessment, and behavior toolbars", () => {
   const page = readFileSync("app/page.tsx", "utf8");
   assert.match(page, /className="plan-saved-actions"/);
