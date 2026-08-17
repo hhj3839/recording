@@ -149,7 +149,9 @@ test("keeps the simplified plan, assessment, and behavior toolbars", () => {
   assert.match(css, /behavior-review-cell>div:not\(\.review-cell-actions\):not\(\.similarity-detail\)>span\{box-sizing:border-box;width:100%;text-align:center\}/);
   assert.match(css, /behavior-split-table th:nth-child\(2\),\.behavior-split-table td:nth-child\(2\)\{width:64px\}/);
   assert.match(page, /<th>검수<\/th>[\s\S]*className="validation-cell behavior-validation issue-only-validation behavior-review-cell"/);
-  assert.match(page, /behavior-review-cell[\s\S]*<ReviewWarning issues=\{behaviorReviewIssues\}[\s\S]*다시 생성/);
+  assert.match(page, /행동특성 생성 대상 선택[\s\S]*결과가 비어 있는 학생만 생성[\s\S]*특성을 수정한 학생만 생성[\s\S]*특성이 입력된 학생 전체 생성/);
+  assert.match(page, /role="dialog" aria-modal="true"/);
+  assert.doesNotMatch(page, /rewriteBehavior|student\.id, record, "regenerate"/);
   assert.doesNotMatch(page, /issues\.length === 1/);
   assert.match(page, /createPortal\([\s\S]*review-warning-tooltip[\s\S]*document\.body/);
   assert.match(page, /document\.addEventListener\("pointerdown", closeOutside\)/);

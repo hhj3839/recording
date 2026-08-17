@@ -128,6 +128,7 @@ export async function saveGeneratedBehaviors(input: {
   await upsertRows("student_behaviors", input.behaviors.map((item) => ({
     student_id: item.studentId,
     characteristic: item.characteristic,
+    generated_characteristic: item.characteristic,
     behavior: item.behavior,
     confirmed: false,
     confirmed_at: null,

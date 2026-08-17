@@ -1286,8 +1286,9 @@ function Comments({ assessmentDataBySubject, plan, roster }: { assessmentDataByS
 
 function Behavior({ roster }: { roster: AssessmentStudent[] }) {
   type BehaviorJob = { id: string; status: string; totalItems: number; completedItems: number; failedItems: number; error?: string; completedAt?: string | null };
-  type BehaviorRecord = { characteristic: string; behavior: string };
-  const emptyBehaviorRecord = (): BehaviorRecord => ({ characteristic: "", behavior: "" });
+  type BehaviorRecord = { characteristic: string; generatedCharacteristic: string; behavior: string };
+  type BehaviorGenerationMode = "empty" | "modified" | "all";
+  const emptyBehaviorRecord = (): BehaviorRecord => ({ characteristic: "", generatedCharacteristic: "", behavior: "" });
   const [records, setRecords] = useState<Record<number, BehaviorRecord>>({});
   const [loading, setLoading] = useState(false);
   const [generationProgress, setGenerationProgress] = useState("");
@@ -1297,13 +1298,14 @@ function Behavior({ roster }: { roster: AssessmentStudent[] }) {
   const [lastGeneratedAt, setLastGeneratedAt] = useState("");
   const [activeCategory, setActiveCategory] = useState(behaviorReferences[0].category);
   const [activeStudentId, setActiveStudentId] = useState<number | null>(roster[0]?.id ?? null);
-  const [rewriteBusyKey, setRewriteBusyKey] = useState("");
+  const [generationDialogOpen, setGenerationDialogOpen] = useState(false);
+  const [generationMode, setGenerationMode] = useState<BehaviorGenerationMode>("modified");
   const loadBehaviors = async () => {
     try {
       const response = await fetch("/api/student-behaviors", { cache: "no-store" });
-      const result = await response.json() as { behaviors?: Array<{ studentId: number; characteristic: string; behavior: string; confirmed: boolean; updatedAt: string }> };
+      const result = await response.json() as { behaviors?: Array<{ studentId: number; characteristic: string; generatedCharacteristic: string; behavior: string; confirmed: boolean; updatedAt: string }> };
       if (!response.ok || !result.behaviors) return;
-      setRecords(Object.fromEntries(result.behaviors.map((item) => [item.studentId, { characteristic: item.characteristic, behavior: item.behavior }])));
+      setRecords(Object.fromEntries(result.behaviors.map((item) => [item.studentId, { characteristic: item.characteristic, generatedCharacteristic: item.generatedCharacteristic, behavior: item.behavior }])));
       setLastGeneratedAt(result.behaviors.map((item) => item.updatedAt).sort().at(-1) ?? "");
     } catch {
       setError("저장된 행동특성을 불러오지 못했습니다.");
@@ -1359,24 +1361,38 @@ function Behavior({ roster }: { roster: AssessmentStudent[] }) {
     updateRecord(activeStudentId, { characteristic: current ? `${current} · ${phrase}` : phrase });
     setError("");
   };
-  const generateAll = async () => {
+  const generationCandidates = roster
+    .map((student) => ({ studentId: student.id, characteristic: records[student.id]?.characteristic ?? "" }))
+    .filter((item) => item.characteristic.trim());
+  const emptyGenerationCount = generationCandidates.filter((item) => !records[item.studentId]?.behavior.trim()).length;
+  const modifiedGenerationCount = generationCandidates.filter((item) => {
+    const record = records[item.studentId];
+    return Boolean(record?.behavior.trim()) && record.characteristic.trim() !== record.generatedCharacteristic.trim();
+  }).length;
+  const generationModeCount = (mode: BehaviorGenerationMode) => mode === "empty"
+    ? emptyGenerationCount
+    : mode === "modified" ? modifiedGenerationCount : generationCandidates.length;
+  const openGenerationDialog = () => {
+    if (!generationCandidates.length) return setError("한 명 이상의 특성을 입력해 주세요.");
+    setGenerationMode(modifiedGenerationCount ? "modified" : emptyGenerationCount ? "empty" : "all");
+    setGenerationDialogOpen(true);
+    setError("");
+  };
+  const generateAll = async (mode: BehaviorGenerationMode) => {
     let inputs = roster.map((student) => ({ studentId: student.id, characteristic: records[student.id]?.characteristic ?? "" })).filter((item) => item.characteristic.trim());
-    if (!inputs.length) return setError("한 명 이상의 특성을 입력해 주세요.");
-    const filledIds = inputs.filter((item) => records[item.studentId]?.behavior.trim()).map((item) => item.studentId);
-    if (filledIds.length) {
-      if (window.confirm(`행동특성이 ${filledIds.length}명에게 이미 있습니다.\n\n확인: 비어 있는 학생만 생성\n취소: 다른 선택 보기`)) {
-        inputs = inputs.filter((item) => !filledIds.includes(item.studentId));
-        if (!inputs.length) return setError("특성이 입력된 모든 학생의 행동특성이 이미 작성되어 있습니다.");
-      } else if (!window.confirm(`기존 ${filledIds.length}명의 행동특성도 덮어쓰고 ${inputs.length}명 전체를 다시 생성할까요?\n교사가 수정한 내용도 바뀝니다.`)) {
-        return;
-      }
-    }
+    if (mode === "empty") inputs = inputs.filter((item) => !records[item.studentId]?.behavior.trim());
+    if (mode === "modified") inputs = inputs.filter((item) => {
+      const record = records[item.studentId];
+      return Boolean(record?.behavior.trim()) && record.characteristic.trim() !== record.generatedCharacteristic.trim();
+    });
+    if (!inputs.length) return setError(mode === "empty" ? "결과가 비어 있는 학생이 없습니다." : "특성을 수정한 학생이 없습니다.");
     const blocked = inputs.filter((item) => !validateBehaviorSource(item.characteristic).valid);
     if (blocked.length) {
       const numbers = blocked.map((item) => roster.find((student) => student.id === item.studentId)?.number ?? item.studentId);
       return setError(`${numbers.join(", ")}번 학생의 관찰 사실에서 금지 내용 또는 개인정보를 삭제해 주세요.`);
     }
     setLoading(true);
+    setGenerationDialogOpen(false);
     setError("");
     setGenerationProgress("작업 등록 중…");
     try {
@@ -1408,7 +1424,7 @@ function Behavior({ roster }: { roster: AssessmentStudent[] }) {
     if (!response.ok) return setError(result.error || "행동특성을 초기화하지 못했습니다.");
     setRecords((current) => Object.fromEntries(roster.map((student) => [
       student.id,
-      removeSources ? emptyBehaviorRecord() : { characteristic: current[student.id]?.characteristic ?? "", behavior: "" },
+      removeSources ? emptyBehaviorRecord() : { characteristic: current[student.id]?.characteristic ?? "", generatedCharacteristic: "", behavior: "" },
     ])));
     setLastGeneratedAt("");
     setError("");
@@ -1435,29 +1451,6 @@ function Behavior({ roster }: { roster: AssessmentStudent[] }) {
       setError("수정한 행동특성 내용을 저장하지 못했습니다. 잠시 후 다시 시도해 주세요.");
     }
   };
-  const rewriteBehavior = async (studentId: number, record: BehaviorRecord, mode: "regenerate" | "length") => {
-    if (!record.characteristic.trim()) return setError("관찰 사실을 먼저 입력해 주세요.");
-    const busyKey = `${studentId}|${mode}`;
-    setRewriteBusyKey(busyKey);
-    setError("");
-    try {
-      const response = await fetch("/api/generate-behavior", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ studentId, observation: record.characteristic, currentBehavior: record.behavior, mode }),
-      });
-      const result = await response.json() as { behavior?: string; error?: string };
-      if (!response.ok || !result.behavior) throw new Error(result.error || "행동특성을 다시 생성하지 못했습니다.");
-      const rewritten = { ...record, behavior: result.behavior };
-      updateRecord(studentId, rewritten);
-      await saveRecord(studentId, rewritten);
-      setLastGeneratedAt(new Date().toISOString());
-    } catch (reason) {
-      setError(reason instanceof Error ? reason.message : "행동특성을 다시 생성하지 못했습니다.");
-    } finally {
-      setRewriteBusyKey("");
-    }
-  };
   const formattedLastGeneratedAt = lastGeneratedAt
     ? new Intl.DateTimeFormat("ko-KR", { month: "numeric", day: "numeric", hour: "numeric", minute: "2-digit" }).format(new Date(lastGeneratedAt))
     : "";
@@ -1470,8 +1463,25 @@ function Behavior({ roster }: { roster: AssessmentStudent[] }) {
     <section>
       <div className="page-heading">
         <div><p className="eyebrow">행동 기록</p><h1>행동특성 작성</h1><p>왼쪽에 관찰한 키워드나 메모를 자유롭게 쓰고, 오른쪽에서 생성 결과를 바로 확인하세요.</p></div>
-        <div className="ai-generate-actions">{formattedLastGeneratedAt && <span>마지막 생성 {formattedLastGeneratedAt}</span>}<button onClick={() => void generateAll()} disabled={loading || inputIssueCount > 0}>{loading ? generationProgress || "전체 생성 중…" : inputIssueCount ? `입력 확인 ${inputIssueCount}명` : "✦ 행동특성 생성"}</button><button className="secondary result-copy-button" onClick={() => void copyBehaviors()} disabled={!roster.some((student) => records[student.id]?.behavior)}>{copied ? "복사됨 ✓" : "행동특성만 복사하기"}</button><button className="danger-text" onClick={() => void clearBehaviors()} disabled={loading || !roster.some((student) => records[student.id]?.behavior.trim())}>결과 초기화</button></div>
+        <div className="ai-generate-actions">{formattedLastGeneratedAt && <span>마지막 생성 {formattedLastGeneratedAt}</span>}<button onClick={openGenerationDialog} disabled={loading || inputIssueCount > 0}>{loading ? generationProgress || "전체 생성 중…" : inputIssueCount ? `입력 확인 ${inputIssueCount}명` : "✦ 행동특성 생성"}</button><button className="secondary result-copy-button" onClick={() => void copyBehaviors()} disabled={!roster.some((student) => records[student.id]?.behavior)}>{copied ? "복사됨 ✓" : "행동특성만 복사하기"}</button><button className="danger-text" onClick={() => void clearBehaviors()} disabled={loading || !roster.some((student) => records[student.id]?.behavior.trim())}>결과 초기화</button></div>
       </div>
+      {generationDialogOpen && <div className="generation-dialog-backdrop" onMouseDown={(event) => { if (event.target === event.currentTarget) setGenerationDialogOpen(false); }}>
+        <div className="generation-dialog" role="dialog" aria-modal="true" aria-labelledby="behavior-generation-title">
+          <div><p className="eyebrow">AI 생성</p><h2 id="behavior-generation-title">행동특성 생성 대상 선택</h2><p>생성할 학생 범위를 선택하세요. 기존 결과는 선택한 범위에 따라서만 교체됩니다.</p></div>
+          <div className="generation-options">
+            {([
+              ["empty", "결과가 비어 있는 학생만 생성", "기존 결과를 유지하고 아직 작성되지 않은 학생만 생성합니다."],
+              ["modified", "특성을 수정한 학생만 생성", "마지막 생성 이후 관찰 키워드·메모를 고친 학생만 다시 생성합니다."],
+              ["all", "특성이 입력된 학생 전체 생성", "기존 결과를 포함해 특성이 입력된 모든 학생을 새로 생성합니다."],
+            ] as const).map(([mode, title, description]) => <label className={generationMode === mode ? "selected" : ""} key={mode}>
+              <input type="radio" name="behavior-generation-mode" value={mode} checked={generationMode === mode} onChange={() => setGenerationMode(mode)} />
+              <span><strong>{title}</strong><small>{description}</small></span><b>{generationModeCount(mode)}명</b>
+            </label>)}
+          </div>
+          {generationMode === "all" && roster.some((student) => records[student.id]?.behavior.trim()) && <p className="generation-overwrite-warning">기존 행동특성이 새 결과로 교체됩니다.</p>}
+          <div className="generation-dialog-actions"><button className="secondary" onClick={() => setGenerationDialogOpen(false)}>취소</button><button onClick={() => void generateAll(generationMode)} disabled={generationModeCount(generationMode) === 0}>{generationModeCount(generationMode)}명 생성하기</button></div>
+        </div>
+      </div>}
       <div className="review-content behavior-table-content">
         {error && <p className="generation-error">! {error}</p>}
         {loading && <div className="comment-loading class-loading"><span>✦</span><p>입력된 모든 학생의 행동특성을 생성하고 있어요.</p></div>}
@@ -1509,7 +1519,6 @@ function Behavior({ roster }: { roster: AssessmentStudent[] }) {
                     <ReviewWarning issues={behaviorReviewIssues} />
                     {preferredLengthAdvisory && <small className="behavior-length-advisory">{preferredLengthAdvisory}</small>}
                     {similarStudents.length > 0 && closest && <div className="similarity-detail"><strong>{closest.student.name} 학생과 {Math.round(closest.score * 100)}%</strong>{closest.overlaps.length > 0 && <span>겹치는 표현: {closest.overlaps.join(" · ")}</span>}</div>}
-                    <div className="comment-row-actions review-cell-actions"><button disabled={!record.characteristic || !sourceValidation.valid || !!rewriteBusyKey} onMouseDown={(event) => event.preventDefault()} onClick={() => void rewriteBehavior(student.id, record, "regenerate")}>{rewriteBusyKey === `${student.id}|regenerate` ? "생성 중…" : "다시 생성"}</button></div>
                   </td>
                 </tr>;
               })}</tbody>
