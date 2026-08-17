@@ -1287,7 +1287,6 @@ function Comments({ assessmentDataBySubject, plan, roster }: { assessmentDataByS
                   .map((part) => ({ ...part, visibleIssues: commentAreaIssuesForDisplay(part.status, part.issues) }))
                   .filter((part) => part.status === "needs_review" || part.visibleIssues.length > 0);
                 const commentReviewIssues = [
-                  ...(text && !validation.endingsOk ? ["명사형 종결 확인"] : []),
                   ...(text && validation.forbidden.length > 0 ? [`금지어 확인: ${validation.forbidden.join(" · ")}`] : []),
                   ...(text && !validation.spellingOk ? validation.spellingIssues.map((issue) => `맞춤법: ${issue}`) : []),
                   ...areaIssues.flatMap((part) => {
@@ -1296,7 +1295,7 @@ function Comments({ assessmentDataBySubject, plan, roster }: { assessmentDataByS
                     return reasons.map((reason) => `${domain} 영역: ${reason}`);
                   }),
                 ];
-                const hasBlockingCommentIssue = Boolean(text) && (!validation.endingsOk || validation.forbidden.length > 0)
+                const hasBlockingCommentIssue = Boolean(text) && validation.forbidden.length > 0
                   || areaIssues.some((part) => part.status === "needs_review");
                 const comparisons = roster.filter((other) => other.id !== student.id).map((other) => ({
                   student: other,
