@@ -123,7 +123,7 @@ test("keeps natural comments in the broad display range without inventing prefix
   const strict = "글의 중심 생각을 정확하게 파악하고 중요한 내용을 근거와 함께 정리하여 발표 활동에 꾸준히 참여함.";
   assert.equal(normalizeGeneratedCommentCandidate(strict), strict);
   const nearMiss = Array.from(strict).slice(2).join("");
-  if (Array.from(nearMiss.trim()).length >= 48) assert.equal(normalizeGeneratedCommentCandidate(nearMiss), nearMiss.trim());
+  if (Array.from(nearMiss.trim()).length >= 55) assert.equal(normalizeGeneratedCommentCandidate(nearMiss), nearMiss.trim());
   const tooShort = "평가함.";
   assert.equal(normalizeGeneratedCommentCandidate(tooShort), "");
   assert.equal(normalizeGeneratedCommentCandidate(tooShort).startsWith("수업에서 "), false);
@@ -207,7 +207,7 @@ test("shows out-of-target lengths while keeping them as teacher-review warnings"
   const base = "글의 중심 생각을 정확하게 파악하고 중요한 내용을 근거와 함께 정리하여 발표 활동에 꾸준히 참여함.";
   const sentence49 = Array.from(base).slice(0, 46).join("").replace(/[.]*$/, "") + " 참여함.";
   const result = validateGeneratedCommentPart(sentence49);
-  if (Array.from(sentence49).length >= 35 && Array.from(sentence49).length <= 90) {
+  if (Array.from(sentence49).length >= 55 && Array.from(sentence49).length <= 90) {
     assert.equal(result.valid, true);
     assert.equal(result.warnings.length > 0, Array.from(sentence49).length < 60 || Array.from(sentence49).length > 80);
   }
@@ -250,6 +250,24 @@ test("blocks invented methods and attitudes that are absent from the criterion",
   );
 });
 
+test("requires every independent performance element from the selected criterion", () => {
+  const criterion = "문장을 문장의 짜임에 따라 일부 나눌 수 있고, 자료에 대한 내용을 문장의 짜임에 맞게 일부 표현할 수 있다.";
+  assert.deepEqual(
+    evidenceBlockingIssues(
+      "자료의 내용을 문장의 짜임에 맞추어 일부 표현하며 문장 구성의 기본을 익혀 가는 모습이 드러남.",
+      criterion,
+    ),
+    ["평가 기준의 필수 조건 ‘문장의 짜임에 따라 나누기’ 누락"],
+  );
+  assert.deepEqual(
+    evidenceBlockingIssues(
+      "문장을 문장의 짜임에 따라 일부 나누고 자료 내용을 그 짜임에 맞게 부분적으로 표현하는 모습임.",
+      criterion,
+    ),
+    [],
+  );
+});
+
 test("blocks invented stock openings and required assistance omissions", () => {
   assert.deepEqual(
     evidenceBlockingIssues(
@@ -277,7 +295,11 @@ test("blocks invented stock openings and required assistance omissions", () => {
       "평가 활동의 대상과 수행 내용을 바탕으로 문장의 짜임을 구별함.",
       "문장을 문장의 짜임에 따라 일부 나눌 수 있다.",
     ),
-    ["평가 근거에 없는 ‘평가 메타 표현’ 표현", "평가 기준의 필수 조건 ‘일부 수행’ 누락"],
+    [
+      "평가 근거에 없는 ‘평가 메타 표현’ 표현",
+      "평가 기준의 필수 조건 ‘일부 수행’ 누락",
+      "평가 기준의 필수 조건 ‘문장의 짜임에 따라 나누기’ 누락",
+    ],
   );
   assert.deepEqual(
     evidenceBlockingIssues(

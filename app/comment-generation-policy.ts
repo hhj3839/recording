@@ -136,7 +136,7 @@ export function composeGeneratedCommentCandidate(body: string, ending: string) {
 export function validateGeneratedCommentPart(comment: string) {
   const strict = validateGeneratedComment(comment, 1);
   const length = strict.lengths[0] ?? 0;
-  const acceptedLength = length >= 35 && length <= 90;
+  const acceptedLength = length >= 55 && length <= 90;
   const warnings = [
     ...(acceptedLength && !strict.lengthsOk ? [`권장 60~80자 범위를 벗어난 ${length}자 문장`] : []),
   ];
@@ -209,9 +209,10 @@ export function evidenceGroundingWarnings(comment: string, evidence: string) {
     .map(({ label }) => `평가 근거에 없는 ‘${label}’ 표현 확인 필요`);
 }
 
-export function evidenceBlockingIssues(comment: string, evidence: string) {
+export function evidenceBlockingIssues(comment: string, evidence: string, requiredEvidence = evidence) {
   const normalizedComment = normalizeGroundingText(comment);
   const normalizedEvidence = normalizeGroundingText(evidence);
+  const normalizedRequiredEvidence = normalizeGroundingText(requiredEvidence);
   const unsupported = unsupportedGroundingConcepts
     .filter(({ pattern, evidencePattern, exclude, blocking }) => blocking
       && pattern.test(normalizedComment)
@@ -222,7 +223,12 @@ export function evidenceBlockingIssues(comment: string, evidence: string) {
     { evidence: /교사.{0,5}도움|도움.{0,5}교사/, comment: /교사|도움/, label: "교사의 도움" },
     { evidence: /일부/, comment: /일부|몇몇|한부분|부분적으로/, label: "일부 수행" },
     { evidence: /노력|익혀가|과정/, comment: /노력|애씀|힘씀|익혀가|배워가|과정/, label: "노력·성장 과정" },
-  ].filter((item) => item.evidence.test(normalizedEvidence) && !item.comment.test(normalizedComment))
+    { evidence: /짜임.{0,16}(?:나누|나눌|나눠|구분)/, comment: /짜임.{0,24}(?:나누|나눌|나눠|구분)/, label: "문장의 짜임에 따라 나누기" },
+    { evidence: /자료.{0,16}표현/, comment: /자료.{0,20}(?:표현|나타내|옮겨적)/, label: "자료 내용 표현하기" },
+    { evidence: /중심문장.{0,12}뒷받침문장.{0,16}파악/, comment: /중심문장.{0,20}뒷받침문장.{0,20}(?:파악|찾)/, label: "중심·뒷받침 문장 파악하기" },
+    { evidence: /간추/, comment: /간추|요약|정리/, label: "내용 간추리기" },
+    { evidence: /재미.{0,12}감동.{0,20}까닭/, comment: /재미.{0,20}감동.{0,24}(?:까닭|이유)/, label: "재미·감동과 까닭 쓰기" },
+  ].filter((item) => item.evidence.test(normalizedRequiredEvidence) && !item.comment.test(normalizedComment))
     .map((item) => `평가 기준의 필수 조건 ‘${item.label}’ 누락`);
   return [...unsupported, ...required];
 }
