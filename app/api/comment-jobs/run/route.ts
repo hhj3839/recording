@@ -281,7 +281,16 @@ export async function POST(request: Request) {
       generatedParts.get(`${item.studentId}|${item.subject}|${evidenceItem.assessmentIndex}`)?.text ?? "");
     const available = sentences.filter(Boolean);
     return available.length
-      ? [{ studentId: item.studentId, subject: item.subject, comment: available.join(" "), candidates: [available.join(" ")] }]
+      ? [{
+          studentId: item.studentId,
+          subject: item.subject,
+          comment: available.join(" "),
+          candidates: [available.join(" ")],
+          generationLevels: (item.subjectItems ?? item.items).map((entry) => ({
+            assessmentIndex: entry.assessmentIndex,
+            level: entry.level ?? "-",
+          })),
+        }]
       : [];
   });
   comments = selectMostDiverseComments(comments, avoidComments)

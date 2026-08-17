@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { commentAreaIssuesForDisplay, commentEvidenceInstructions, composeGeneratedCommentCandidate, ensureGeneratedCommentPeriod, evidenceBlockingIssues, evidenceGroundingWarnings, generatedCommentFailureMessage, hasCompleteEvidenceCoverage, hasNaturalNominalEnding, normalizeGeneratedCommentCandidate, normalizeGeneratedCommentWhitespace, openingRepetitionRate, replaceSelectedCommentText, resolveGeneratedEvidenceItemId, validateGeneratedComment, validateGeneratedCommentPart } from "../app/comment-generation-policy.ts";
+import { commentAreaIssuesForDisplay, commentEvidenceInstructions, commentLengthTarget, composeGeneratedCommentCandidate, ensureGeneratedCommentPeriod, evidenceBlockingIssues, evidenceGroundingWarnings, generatedCommentFailureMessage, hasCompleteEvidenceCoverage, hasNaturalNominalEnding, normalizeGeneratedCommentCandidate, normalizeGeneratedCommentWhitespace, openingRepetitionRate, replaceSelectedCommentText, resolveGeneratedEvidenceItemId, validateGeneratedComment, validateGeneratedCommentPart } from "../app/comment-generation-policy.ts";
 import { behaviorRepairInstruction, behaviorRepairPlan, behaviorRepairTargets } from "../app/behavior-repair-policy.ts";
 import { assertStrictGeneratedBehaviors, selectBehaviorCandidate } from "../app/behavior-persistence-policy.ts";
 import { validateRecord } from "../app/record-validation.ts";
@@ -135,7 +135,13 @@ test("stores a natural long subject comment while keeping length as a recommenda
   assert.equal(Array.from(long).length > 80, true);
   assert.equal(result.acceptedLength, true);
   assert.equal(result.valid, true);
-  assert.equal(result.warnings.some((issue) => issue.includes("권장 60~80자")), true);
+  assert.equal(result.warnings.some((issue) => issue.startsWith("권장 ")), true);
+});
+
+test("adapts the target length to the amount of criterion information", () => {
+  assert.deepEqual(commentLengthTarget("자료를 분류할 수 있다."), { min: 45, max: 65, label: "45~65자" });
+  assert.deepEqual(commentLengthTarget("문장의 짜임에 따라 문장을 나누고 자료 내용을 표현할 수 있다."), { min: 55, max: 75, label: "55~75자" });
+  assert.deepEqual(commentLengthTarget("인물의 상황을 파악하고 표정과 몸짓을 선택하며 목소리와 말투를 활용하여 대화를 실감 나게 표현할 수 있다."), { min: 60, max: 85, label: "60~85자" });
 });
 
 test("rejects missing areas, invalid length, endings, and forbidden expressions", () => {

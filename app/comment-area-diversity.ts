@@ -59,7 +59,7 @@ export function commentAreaOverlapReasons(left: CommentAreaPart, right: CommentA
   const rightPhrases = fourWordPhrases(styleWords(right.text, right.evidence));
   if ([...leftPhrases].some((phrase) => rightPhrases.has(phrase))) reasons.push("4단어 연속 중복");
   const similarity = commentAreaSimilarity(left, right);
-  if (similarity >= 0.65) reasons.push(`표현 유사도 ${Math.round(similarity * 100)}%`);
+  if (similarity >= 0.70) reasons.push(`표현 유사도 ${Math.round(similarity * 100)}%`);
   return reasons;
 }
 

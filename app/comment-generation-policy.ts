@@ -38,6 +38,15 @@ export function normalizeGeneratedCommentWhitespace(comment: string) {
   return comment.replace(/\s+/g, " ").trim();
 }
 
+export function commentLengthTarget(evidence: string) {
+  const normalized = normalizeGeneratedCommentWhitespace(evidence);
+  const criterion = normalized.split(/\|\s*기준:\s*/).at(-1) ?? normalized;
+  const actionCount = (criterion.match(/(?:고|며|하고|하며|하여|해서|거나|및|·|\/)/g) ?? []).length + 1;
+  if (Array.from(criterion).length < 38 && actionCount <= 1) return { min: 45, max: 65, label: "45~65자" };
+  if (Array.from(criterion).length < 75 && actionCount <= 2) return { min: 55, max: 75, label: "55~75자" };
+  return { min: 60, max: 85, label: "60~85자" };
+}
+
 export function commentEvidenceInstructions(evidence: string) {
   const normalized = normalizeGeneratedCommentWhitespace(evidence);
   const required = [
@@ -133,12 +142,13 @@ export function composeGeneratedCommentCandidate(body: string, ending: string) {
   return `${normalizedBody} ${ending}`;
 }
 
-export function validateGeneratedCommentPart(comment: string) {
+export function validateGeneratedCommentPart(comment: string, evidence = "") {
   const strict = validateGeneratedComment(comment, 1);
   const length = strict.lengths[0] ?? 0;
   const acceptedLength = length >= 35 && length <= 90;
+  const target = commentLengthTarget(evidence || comment);
   const warnings = [
-    ...(acceptedLength && !strict.lengthsOk ? [`권장 60~80자 범위를 벗어난 ${length}자 문장`] : []),
+    ...(acceptedLength && (length < target.min || length > target.max) ? [`권장 ${target.label} 범위를 벗어난 ${length}자 문장`] : []),
   ];
   return {
     ...strict,
@@ -237,7 +247,7 @@ export function evidenceBlockingIssues(comment: string, evidence: string, requir
 }
 
 export function isCommentLengthReviewIssue(issue: string) {
-  return /^권장 (?:50~60|60~80)자 범위를 벗어난 \d+자 문장$/.test(issue.trim());
+  return /^권장 (?:45~65|50~60|55~75|60~80|60~85)자 범위를 벗어난 \d+자 문장$/.test(issue.trim());
 }
 
 export function commentAreaIssuesForDisplay(status: string, issues: string[]) {

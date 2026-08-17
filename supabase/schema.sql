@@ -74,6 +74,7 @@ create table if not exists generated_comments (
   evidence_hash text,
   evidence_validated_at timestamptz,
   candidates jsonb not null default '[]'::jsonb,
+  generation_levels jsonb not null default '[]'::jsonb,
   updated_at timestamptz not null default now(),
   owner_email text not null,
   owner_id uuid references auth.users(id) on delete cascade,

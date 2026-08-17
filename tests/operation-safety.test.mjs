@@ -50,10 +50,11 @@ test("job status polling wakes queued background generation without creating a n
   }
 });
 
-test("comment prompt uses 60 to 80 characters and natural nominal endings", () => {
+test("comment prompt uses adaptive lengths and natural nominal endings", () => {
   const source = readFileSync("app/comment-generation.ts", "utf8");
   const page = readFileSync("app/page.tsx", "utf8");
-  assert.match(source, /text는 60~80자를 목표/);
+  assert.match(source, /근거 사전의 lengthTarget을 목표/);
+  assert.match(source, /평가기준의 정보량보다 길이를 우선하지 않는다/);
   assert.match(source, /모든 문장은 반드시 학교생활기록부에 적합한 관찰 기반 명사형 종결 표현과 마침표로 끝낸다/);
   assert.match(source, /‘문제를 해결하는 능력이 뛰어남\.’, ‘학습 내용을 적용하는 태도가 돋보임\.’, ‘꾸준히 성장하는 모습이 인상적임\.’/);
   assert.match(source, /문자 그대로 ‘함\.’만 뜻하지 않으며 함·음·임 계열/);
@@ -141,7 +142,8 @@ test("keeps the simplified plan, assessment, and behavior toolbars", () => {
   assert.equal((page.match(/className="secondary result-copy-button"/g) ?? []).length, 2);
   assert.match(page, /className="comment-row-actions review-cell-actions comment-review-actions"[\s\S]*다시 생성[\s\S]*선택한 부분 바꾸기/);
   assert.match(page, /if \(!eligibleIds\.length\) return setError\(`\$\{selectedSubject\}에서 상·중·하 평가수준이 입력된 학생이 없습니다\.`\)/);
-  assert.match(page, /isRetry[\s\S]*다시 생성할 수 있는 학생이 없습니다[\s\S]*모든 생성 대상 학생에게 이미 작성되어 있습니다/);
+  assert.match(page, /평어 생성 대상 선택[\s\S]*결과가 비어 있는 학생만 생성[\s\S]*평가수준을 수정한 학생만 생성[\s\S]*생성 대상 학생 전체 다시 생성/);
+  assert.match(page, /자동 생성·보완 중[\s\S]*저장 완료[\s\S]*교사 확인 권장[\s\S]*생성 실패/);
   assert.doesNotMatch(page, /evidenceKey|setEvidenceKey|className="evidence-button"/);
   const css = readFileSync("app/globals.css", "utf8");
   const recordValidation = readFileSync("app/record-validation.ts", "utf8");

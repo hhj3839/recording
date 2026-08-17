@@ -86,7 +86,7 @@ test("distributes randomized comment styles across a class batch", () => {
   assert.equal(variations.length, 10);
   assert.equal(new Set(variations.slice(0, 6).map((item) => item.structure)).size, 6);
   assert.equal(new Set(variations.slice(0, 8).map((item) => item.opening)).size, 8);
-  assert.equal(variations.every((item) => item.structure && item.opening && item.focusOrder), true);
+  assert.equal(variations.every((item) => item.structure && item.opening && item.focusOrder && item.verbStrategy && item.endingStyle), true);
 });
 
 test("distributes randomized behavior styles across a class batch", () => {
