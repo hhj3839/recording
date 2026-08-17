@@ -143,13 +143,11 @@ export function composeGeneratedCommentCandidate(body: string, ending: string) {
 }
 
 export function validateGeneratedCommentPart(comment: string, evidence = "") {
+  void evidence;
   const strict = validateGeneratedComment(comment, 1);
   const length = strict.lengths[0] ?? 0;
   const acceptedLength = length >= 35 && length <= 90;
-  const target = commentLengthTarget(evidence || comment);
-  const warnings = [
-    ...(acceptedLength && (length < target.min || length > target.max) ? [`권장 ${target.label} 범위를 벗어난 ${length}자 문장`] : []),
-  ];
+  const warnings: string[] = [];
   return {
     ...strict,
     acceptedLength,

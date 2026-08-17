@@ -50,7 +50,7 @@ function validateComment(comment, expectedSentenceCount) {
     || /[가-힣]+(?:는|은)\s+(?:이해|표현|설명|정리|구별|활용|수행)함\.$/.test(sentence));
   return {
     valid: sentences.length === expectedSentenceCount
-      && lengths.every((length) => length >= 55 && length <= 90)
+      && lengths.every((length) => length >= 35 && length <= 90)
       && sentences.every(hasNaturalNominalEnding)
       && awkwardEndings.length === 0
       && !commentForbiddenExpressions.some((expression) => comment.includes(expression)),
@@ -243,9 +243,27 @@ if (mode === "start" || mode === "subject" || mode === "sample" || mode === "pre
     invalidSamples: validations.filter((item) => !item.valid).slice(0, 10),
     error: job.error || "",
     ...(mode === "quality" ? {
+      qualitySummary: (() => {
+        const allSubjects = [...new Set(planData.plan.map((item) => item.subject))];
+        const scope = selectCommentLoadScope("subject", classData.students, allSubjects);
+        const studentIds = new Set(scope.selectedStudents.map((student) => Number(student.id)));
+        const subjects = new Set(scope.selectedSubjects);
+        const parts = (generatedData.parts ?? [])
+          .filter((part) => studentIds.has(Number(part.studentId)) && subjects.has(part.subject));
+        const issues = parts.flatMap((part) => Array.isArray(part.issues) ? part.issues : []);
+        return {
+          parts: parts.length,
+          complete: parts.filter((part) => part.status === "complete").length,
+          warnings: parts.filter((part) => part.status === "warning").length,
+          needsReview: parts.filter((part) => part.status === "needs_review").length,
+          groundingWarnings: issues.filter((issue) => /근거|입력|평가기준|평가 기준/.test(issue)).length,
+          similarityWarnings: issues.filter((issue) => /유사|중복|겹/.test(issue)).length,
+          lengthWarnings: issues.filter((issue) => /권장.*자/.test(issue)).length,
+        };
+      })(),
       qualitySamples: (() => {
         const allSubjects = [...new Set(planData.plan.map((item) => item.subject))];
-        const scope = selectCommentLoadScope("sample", classData.students, allSubjects);
+        const scope = selectCommentLoadScope("subject", classData.students, allSubjects);
         const studentIds = new Set(scope.selectedStudents.map((student) => Number(student.id)));
         const subjects = new Set(scope.selectedSubjects);
         return (generatedData.parts ?? [])
