@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { commentAreaIssuesForDisplay, commentEvidenceInstructions, commentLengthTarget, composeGeneratedCommentCandidate, criterionToSafeNominalSentence, ensureGeneratedCommentPeriod, evidenceBlockingIssues, evidenceGroundingWarnings, generatedCommentFailureMessage, hasCompleteEvidenceCoverage, hasNaturalNominalEnding, normalizeGeneratedCommentCandidate, normalizeGeneratedCommentWhitespace, openingRepetitionRate, positiveGrowthCriterion, repairSafeNominalEnding, replaceSelectedCommentText, resolveGeneratedEvidenceItemId, validateGeneratedComment, validateGeneratedCommentPart } from "../app/comment-generation-policy.ts";
+import { commentAreaIssuesForDisplay, commentEvidenceInstructions, commentLengthTarget, composeGeneratedCommentCandidate, criterionToSafeNominalCandidates, criterionToSafeNominalSentence, ensureGeneratedCommentPeriod, evidenceBlockingIssues, evidenceGroundingWarnings, generatedCommentFailureMessage, hasCompleteEvidenceCoverage, hasNaturalNominalEnding, levelAppropriatenessIssues, normalizeGeneratedCommentCandidate, normalizeGeneratedCommentWhitespace, openingRepetitionRate, positiveGrowthCriterion, repairSafeNominalEnding, replaceSelectedCommentText, resolveGeneratedEvidenceItemId, validateGeneratedComment, validateGeneratedCommentPart } from "../app/comment-generation-policy.ts";
 import { behaviorRepairInstruction, behaviorRepairPlan, behaviorRepairTargets } from "../app/behavior-repair-policy.ts";
 import { assertStrictGeneratedBehaviors, selectBehaviorCandidate } from "../app/behavior-persistence-policy.ts";
 import { validateRecord } from "../app/record-validation.ts";
@@ -115,6 +115,23 @@ test("creates a grounded nominal fallback from a declarative criterion", () => {
   );
 });
 
+test("creates distinct grounded fallbacks for a group collaboration criterion", () => {
+  assert.deepEqual(
+    criterionToSafeNominalCandidates("모둠 친구들과 함께 동물의 특징을 이용해 생활용품을 설계한다."),
+    [
+      "모둠 친구들과 함께 동물의 특징을 이용해 생활용품을 설계함.",
+      "동물의 특징을 이용해 생활용품을 설계하며 모둠 친구들과 함께 활동함.",
+      "동물의 특징을 이용해 생활용품을 설계하는 과정에 모둠 친구들과 함께 참여함.",
+    ],
+  );
+});
+
+test("blocks unsupported strong praise for middle and low levels", () => {
+  assert.deepEqual(levelAppropriatenessIssues("생활용품을 설계하는 수행이 돋보임.", "중"), ["평가수준보다 과도한 우수 표현"]);
+  assert.deepEqual(levelAppropriatenessIssues("생활용품 설계 활동에 참여하는 모습이 인상적임.", "하"), ["평가수준보다 과도한 우수 표현"]);
+  assert.deepEqual(levelAppropriatenessIssues("생활용품을 창의적으로 설계하는 능력이 뛰어남.", "상"), []);
+});
+
 test("rejects direct negative science-record expressions", () => {
   for (const sentence of [
     "용수철저울로 무게를 비교하는 데 어려움을 겪음.",
@@ -143,7 +160,7 @@ test("assigns only validated unique pool candidates and reports a shortage", () 
   const result = assignUniquePoolCandidates(group, [
     repeated,
     repeated,
-    "문장의 짜임을 고려하여 자료에 담긴 내용을 일부 표현하는 수행이 돋보임.",
+    "문장의 짜임을 고려하여 자료에 담긴 내용을 일부 알맞게 표현함.",
   ]);
   assert.equal(result.candidates.length, 2);
   assert.equal(result.issues.includes("완전히 같은 문장 후보 중복"), true);

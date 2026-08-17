@@ -7,7 +7,7 @@ import { generateCommentPoolBatch } from "../../../comment-pool-generation";
 import { generationModel } from "../../../ai-model-policy";
 import { MAX_COMMENT_AI_CALLS_PER_BATCH, MAX_COMMENT_DIVERSITY_CALLS_PER_BATCH } from "../../../comment-batching";
 import { CommentAreaPart, findCommentAreaOverlaps } from "../../../comment-area-diversity";
-import { criterionToSafeNominalSentence, evidenceBlockingIssues, positiveGrowthCriterion, validateGeneratedCommentPart } from "../../../comment-generation-policy";
+import { criterionToSafeNominalCandidates, evidenceBlockingIssues, levelAppropriatenessIssues, positiveGrowthCriterion, validateGeneratedCommentPart } from "../../../comment-generation-policy";
 
 export const maxDuration = 300;
 const MAX_GENERATION_ATTEMPTS = 5;
@@ -215,27 +215,35 @@ export async function POST(request: Request) {
         const sourceItem = sourceEntry?.items.find((source) => source.assessmentIndex === candidate.assessmentIndex);
         if (!sourceItem || sourceItem.level !== item.level) return false;
         return validateGeneratedCommentPart(candidate.text, item.criterion ?? item.text).valid
+          && levelAppropriatenessIssues(candidate.text, item.level, item.criterion ?? item.text).length === 0
           && evidenceBlockingIssues(candidate.text, item.text, item.criterion ?? item.text).length === 0;
       });
       const generationCriterion = positiveGrowthCriterion(item.level, item.criterion ?? item.text);
-      const deterministicText = criterionToSafeNominalSentence(generationCriterion);
-      const deterministicValid = !fallback
-        && validateGeneratedCommentPart(deterministicText, generationCriterion).valid
-        && evidenceBlockingIssues(
-          deterministicText,
-          `${item.text} | 생성용 기준: ${generationCriterion}`,
-          generationCriterion,
-        ).length === 0;
-      if (!fallback && !deterministicValid) continue;
-      const warning = fallback
-        ? "같은 평가영역·수준의 검증된 문장을 재사용하여 표현 중복 확인이 필요함"
-        : "평가기준을 안전한 명사형으로 변환하여 표현 중복 확인이 필요함";
+      const usedSameLevel = new Set([...generatedParts.values()].flatMap((part) => {
+        if (part.subject !== entry.subject || part.assessmentIndex !== item.assessmentIndex) return [];
+        const sourceEntry = batch.find((batchEntry) => batchEntry.studentId === part.studentId);
+        const sourceItem = sourceEntry?.items.find((source) => source.assessmentIndex === part.assessmentIndex);
+        return sourceItem?.level === item.level
+          ? [part.text.normalize("NFKC").replace(/\s+/g, "").replace(/[.!?]/g, "")]
+          : [];
+      }));
+      const deterministicText = criterionToSafeNominalCandidates(generationCriterion).find((candidate) => {
+        const candidateKey = candidate.normalize("NFKC").replace(/\s+/g, "").replace(/[.!?]/g, "");
+        return !usedSameLevel.has(candidateKey)
+          && validateGeneratedCommentPart(candidate, generationCriterion).valid
+          && levelAppropriatenessIssues(candidate, item.level, generationCriterion).length === 0
+          && evidenceBlockingIssues(candidate, `${item.text} | 생성용 기준: ${generationCriterion}`, generationCriterion).length === 0;
+      });
+      if (!deterministicText && !fallback) continue;
+      const warning = deterministicText
+        ? "평가기준을 안전한 명사형 문형으로 변환하여 교사 확인이 필요함"
+        : "같은 평가영역·수준의 검증된 문장을 재사용하여 표현 중복 확인이 필요함";
       const reused = {
         studentId: entry.studentId,
         subject: entry.subject,
         assessmentIndex: item.assessmentIndex,
         evidence: item.text,
-        text: fallback?.text ?? deterministicText,
+        text: deterministicText ?? fallback!.text,
         warnings: [warning],
       };
       generatedParts.set(key, reused);
