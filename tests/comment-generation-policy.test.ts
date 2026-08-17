@@ -480,6 +480,42 @@ test("blocks invented methods and attitudes that are absent from the criterion",
   );
 });
 
+test("allows concrete literature methods only when the selected level supports diverse expression", () => {
+  const context = "평가 관점: 작품에서 느낀 재미나 감동을 그림이나 시 등으로 표현할 수 있는가?";
+  const middle = "작품을 읽고 재미나 감동을 느낀 부분과 그 까닭이 무엇인지 쓸 수 있다.";
+  const high = "작품을 읽고 재미나 감동을 느낀 부분과 그 까닭을 쓰고 다양한 방법으로 표현할 수 있다.";
+  assert.deepEqual(
+    evidenceBlockingIssues("작품을 읽고 재미나 감동을 느낀 부분과 그 까닭을 시로 표현함.", `${context} | ${middle}`, middle),
+    ["선택한 평가수준에 없는 구체적 표현 방법 ‘시’ 포함"],
+  );
+  assert.deepEqual(
+    evidenceBlockingIssues("작품을 읽고 재미나 감동을 느낀 부분과 그 까닭을 시로 표현함.", `${context} | ${high}`, high),
+    [],
+  );
+});
+
+test("requires the selected high-level performance degree", () => {
+  assert.deepEqual(
+    evidenceBlockingIssues(
+      "작품 속 인물의 상황에 알맞은 표정과 몸짓, 목소리, 말투를 알고 대화를 표현함.",
+      "작품 속 인물의 상황에 알맞은 표정과 몸짓, 목소리, 말투를 알고 대화를 실감 나게 표현할 수 있다.",
+    ),
+    ["평가 기준의 필수 조건 ‘실감 나거나 생생한 표현 수준’ 누락"],
+  );
+});
+
+test("blocks awkward Korean comment constructions found in stored results", () => {
+  for (const sentence of [
+    "작품에서 재미나 감동을 느낀 부분과 그 까닭을 작품을 읽고 씀.",
+    "마음을 전하는 글을 쓰는 방법을 알고, 활용하여 마음이 잘 드러나는 글을 씀.",
+    "작품 속 인물의 대화 표현에 힘씀.",
+    "교사의 도움을 받아 마음을 전하는 글로 표현함.",
+  ]) {
+    assert.equal(validateGeneratedCommentPart(sentence, sentence).naturalEndingsOk, false);
+  }
+  assert.equal(repairSafeNominalEnding("마음이 잘 드러나도록 글을 써냄."), "마음이 잘 드러나도록 글을 써 냄.");
+});
+
 test("blocks an invented speaking activity when the evidence only supports writing", () => {
   const comment = "작품에서 느낀 재미와 감동을 말로 풀어 내고, 그런 느낌을 가지게 된 까닭을 함께 적는 모습임.";
   const writingEvidence = "작품을 읽고 재미나 감동을 느낀 부분과 그 까닭이 무엇인지 쓸 수 있다.";

@@ -53,6 +53,10 @@ export function commentEvidenceInstructions(evidence: string) {
     ...(/교사.{0,8}도움|도움.{0,8}교사/.test(normalized) ? ["교사의 도움을 받아 수행함"] : []),
     ...(/일부/.test(normalized) ? ["수행 범위가 일부임"] : []),
     ...(/노력|익혀\s*가|과정/.test(normalized) ? ["노력하거나 익혀 가는 과정임"] : []),
+    ...(/정확(?:하게|히)/.test(normalized) ? ["정확한 수행 정도가 드러남"] : []),
+    ...(/실감\s*나게/.test(normalized) ? ["실감 나거나 생생한 표현 수준이 드러남"] : []),
+    ...(/다양한\s*방법/.test(normalized) ? ["다양한 방법으로 수행함"] : []),
+    ...(/이해하기\s*쉽게/.test(normalized) ? ["이해하기 쉽게 수행함"] : []),
   ];
   const guarded = [
     { label: "정확하게", pattern: /정확(?:하게|히)/ },
@@ -168,6 +172,7 @@ export function ensureGeneratedCommentPeriod(sentence: string) {
 // 교정한다. 동사 활용을 추측해야 하는 문형은 손대지 않아 의미 변형을 막는다.
 export function repairSafeNominalEnding(sentence: string) {
   return ensureGeneratedCommentPeriod(sentence)
+    .replace(/써냄\.$/, "써 냄.")
     .replace(/([가-힣]+)하는\s+함\.$/, "$1함.")
     .replace(/([가-힣]+)하는\s+(?:수행|활동|과정|모습)임\.$/, "$1함.")
     .replace(/만드는\s+(?:모습|과정)임\.$/, "만듦.")
@@ -198,7 +203,11 @@ export function validateGeneratedComment(comment: string, expectedSentenceCount:
     || /도움\s*없이가\s*아니라/.test(sentence)
     || /(?:조사하여\s*정리하여|들으며\s*토의하며)/.test(sentence)
     || /함\s*,/.test(sentence)
-    || /장소를\s+소개\s+자료로/.test(sentence));
+    || /장소를\s+소개\s+자료로/.test(sentence)
+    || /(?:까닭|이유)(?:을|를)\s+작품을\s+읽고/.test(sentence)
+    || /방법을\s+알고,?\s*활용하여/.test(sentence)
+    || /대화\s*표현에\s*(?:힘씀|애씀)/.test(sentence)
+    || /마음을\s*전하는\s*글로\s*표현함\.$/.test(sentence));
   return {
     sentences,
     lengths,
@@ -283,7 +292,7 @@ const unsupportedGroundingConcepts: Array<{
   { label: "실감 나게", pattern: /실감나게/, blocking: true },
   { label: "다양한 방법", pattern: /다양한방법/, blocking: true },
   { label: "이해하기 쉽게", pattern: /이해하기쉽게/, blocking: true },
-  { label: "입력에 없는 구체적 표현 방법", pattern: /(?:그림|시)(?:이나|나|와|과|으로|로)/, blocking: true },
+  { label: "입력에 없는 구체적 표현 방법", pattern: /(?:그림|시|노래|만화)(?:이나|나|와|과|으로|로)/, blocking: true },
   { label: "말하기·발표 활동", pattern: /(?:말로풀어|말로표현|말하기|발표|구술)/, evidencePattern: /(?:말|대화|목소리|말투|발표|구술|듣기)/, blocking: true },
   { label: "내용 간추리기·요약하기", pattern: /(?:간추|요약)/, evidencePattern: /(?:간추|요약)/, blocking: true },
   { label: "자료 내용을 나누거나 구분하기", pattern: /자료(?:의)?내용.{0,10}(?:나누|구분)/, evidencePattern: /자료(?:의)?내용.{0,10}(?:나누|구분)/, blocking: true },
@@ -317,6 +326,12 @@ export function evidenceBlockingIssues(comment: string, evidence: string, requir
       && !(exclude?.test(normalizedComment))
       && !(evidencePattern ?? pattern).test(normalizedEvidence))
     .map(({ label }) => `평가 근거에 없는 ‘${label}’ 표현`);
+  const concreteMethodLeak = ["그림", "시", "노래", "만화"]
+    .filter((method) => normalizedComment.includes(method)
+      && normalizedEvidence.includes(method)
+      && !normalizedRequiredEvidence.includes(method)
+      && !normalizedRequiredEvidence.includes("다양한방법"))
+    .map((method) => `선택한 평가수준에 없는 구체적 표현 방법 ‘${method}’ 포함`);
   const required = [
     { evidence: /교사.{0,5}도움|도움.{0,5}교사/, comment: /교사|도움/, label: "교사의 도움" },
     { evidence: /일부/, comment: /일부|몇몇|한부분|부분적으로/, label: "일부 수행" },
@@ -327,9 +342,13 @@ export function evidenceBlockingIssues(comment: string, evidence: string, requir
     { evidence: /간추/, comment: /간추|요약|정리/, label: "내용 간추리기" },
     { evidence: /재미.{0,12}감동.{0,20}까닭/, comment: /재미.{0,20}감동.{0,24}(?:까닭|이유)/, label: "재미·감동과 까닭 쓰기" },
     { evidence: /방법.{0,12}알고/, comment: /방법.{0,18}(?:알고|앎|이해)/, label: "방법을 알고 있음" },
+    { evidence: /정확(?:하게|히)/, comment: /정확|바르게/, label: "정확한 수행 정도" },
+    { evidence: /실감나게/, comment: /실감|생생/, label: "실감 나거나 생생한 표현 수준" },
+    { evidence: /다양한방법/, comment: /다양한방법|여러방법|(?:그림|시|노래|만화)(?:이나|나|와|과|으로|로)/, label: "다양한 방법으로 수행하기" },
+    { evidence: /이해하기쉽게/, comment: /이해하기쉽게|알기쉽게/, label: "이해하기 쉽게 수행하기" },
   ].filter((item) => item.evidence.test(normalizedRequiredEvidence) && !item.comment.test(normalizedComment))
     .map((item) => `평가 기준의 필수 조건 ‘${item.label}’ 누락`);
-  return [...unsupported, ...required];
+  return [...new Set([...unsupported, ...concreteMethodLeak, ...required])];
 }
 
 export type CommentLevelCriteria = { high: string; middle: string; low: string };
