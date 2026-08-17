@@ -81,6 +81,20 @@ test("does not replace a unique stored sentence with a candidate matching a fixe
   assert.equal(result.issues.includes("완전히 같은 문장 후보 중복"), true);
 });
 
+test("uses a grounded reference duplicate only when the final fallback is explicitly enabled", () => {
+  const [group] = buildCommentPoolGroups([{
+    studentId: 1,
+    subject: "국어",
+    items: [{ assessmentIndex: 0, level: "중" as const, criterion: "마음을 전하는 글을 쓰는 방법을 알고, 마음을 전하는 글을 쓰기 위해 노력한다.", text: "쓰기 | 수준: 중 | 기준: 마음을 전하는 글을 쓰는 방법을 알고, 마음을 전하는 글을 쓰기 위해 노력한다." }],
+  }]);
+  const sentence = "마음을 전하는 글을 쓰는 방법을 알고, 마음을 전하는 글을 쓰기 위해 노력함.";
+  const blocked = assignUniquePoolCandidates(group, [sentence], [sentence]);
+  const fallback = assignUniquePoolCandidates(group, [sentence], [sentence], true);
+  assert.equal(blocked.candidates.length, 0);
+  assert.deepEqual(fallback.candidates, [sentence]);
+  assert.equal(fallback.fallbackKeys.size, 1);
+});
+
 test("keeps grounded candidates even when their structures are similar", () => {
   const [group] = buildCommentPoolGroups([1, 2].map((studentId) => ({
     studentId,
