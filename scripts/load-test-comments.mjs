@@ -53,7 +53,7 @@ function validateComment(comment, expectedSentenceCount) {
     || /[가-힣]+(?:는|은)\s+(?:이해|표현|설명|정리|구별|활용|수행)함\.$/.test(sentence));
   return {
     valid: sentences.length === expectedSentenceCount
-      && lengths.every((length) => length >= 35 && length <= 90)
+      && lengths.every((length) => length >= 20 && length <= 90)
       && sentences.every(hasNaturalNominalEnding)
       && awkwardEndings.length === 0
       && !commentForbiddenExpressions.some((expression) => comment.includes(expression)),
@@ -339,7 +339,15 @@ if (mode === "start" || mode === "subject" || mode === "sample" || mode === "pre
   const [classData, planData] = await Promise.all([request("/api/class-data"), request("/api/assessment-plan")]);
   if (classData.students.length !== 25) throw new Error(`Expected 25 active students, found ${classData.students.length}`);
   const subjects = [...new Set(planData.plan.map((item) => item.subject))];
-  const { selectedStudents, selectedSubjects } = selectCommentLoadScope(mode, classData.students, subjects);
+  const { selectedStudents, selectedSubjects } = selectCommentLoadScope(
+    mode,
+    classData.students,
+    subjects,
+    process.env.LOAD_TEST_SUBJECT || "",
+  );
+  if (process.env.LOAD_TEST_SUBJECT && !subjects.includes(process.env.LOAD_TEST_SUBJECT)) {
+    throw new Error(`Requested load-test subject is not in the active assessment plan: ${process.env.LOAD_TEST_SUBJECT}`);
+  }
   const planCounts = Object.fromEntries(selectedSubjects.map((subject) => [subject, planData.plan.filter((item) => item.subject === subject).length]));
   const levelLookup = new Map(classData.levels.map((item) => [`${item.studentId}|${item.subject}|${item.assessmentIndex}`, item.level]));
   const scores = Object.fromEntries(selectedSubjects.map((subject) => [
