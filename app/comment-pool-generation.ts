@@ -1,5 +1,5 @@
 import { primaryAiModel } from "./ai-model-policy.ts";
-import { commentEvidenceInstructions, commentLengthTarget, positiveGrowthCriterion, repairSafeNominalEnding, evidenceBlockingIssues, evidenceGroundingWarnings, validateGeneratedCommentPart } from "./comment-generation-policy.ts";
+import { commentEvidenceInstructions, commentLengthTarget, levelAppropriatenessIssues, positiveGrowthCriterion, repairSafeNominalEnding, evidenceBlockingIssues, evidenceGroundingWarnings, validateGeneratedCommentPart } from "./comment-generation-policy.ts";
 import type { AiTokenUsage } from "./ai-usage.ts";
 import type { CommentEvidence, CommentEvidenceItem, CommentBatchResult, GeneratedCommentPart, GeneratedCommentRejection } from "./comment-generation.ts";
 import { createCommentVariations, type CommentVariation } from "./comment-variation.ts";
@@ -110,6 +110,11 @@ export function assignUniquePoolCandidates(
     const format = validateGeneratedCommentPart(text, group.criterion);
     if (!format.valid) {
       issues.add("문장 형식 또는 명사형 종결 검수 미통과");
+      return [];
+    }
+    const levelIssues = levelAppropriatenessIssues(text, group.level, group.criterion);
+    if (levelIssues.length) {
+      levelIssues.forEach((issue) => issues.add(issue));
       return [];
     }
     const groundingEvidence = `${group.evidence} | 생성용 기준: ${group.criterion}`;

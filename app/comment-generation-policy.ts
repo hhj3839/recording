@@ -105,6 +105,29 @@ export function criterionToSafeNominalSentence(criterion: string) {
     .replace(/이다\.$/, "임.");
 }
 
+export function criterionToSafeNominalCandidates(criterion: string) {
+  const normalized = normalizeGeneratedCommentWhitespace(criterion);
+  const candidates = [criterionToSafeNominalSentence(normalized)];
+  const together = normalized.match(/^모둠\s*친구들과\s*함께\s+(.+?)한다\.$/);
+  if (together) {
+    const action = together[1].trim();
+    candidates.push(
+      `${action}하며 모둠 친구들과 함께 활동함.`,
+      `${action}하는 과정에 모둠 친구들과 함께 참여함.`,
+    );
+  }
+  return [...new Set(candidates.filter(Boolean))];
+}
+
+export function levelAppropriatenessIssues(comment: string, level: string | undefined, criterion = "") {
+  if (!level || level === "상") return [];
+  const strongPraise = /(?:능력이\s*)?뛰어남|돋보임|인상적임/;
+  const criterionAllowsPraise = /뛰어|돋보|인상적|탁월|우수/.test(criterion);
+  return strongPraise.test(comment) && !criterionAllowsPraise
+    ? ["평가수준보다 과도한 우수 표현"]
+    : [];
+}
+
 export function hasNaturalNominalEnding(sentence: string) {
   const trimmed = sentence.trim();
   if (!trimmed.endsWith(".")) return false;

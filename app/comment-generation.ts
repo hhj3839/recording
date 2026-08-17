@@ -1,6 +1,6 @@
 import { createHmac, timingSafeEqual } from "node:crypto";
 import { upsertRows } from "../db/supabase";
-import { commentEvidenceInstructions, commentLengthTarget, repairSafeNominalEnding, evidenceBlockingIssues, evidenceGroundingWarnings, generatedCommentFailureMessage, hasCompleteEvidenceCoverage, resolveGeneratedEvidenceItemId, validateGeneratedCommentPart } from "./comment-generation-policy";
+import { commentEvidenceInstructions, commentLengthTarget, levelAppropriatenessIssues, repairSafeNominalEnding, evidenceBlockingIssues, evidenceGroundingWarnings, generatedCommentFailureMessage, hasCompleteEvidenceCoverage, resolveGeneratedEvidenceItemId, validateGeneratedCommentPart } from "./comment-generation-policy";
 import { CommentVariation } from "./comment-variation";
 import { archiveComment } from "./record-revisions";
 import { primaryAiModel } from "./ai-model-policy";
@@ -199,6 +199,11 @@ export async function generateCommentBatch(evidence: CommentEvidence[], avoidCom
               ...(format.forbidden.length ? [`금지 표현 포함: ${format.forbidden.join(", ")}`] : []),
             ],
           });
+          continue;
+        }
+        const levelIssues = levelAppropriatenessIssues(row.text, evidenceEntry.level, evidenceEntry.criterion ?? evidenceEntry.text);
+        if (levelIssues.length) {
+          rejections.push({ studentId, subject, assessmentIndex: evidenceEntry.assessmentIndex, issues: levelIssues });
           continue;
         }
         const blockingIssues = evidenceBlockingIssues(row.text, evidenceEntry.text, evidenceEntry.criterion ?? evidenceEntry.text);
