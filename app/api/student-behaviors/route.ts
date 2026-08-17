@@ -11,7 +11,7 @@ export async function GET() {
       owner_id: eq(user.id), class_id: eq(classId), order: "student_id.asc",
     });
     return Response.json({ behaviors: rows.map((row) => ({
-      id: row.id, studentId: row.student_id, characteristic: row.characteristic, behavior: row.behavior, confirmed: Boolean(row.confirmed), confirmedAt: row.confirmed_at, updatedAt: row.updated_at,
+      id: row.id, studentId: row.student_id, characteristic: row.characteristic, generatedCharacteristic: row.generated_characteristic ?? "", behavior: row.behavior, confirmed: Boolean(row.confirmed), confirmedAt: row.confirmed_at, updatedAt: row.updated_at,
     })) }, { headers: { "Cache-Control": "private, no-store" } });
   } catch (error) {
     return dataError(error, "저장된 행동특성을 불러오지 못했습니다.");
@@ -61,7 +61,7 @@ export async function DELETE(request: Request) {
       });
     } else {
       await updateRows("student_behaviors", { owner_id: eq(user.id), class_id: eq(classId) }, {
-        behavior: "", confirmed: false, confirmed_at: null, updated_at: new Date().toISOString(),
+        behavior: "", generated_characteristic: null, confirmed: false, confirmed_at: null, updated_at: new Date().toISOString(),
       });
     }
     return Response.json({ ok: true, scope });

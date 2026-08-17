@@ -41,6 +41,7 @@
     "db:migrate-comment-evidence": "node scripts/migrate-comment-evidence-validation.mjs",
     "db:migrate-pilot-feedback": "node scripts/migrate-pilot-feedback.mjs",
     "db:migrate-behavior-evidence": "node scripts/migrate-behavior-evidence-validation.mjs",
+    "db:migrate-behavior-generation-source": "node scripts/migrate-behavior-generation-source.mjs",
     "db:migrate-comment-candidates": "node scripts/migrate-comment-candidates.mjs",
     "db:migrate-school-organizations": "node scripts/migrate-school-organizations.mjs",
     "db:migrate-shared-plans": "node scripts/migrate-shared-assessment-plans.mjs",
