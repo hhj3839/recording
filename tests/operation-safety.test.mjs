@@ -91,6 +91,11 @@ test("behavior prompt reframes negative observations through a positive growth l
   assert.match(source, /관찰되지 않은 개선 성과나 새로운 사건은 만들지 않는다/);
 });
 
+test("clears transient behavior repair diagnostics after every student succeeds", () => {
+  const source = readFileSync("app/api/behavior-jobs/run/route.ts", "utf8");
+  assert.match(source, /error_message:\s*failedItems\s*\?\s*\(errorMessage\s*\|\|\s*job\.error_message\)\s*:\s*""/);
+});
+
 test("keeps the simplified teacher-facing guidance", () => {
   const page = readFileSync("app/page.tsx", "utf8");
   assert.match(page, /같은 반은 1년 동안 계속 사용할 수 있습니다/);

@@ -129,7 +129,8 @@ export async function POST(request: Request) {
   await updateRows("generation_jobs", { id: eq(jobId) }, {
     status: terminal ? (failedItems ? "completed_with_errors" : "completed") : "queued",
     current_batch: nextBatch, completed_items: completedItems, failed_items: failedItems,
-    error_message: errorMessage || job.error_message, completed_at: terminal ? new Date().toISOString() : null, updated_at: new Date().toISOString(),
+    error_message: failedItems ? (errorMessage || job.error_message) : "",
+    completed_at: terminal ? new Date().toISOString() : null, updated_at: new Date().toISOString(),
   });
   if (!terminal) queueNext(request, jobId);
   return Response.json({ ok: true, terminal, completedItems, failedItems });
