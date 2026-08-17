@@ -1,6 +1,6 @@
 import { createHmac, timingSafeEqual } from "node:crypto";
 import { upsertRows } from "../db/supabase";
-import { commentEvidenceInstructions, evidenceBlockingIssues, evidenceGroundingWarnings, generatedCommentFailureMessage, hasCompleteEvidenceCoverage, normalizeGeneratedCommentWhitespace, resolveGeneratedEvidenceItemId, validateGeneratedComment, validateGeneratedCommentPart } from "./comment-generation-policy";
+import { commentEvidenceInstructions, ensureGeneratedCommentPeriod, evidenceBlockingIssues, evidenceGroundingWarnings, generatedCommentFailureMessage, hasCompleteEvidenceCoverage, resolveGeneratedEvidenceItemId, validateGeneratedComment, validateGeneratedCommentPart } from "./comment-generation-policy";
 import { CommentVariation } from "./comment-variation";
 import { archiveComment } from "./record-revisions";
 import { primaryAiModel } from "./ai-model-policy";
@@ -95,7 +95,7 @@ export async function generateCommentBatch(evidence: CommentEvidence[], avoidCom
   const avoidanceHints = [...new Set(avoidComments.map((item) => item.split(/[.!?]/)[0]?.trim().slice(0, 90)).filter(Boolean))].slice(0, 20);
   const repairInstruction = repair
     ? "이전 응답에서 저장되지 않은 영역만 보완한다. 표현 다양화보다 평가기준의 수행 수준과 필수 조건을 빠짐없이 보존하는 것을 우선한다. 특히 평가기준에 교사의 도움, 노력, 일부 수행이 있으면 그 의미를 반드시 문장에 포함한다. 평가기준을 한 문장의 자연스러운 학교생활기록부 문체로 가깝게 바꾸어 쓰고, 입력에 없는 태도나 활동은 덧붙이지 않는다. 길이는 35~90자 안에서 자연스러움을 우선하며 itemId마다 정확히 한 문장을 반환한다."
-    : "각 문장은 60~80자를 목표로 하되 자연스러운 완성 문장을 우선한다. 각 영역의 itemVariations를 표현 방식으로만 적용하고 같은 요청 안에서 첫 10~15자를 반복하지 않는다.";
+    : "각 문장은 반드시 60자 이상 80자 이하를 목표로 하되 자연스러운 완성 문장을 우선한다. 각 영역의 itemVariations를 표현 방식으로만 적용하고 같은 요청 안에서 첫 10~15자를 반복하지 않는다.";
   const response = await fetch("https://api.openai.com/v1/responses", {
     method: "POST",
     headers: { Authorization: `Bearer ${apiKey}`, "Content-Type": "application/json" },
@@ -173,7 +173,7 @@ export async function generateCommentBatch(evidence: CommentEvidence[], avoidCom
             const generated = candidate as { text?: unknown };
             return typeof generated.text === "string" ? [generated.text] : [];
           });
-          const text = candidates.map(normalizeGeneratedCommentWhitespace).find(Boolean);
+          const text = candidates.map(ensureGeneratedCommentPeriod).find(Boolean);
           const itemId = resolveGeneratedEvidenceItemId(expectedIds, value.itemId, rawSentences.length);
           return text && itemId ? [{ itemId, text, candidateLengths: candidates.map((candidate) => Array.from(candidate).length) }] : [];
         })
