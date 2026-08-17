@@ -94,7 +94,7 @@ export async function generateCommentBatch(evidence: CommentEvidence[], avoidCom
   }));
   const avoidanceHints = [...new Set(avoidComments.map((item) => item.split(/[.!?]/)[0]?.trim().slice(0, 90)).filter(Boolean))].slice(0, 20);
   const repairInstruction = repair
-    ? "이전 응답에서 저장되지 않은 영역만 보완한다. 표현 다양화보다 평가기준의 수행 수준과 필수 조건을 빠짐없이 보존하는 것을 우선한다. 특히 평가기준에 교사의 도움, 노력, 일부 수행이 있으면 그 의미를 반드시 문장에 포함한다. 평가기준을 한 문장의 자연스러운 학교생활기록부 문체로 가깝게 바꾸어 쓰고, 입력에 없는 태도나 활동은 덧붙이지 않는다. 길이는 35~90자 안에서 자연스러움을 우선하며 itemId마다 정확히 한 문장을 반환한다."
+    ? "이전 응답에서 저장되지 않은 영역만 보완한다. 표현 다양화보다 평가기준의 수행 수준과 필수 조건을 빠짐없이 보존하는 것을 우선한다. 평가기준을 독립된 수행 요소로 나누어 하나도 생략하지 않는다. 특히 평가기준에 교사의 도움, 노력, 일부 수행, 나누기, 표현하기, 파악하기, 간추리기가 있으면 그 의미를 반드시 문장에 포함한다. 평가기준을 한 문장의 자연스러운 학교생활기록부 문체로 가깝게 바꾸어 쓰고, 입력에 없는 태도나 활동은 덧붙이지 않는다. 길이는 60~80자를 목표로 하고 최소 55자 이상으로 쓰며 itemId마다 정확히 한 문장을 반환한다."
     : "각 문장은 반드시 60자 이상 80자 이하를 목표로 하되 자연스러운 완성 문장을 우선한다. 각 영역의 itemVariations를 표현 방식으로만 적용하고 같은 요청 안에서 첫 10~15자를 반복하지 않는다.";
   const response = await fetch("https://api.openai.com/v1/responses", {
     method: "POST",
@@ -198,7 +198,7 @@ export async function generateCommentBatch(evidence: CommentEvidence[], avoidCom
           });
           continue;
         }
-        const blockingIssues = evidenceBlockingIssues(row.text, evidenceEntry.criterion ?? evidenceEntry.text);
+        const blockingIssues = evidenceBlockingIssues(row.text, evidenceEntry.text, evidenceEntry.criterion ?? evidenceEntry.text);
         if (blockingIssues.length) {
           rejections.push({ studentId, subject, assessmentIndex: evidenceEntry.assessmentIndex, issues: blockingIssues });
           continue;

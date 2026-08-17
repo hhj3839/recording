@@ -50,7 +50,7 @@ function validateComment(comment, expectedSentenceCount) {
     || /[가-힣]+(?:는|은)\s+(?:이해|표현|설명|정리|구별|활용|수행)함\.$/.test(sentence));
   return {
     valid: sentences.length === expectedSentenceCount
-      && lengths.every((length) => length >= 35 && length <= 90)
+      && lengths.every((length) => length >= 55 && length <= 90)
       && sentences.every(hasNaturalNominalEnding)
       && awkwardEndings.length === 0
       && !commentForbiddenExpressions.some((expression) => comment.includes(expression)),
@@ -234,7 +234,7 @@ if (mode === "start" || mode === "subject" || mode === "sample" || mode === "pre
     savedComments: currentComments.length, elapsedSeconds, validComments,
     strictSuccessRate: currentComments.length ? Math.round(validComments / currentComments.length * 10000) / 100 : 0,
     recommendedLengthRate: validations.length
-      ? Math.round(validations.flatMap((item) => item.lengths).filter((length) => length >= 50 && length <= 60).length
+      ? Math.round(validations.flatMap((item) => item.lengths).filter((length) => length >= 60 && length <= 80).length
         / Math.max(1, validations.flatMap((item) => item.lengths).length) * 10000) / 100
       : 0,
     monthlyUsage: usageData.monthly, monthlyLimit: usageData.limit,
@@ -260,7 +260,8 @@ if (mode === "start" || mode === "subject" || mode === "sample" || mode === "pre
           const criterion = level === "상" ? plan?.high : level === "중" ? plan?.middle : level === "하" ? plan?.low : "";
           return {
             studentId: part.studentId, subject: part.subject, assessmentIndex: index,
-            domain: plan?.domain ?? "", level, criterion, sentence: part.sentence,
+            unit: plan?.unit ?? "", domain: plan?.domain ?? "", goal: plan?.goal ?? "",
+            perspective: plan?.perspective ?? "", level, criterion, sentence: part.sentence,
             status: part.status, issues: part.issues,
           };
         });
