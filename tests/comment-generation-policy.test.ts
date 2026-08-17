@@ -276,6 +276,10 @@ test("blocks invented summarizing activities and demeanor fillers", () => {
     evidenceBlockingIssues("마음을 전하는 글의 방법을 알고 성실히 힘쓰는 모습임.", "마음을 전하는 글을 쓰기 위해 노력한다."),
     ["평가 근거에 없는 ‘성실하게’ 표현"],
   );
+  assert.deepEqual(
+    evidenceBlockingIssues("교사의 도움을 받아 작품에서 느낀 부분과 까닭을 쓰는 과정을 끝까지 이어 감.", "교사의 도움을 받아 느낀 부분과 까닭을 쓸 수 있다."),
+    ["평가 근거에 없는 ‘끝까지’ 표현"],
+  );
 });
 
 test("requires every independent performance element from the selected criterion", () => {
