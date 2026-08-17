@@ -52,9 +52,13 @@ test("job status polling wakes queued background generation without creating a n
 
 test("comment prompt uses 60 to 80 characters and natural nominal endings", () => {
   const source = readFileSync("app/comment-generation.ts", "utf8");
+  const page = readFileSync("app/page.tsx", "utf8");
   assert.match(source, /text는 60~80자를 목표/);
-  assert.match(source, /‘능력이 뛰어남\.’, ‘태도가 돋보임\.’, ‘모습이 인상적임\.’/);
-  assert.match(source, /‘하였다\.’, ‘입니다\.’, ‘할 수 있다\.’ 같은 서술형 종결은 사용하지 않는다/);
+  assert.match(source, /모든 문장은 반드시 학교생활기록부에 적합한 관찰 기반 명사형 종결 표현과 마침표로 끝낸다/);
+  assert.match(source, /‘문제를 해결하는 능력이 뛰어남\.’, ‘학습 내용을 적용하는 태도가 돋보임\.’, ‘꾸준히 성장하는 모습이 인상적임\.’/);
+  assert.match(source, /문자 그대로 ‘함\.’만 뜻하지 않으며 함·음·임 계열/);
+  assert.match(source, /‘하였다\.’, ‘합니다\.’, ‘입니다\.’, ‘할 수 있다\.’, ‘모습이다\.’ 같은 서술형 종결은 절대 사용하지 않는다/);
+  assert.match(page, /\["명사형 종결 확인"\]/);
 });
 
 test("always refreshes generated result counts without browser caching", () => {
