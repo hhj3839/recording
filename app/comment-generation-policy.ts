@@ -207,7 +207,10 @@ export function validateGeneratedComment(comment: string, expectedSentenceCount:
     || /(?:까닭|이유)(?:을|를)\s+작품을\s+읽고/.test(sentence)
     || /방법을\s+알고,?\s*활용하여/.test(sentence)
     || /대화\s*표현에\s*(?:힘씀|애씀)/.test(sentence)
-    || /마음을\s*전하는\s*글로\s*표현함\.$/.test(sentence));
+    || /마음을\s*전하는\s*글로\s*표현함\.$/.test(sentence)
+    || /(?:비교적\s*)?(?:알고\s*있음|알아봄|알게\s*됨|깨달음)\.$/.test(sentence)
+    || /깊이\s+다짐함\.$/.test(sentence)
+    || /(?:태도|모습|과정)을?\s*(?:보임|나타냄)임\.$/.test(sentence));
   return {
     sentences,
     lengths,

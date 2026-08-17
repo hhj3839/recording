@@ -376,6 +376,18 @@ test("rejects duplicated nominal endings such as 보임함", () => {
   assert.equal(validateGeneratedCommentPart("중심 문장과 뒷받침 문장을 찾아 글의 내용을 알맞게 간추리는 모습을 보임함.").valid, false);
 });
 
+test("rejects vague moral-study filler endings", () => {
+  for (const sentence of [
+    "성실한 생활의 사례를 살펴보고 실천할 수 있는 일을 비교적 알고 있음.",
+    "효와 우애의 의미를 이해하고 가족을 소중히 여기는 마음을 알아봄.",
+    "성실한 생활의 사례를 탐색하며 깊이 다짐함.",
+  ]) {
+    assert.equal(validateGeneratedCommentPart(sentence).naturalEndingsOk, false);
+    assert.equal(validateGeneratedCommentPart(sentence).valid, false);
+  }
+  assert.equal(validateGeneratedCommentPart("성실한 생활의 사례를 찾아 성실한 태도가 필요한 까닭을 정리하고 실천할 일을 다짐함.").valid, true);
+});
+
 test("rejects unnatural predicate combinations found in the paid sample", () => {
   for (const sentence of [
     "문장의 짜임을 살펴 자료의 내용을 일부 나누고 문장 구조에 맞게 표현하는 모습을 보 이해함.",
