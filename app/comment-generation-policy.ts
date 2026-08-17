@@ -169,7 +169,7 @@ const unsupportedGroundingConcepts: Array<{
   { label: "자기주도적으로", pattern: /자기주도적/, blocking: false },
   { label: "모둠원과 협력", pattern: /모둠(?:원)?.{0,4}(?:협력|협동)/, blocking: false },
   { label: "친구와 협력", pattern: /친구.{0,4}(?:협력|협동)/, blocking: false },
-  { label: "끝까지", pattern: /(?:끝|마지막)까지/, blocking: false },
+  { label: "끝까지", pattern: /(?:끝|마지막)까지/, blocking: true },
   { label: "성실하게", pattern: /성실/, blocking: true },
   { label: "꾸준히 참여", pattern: /(?:꾸준|지속적).{0,4}참여/, blocking: false },
   { label: "의미를 파악", pattern: /의미(?:를)?(?:파악|이해)/, blocking: false },
