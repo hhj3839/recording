@@ -2,7 +2,8 @@ import { waitUntil } from "@vercel/functions";
 import { eq, selectRows, updateRows } from "../../../../db/supabase";
 import { getAiUsage, MONTHLY_AI_LIMIT, recordAiUsage } from "../../../ai-usage";
 import { selectMostDiverseComments } from "../../../comment-diversity";
-import { CommentEvidence, GeneratedComment, GeneratedCommentPart, generateCommentBatch, saveGeneratedCommentParts, saveGeneratedComments, signCommentJob, verifyCommentJob } from "../../../comment-generation";
+import { CommentEvidence, GeneratedComment, GeneratedCommentPart, saveGeneratedCommentParts, saveGeneratedComments, signCommentJob, verifyCommentJob } from "../../../comment-generation";
+import { generateCommentPoolBatch } from "../../../comment-pool-generation";
 import { generationModel } from "../../../ai-model-policy";
 import { batchCommentRepairs, MAX_COMMENT_AI_CALLS_PER_BATCH, MAX_COMMENT_DIVERSITY_CALLS_PER_BATCH } from "../../../comment-batching";
 import { CommentAreaPart, findCommentAreaOverlaps } from "../../../comment-area-diversity";
@@ -136,7 +137,7 @@ export async function POST(request: Request) {
       }
       aiCallCount += 1;
       try {
-        const generated = await generateCommentBatch(
+        const generated = await generateCommentPoolBatch(
           group,
           [...avoidComments, ...[...generatedParts.values()].map((item) => item.text)],
           attempt > 0,
@@ -227,7 +228,7 @@ export async function POST(request: Request) {
         ...diversityCandidates.filter((part) => !overlapKeys.has(`${part.studentId}|${part.subject}|${part.assessmentIndex}`)),
       ];
       try {
-        const regenerated = await generateCommentBatch(
+        const regenerated = await generateCommentPoolBatch(
           diversityTargets,
           [...avoidComments, ...fixedReferences.map((part) => part.text), ...diversityCandidates.map((part) => part.text)],
           true,

@@ -8,6 +8,7 @@ import { generationModel } from "../app/ai-model-policy.ts";
 import { batchCommentRepairs, batchCommentsByAssessmentArea, COMMENT_BATCH_SIZE, COMMENT_REPAIR_EVIDENCE_BATCH_SIZE, MAX_COMMENT_AI_CALLS_PER_BATCH, MAX_COMMENT_DIVERSITY_CALLS_PER_BATCH } from "../app/comment-batching.ts";
 import { batchBehaviors, BEHAVIOR_BATCH_SIZE } from "../app/behavior-batching.ts";
 import { estimateAiCostUsd } from "../app/ai-pricing.ts";
+import { assignUniquePoolCandidates, buildCommentPoolGroups, buildPublicCommentPoolRequests } from "../app/comment-pool-generation.ts";
 
 test("uses the same low-cost model for the initial request and retry", () => {
   assert.equal(generationModel(0, 2), "gpt-5.4-mini");
@@ -36,6 +37,36 @@ test("batches up to 25 students by subject and assessment area", () => {
   assert.equal(batches.every((batch) => new Set(batch.map((item) => item.subject)).size === 1), true);
   assert.equal(batches.every((batch) => new Set(batch.flatMap((item) => item.items.map((entry) => entry.assessmentIndex))).size === 1), true);
   assert.equal(batches.every((batch) => batch.every((item) => item.subjectItems.length >= item.items.length)), true);
+});
+
+test("builds level pools without putting student identifiers in the AI pool request", () => {
+  const evidence = [1, 2, 3].map((studentId) => ({
+    studentId,
+    subject: "국어",
+    items: [{ assessmentIndex: 0, level: "중" as const, criterion: "자료의 내용을 표현할 수 있다.", text: "1단원 | 문법 | 수준: 중 | 기준: 자료의 내용을 표현할 수 있다." }],
+  }));
+  const groups = buildCommentPoolGroups(evidence);
+  assert.equal(groups.length, 1);
+  assert.equal(groups[0].members.length, 3);
+  const publicPools = buildPublicCommentPoolRequests(groups);
+  assert.equal(JSON.stringify(publicPools).includes("studentId"), false);
+  assert.equal(new Set(publicPools[0].variantPlans.map((plan) => JSON.stringify(plan))).size, 3);
+});
+
+test("assigns only validated unique pool candidates and reports a shortage", () => {
+  const [group] = buildCommentPoolGroups([1, 2, 3].map((studentId) => ({
+    studentId,
+    subject: "국어",
+    items: [{ assessmentIndex: 0, level: "중" as const, criterion: "자료의 내용을 문장의 짜임에 맞게 일부 표현할 수 있다.", text: "1단원 | 문법 | 수준: 중 | 기준: 자료의 내용을 문장의 짜임에 맞게 일부 표현할 수 있다." }],
+  })));
+  const repeated = "자료의 내용을 문장의 짜임에 맞게 일부 표현하여 학습한 내용을 적용함.";
+  const result = assignUniquePoolCandidates(group, [
+    repeated,
+    repeated,
+    "문장의 짜임을 고려하여 자료에 담긴 내용을 일부 표현하는 수행이 돋보임.",
+  ]);
+  assert.equal(result.candidates.length, 2);
+  assert.equal(result.issues.includes("완전히 같은 문장 후보 중복"), true);
 });
 
 test("groups missing comment evidence into at most ten areas per repair call", () => {
