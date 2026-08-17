@@ -203,7 +203,7 @@ const unsupportedGroundingConcepts: Array<{
   { label: "내용 간추리기·요약하기", pattern: /(?:간추|요약)/, evidencePattern: /(?:간추|요약)/, blocking: true },
   { label: "자료 내용을 나누거나 구분하기", pattern: /자료(?:의)?내용.{0,10}(?:나누|구분)/, evidencePattern: /자료(?:의)?내용.{0,10}(?:나누|구분)/, blocking: true },
   { label: "관찰되지 않은 태도 수식어", pattern: /(?:차분|안정적|알차|고르게|꾸준)/, evidencePattern: /(?:차분|안정적|알차|고르게|꾸준)/, blocking: true },
-  { label: "입력에 없는 학습·성장 과정", pattern: /(?:익혀가|배워가|익혀나가|배워나가)/, evidencePattern: /(?:익혀가|배워가|익혀나가|배워나가|익히는과정|배우는과정)/, blocking: true },
+  { label: "입력에 없는 학습·성장 과정", pattern: /(?:익히|익혀|배우|배워)/, evidencePattern: /(?:익히|익혀|배우|배워)/, blocking: true },
   { label: "학습 태도", pattern: /태도/, evidencePattern: /태도|적극적|성실|꾸준|자기주도|주도적|능동적/, blocking: true },
 ];
 
@@ -241,6 +241,7 @@ export function evidenceBlockingIssues(comment: string, evidence: string, requir
     { evidence: /중심문장.{0,12}뒷받침문장.{0,16}파악/, comment: /중심문장.{0,20}뒷받침문장.{0,20}(?:파악|찾)/, label: "중심·뒷받침 문장 파악하기" },
     { evidence: /간추/, comment: /간추|요약|정리/, label: "내용 간추리기" },
     { evidence: /재미.{0,12}감동.{0,20}까닭/, comment: /재미.{0,20}감동.{0,24}(?:까닭|이유)/, label: "재미·감동과 까닭 쓰기" },
+    { evidence: /방법.{0,12}알고/, comment: /방법.{0,18}(?:알고|앎|이해)/, label: "방법을 알고 있음" },
   ].filter((item) => item.evidence.test(normalizedRequiredEvidence) && !item.comment.test(normalizedComment))
     .map((item) => `평가 기준의 필수 조건 ‘${item.label}’ 누락`);
   return [...unsupported, ...required];
