@@ -1287,16 +1287,16 @@ function Comments({ assessmentDataBySubject, plan, roster }: { assessmentDataByS
                   .map((part) => ({ ...part, visibleIssues: commentAreaIssuesForDisplay(part.status, part.issues) }))
                   .filter((part) => part.status === "needs_review" || part.visibleIssues.length > 0);
                 const commentReviewIssues = [
-                  ...(!validation.endingsOk ? ["명사형 종결 확인"] : []),
-                  ...(validation.forbidden.length > 0 ? [`금지어 확인: ${validation.forbidden.join(" · ")}`] : []),
-                  ...(!validation.spellingOk ? validation.spellingIssues.map((issue) => `맞춤법: ${issue}`) : []),
+                  ...(text && !validation.endingsOk ? ["명사형 종결 확인"] : []),
+                  ...(text && validation.forbidden.length > 0 ? [`금지어 확인: ${validation.forbidden.join(" · ")}`] : []),
+                  ...(text && !validation.spellingOk ? validation.spellingIssues.map((issue) => `맞춤법: ${issue}`) : []),
                   ...areaIssues.flatMap((part) => {
                     const domain = plan.filter((item) => item.subject === selectedSubject)[part.assessmentIndex]?.domain || `${part.assessmentIndex + 1}번째`;
                     const reasons = part.visibleIssues.length ? part.visibleIssues : ["AI 생성이 완료되지 않아 교사 확인이 필요합니다."];
                     return reasons.map((reason) => `${domain} 영역: ${reason}`);
                   }),
                 ];
-                const hasBlockingCommentIssue = !validation.endingsOk || validation.forbidden.length > 0
+                const hasBlockingCommentIssue = Boolean(text) && (!validation.endingsOk || validation.forbidden.length > 0)
                   || areaIssues.some((part) => part.status === "needs_review");
                 const comparisons = roster.filter((other) => other.id !== student.id).map((other) => ({
                   student: other,

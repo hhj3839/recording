@@ -63,6 +63,7 @@ test("comment prompt uses adaptive lengths and natural nominal endings", () => {
   assert.match(source, /문자 그대로 ‘함\.’만 뜻하지 않으며 함·음·임 계열/);
   assert.match(source, /‘하였다\.’, ‘합니다\.’, ‘입니다\.’, ‘할 수 있다\.’, ‘모습이다\.’ 같은 서술형 종결은 절대 사용하지 않는다/);
   assert.match(page, /\["명사형 종결 확인"\]/);
+  assert.match(page, /text && !validation\.endingsOk/);
 });
 
 test("prioritizes current class sentences in the bounded duplicate-avoidance list", () => {
