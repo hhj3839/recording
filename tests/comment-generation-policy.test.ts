@@ -69,6 +69,18 @@ test("assigns only validated unique pool candidates and reports a shortage", () 
   assert.equal(result.issues.includes("완전히 같은 문장 후보 중복"), true);
 });
 
+test("does not replace a unique stored sentence with a candidate matching a fixed reference", () => {
+  const [group] = buildCommentPoolGroups([{
+    studentId: 1,
+    subject: "국어",
+    items: [{ assessmentIndex: 0, level: "중" as const, criterion: "자료의 내용을 문장의 짜임에 맞게 일부 표현할 수 있다.", text: "문법 | 수준: 중 | 기준: 자료의 내용을 문장의 짜임에 맞게 일부 표현할 수 있다." }],
+  }]);
+  const sentence = "자료의 내용을 문장의 짜임에 맞게 일부 표현하여 학습한 내용을 적용함.";
+  const result = assignUniquePoolCandidates(group, [sentence], [sentence]);
+  assert.equal(result.candidates.length, 0);
+  assert.equal(result.issues.includes("완전히 같은 문장 후보 중복"), true);
+});
+
 test("groups missing comment evidence into at most ten areas per repair call", () => {
   const pending = Array.from({ length: 5 }, (_, index) => ({
     studentId: index + 1,
@@ -403,6 +415,10 @@ test("blocks an invented learning process when the criterion already states the 
   assert.deepEqual(
     evidenceBlockingIssues("교사의 도움을 받아 글 쓰는 방법을 익혀 가는 과정임.", "교사의 도움을 받아 글 쓰는 방법을 익혀 가는 과정이다."),
     [],
+  );
+  assert.deepEqual(
+    evidenceBlockingIssues("마음을 전하는 글을 쓰는 방법을 살피며 글을 쓰기 위해 힘씀.", evidence),
+    ["평가 기준의 필수 조건 ‘방법을 알고 있음’ 누락"],
   );
 });
 

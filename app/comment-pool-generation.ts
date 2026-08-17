@@ -83,7 +83,7 @@ export function buildPublicCommentPoolRequests(groups: CommentPoolGroup[]) {
   }));
 }
 
-export function assignUniquePoolCandidates(group: CommentPoolGroup, rawCandidates: string[]) {
+export function assignUniquePoolCandidates(group: CommentPoolGroup, rawCandidates: string[], referenceCandidates: string[] = []) {
   const issues = new Set<string>();
   const validated = rawCandidates.flatMap((candidate, index) => {
     const text = ensureGeneratedCommentPeriod(candidate);
@@ -106,9 +106,10 @@ export function assignUniquePoolCandidates(group: CommentPoolGroup, rawCandidate
     }];
   });
   const seen = new Set<string>();
+  const referenceKeys = new Set(referenceCandidates.map(normalizedSentence).filter(Boolean));
   const deduplicated = validated.filter((candidate) => {
     const key = normalizedSentence(candidate.text);
-    if (!key || seen.has(key)) {
+    if (!key || seen.has(key) || referenceKeys.has(key)) {
       issues.add("완전히 같은 문장 후보 중복");
       return false;
     }
@@ -206,7 +207,7 @@ export async function generateCommentPoolBatch(
     const rawCandidates = Array.isArray(poolCandidates)
       ? poolCandidates.filter((item): item is string => typeof item === "string")
       : [];
-    const assigned = assignUniquePoolCandidates(group, rawCandidates);
+    const assigned = assignUniquePoolCandidates(group, rawCandidates, avoidSentences);
     group.members.forEach((member, index) => {
       const text = assigned.candidates[index];
       if (!text) {
