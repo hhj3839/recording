@@ -106,11 +106,11 @@ test("selects the least repetitive AI comment candidate", () => {
   assert.equal(selected.candidates[0], distinct);
 });
 
-test("detects repeated openings and style similarity only within the same area and level", () => {
+test("does not flag unavoidable evidence openings as style duplication", () => {
   const evidence = "1단원 | 듣기·말하기 | 목표: 상황에 맞게 표현하기 | 수준: 상 | 기준: 표정과 말투로 대화를 표현할 수 있다.";
   const first = { studentId: 1, subject: "국어", assessmentIndex: 0, evidence, text: "인물의 상황을 파악하여 알맞은 표정과 말투로 대화를 실감 나게 표현함." };
   const repeated = { studentId: 2, subject: "국어", assessmentIndex: 0, evidence, text: "인물의 상황을 파악하여 알맞은 몸짓과 목소리로 대화를 실감 나게 표현함." };
-  assert.equal(commentAreaOverlapReasons(repeated, first).includes("첫 12자 중복"), true);
+  assert.deepEqual(commentAreaOverlapReasons(repeated, first), []);
   const differentLevel = { ...repeated, evidence: evidence.replace("수준: 상", "수준: 중") };
   assert.deepEqual(commentAreaOverlapReasons(differentLevel, first), []);
   const differentArea = { ...repeated, assessmentIndex: 1 };

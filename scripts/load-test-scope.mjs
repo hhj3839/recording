@@ -7,7 +7,7 @@ export function selectCommentLoadScope(mode, students, subjects) {
 }
 
 export function commentLoadOverwriteExisting(mode) {
-  return mode === "sample";
+  return mode === "sample" || mode === "subject";
 }
 
 export function selectBehaviorLoadScope(mode, readyStudents, approvedStudentIds = []) {

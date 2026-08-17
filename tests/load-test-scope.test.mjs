@@ -13,10 +13,10 @@ test("comment preflight matches the paid five-student sample scope", () => {
   assert.deepEqual(preflight.selectedSubjects, ["국어"]);
 });
 
-test("paid five-student comment sample replaces old parts to test the current prompt", () => {
+test("paid comment gates replace old parts to test the current prompt", () => {
   assert.equal(commentLoadOverwriteExisting("preflight"), false);
   assert.equal(commentLoadOverwriteExisting("sample"), true);
-  assert.equal(commentLoadOverwriteExisting("subject"), false);
+  assert.equal(commentLoadOverwriteExisting("subject"), true);
   assert.equal(commentLoadOverwriteExisting("start"), false);
 });
 

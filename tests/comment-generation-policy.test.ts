@@ -129,13 +129,13 @@ test("keeps natural comments in the broad display range without inventing prefix
   assert.equal(normalizeGeneratedCommentCandidate(tooShort).startsWith("수업에서 "), false);
 });
 
-test("stores a natural long subject comment while keeping length as a recommendation", () => {
+test("stores a natural long subject comment without turning target length into a warning", () => {
   const long = "작품 속 인물의 상황을 살펴 알맞은 표정과 몸짓, 목소리와 말투를 선택하고 대화의 흐름과 장면의 분위기에 맞추어 인물의 마음이 분명하게 드러나도록 표현함.";
   const result = validateGeneratedCommentPart(long);
   assert.equal(Array.from(long).length > 80, true);
   assert.equal(result.acceptedLength, true);
   assert.equal(result.valid, true);
-  assert.equal(result.warnings.some((issue) => issue.startsWith("권장 ")), true);
+  assert.deepEqual(result.warnings, []);
 });
 
 test("adapts the target length to the amount of criterion information", () => {
@@ -209,13 +209,13 @@ test("rejects dangling connective bodies before composing a generated ending", (
   assert.equal(composeGeneratedCommentCandidate("자료의 특징을 기준에 따라 정확하게", "분류함."), "자료의 특징을 기준에 따라 정확하게 분류함.");
 });
 
-test("shows out-of-target lengths while keeping them as teacher-review warnings", () => {
+test("keeps target length as a generation metric instead of a teacher warning", () => {
   const base = "글의 중심 생각을 정확하게 파악하고 중요한 내용을 근거와 함께 정리하여 발표 활동에 꾸준히 참여함.";
   const sentence49 = Array.from(base).slice(0, 46).join("").replace(/[.]*$/, "") + " 참여함.";
   const result = validateGeneratedCommentPart(sentence49);
   if (Array.from(sentence49).length >= 55 && Array.from(sentence49).length <= 90) {
     assert.equal(result.valid, true);
-    assert.equal(result.warnings.length > 0, Array.from(sentence49).length < 60 || Array.from(sentence49).length > 80);
+    assert.deepEqual(result.warnings, []);
   }
 });
 

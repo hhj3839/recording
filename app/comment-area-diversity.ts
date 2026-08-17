@@ -13,7 +13,6 @@ export type CommentAreaOverlap = {
   similarity: number;
 };
 
-const compact = (value: string) => value.normalize("NFKC").replace(/[^가-힣A-Za-z0-9]/g, "");
 const words = (value: string) => value.normalize("NFKC")
   .replace(/[^가-힣A-Za-z0-9\s]/g, " ")
   .split(/\s+/).map((word) => word.trim()).filter((word) => word.length > 1);
@@ -50,16 +49,11 @@ export function commentAreaSimilarity(left: CommentAreaPart, right: CommentAreaP
 export function commentAreaOverlapReasons(left: CommentAreaPart, right: CommentAreaPart) {
   if (commentAreaGroupKey(left) !== commentAreaGroupKey(right)) return [];
   const reasons: string[] = [];
-  const leftCompact = compact(left.text);
-  const rightCompact = compact(right.text);
-  if (leftCompact.length >= 12 && leftCompact.slice(0, 12) === rightCompact.slice(0, 12)) {
-    reasons.push("첫 12자 중복");
-  }
   const leftPhrases = fourWordPhrases(styleWords(left.text, left.evidence));
   const rightPhrases = fourWordPhrases(styleWords(right.text, right.evidence));
   if ([...leftPhrases].some((phrase) => rightPhrases.has(phrase))) reasons.push("4단어 연속 중복");
   const similarity = commentAreaSimilarity(left, right);
-  if (similarity >= 0.70) reasons.push(`표현 유사도 ${Math.round(similarity * 100)}%`);
+  if (similarity >= 0.75) reasons.push(`표현 유사도 ${Math.round(similarity * 100)}%`);
   return reasons;
 }
 

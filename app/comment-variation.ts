@@ -6,6 +6,7 @@ export type CommentVariation = {
   focusOrder: string;
   verbStrategy: string;
   endingStyle: string;
+  syntaxPattern: string;
 };
 
 const structures = ["수행 결과 중심", "근거의 행동 순서 중심", "대상과 행동 연결", "방법과 결과 연결", "핵심 행동의 어순 변환", "목적어와 서술어 연결"];
@@ -34,6 +35,18 @@ const endingStyles = [
   "성장이나 변화가 근거에 있을 때만 ~인상적임. 종결, 없으면 수행 동사의 ~함. 종결",
   "상태·이해가 근거에 적합하면 ~임.·~음. 종결, 아니면 수행 동사의 ~함. 종결",
 ];
+const syntaxPatterns = [
+  "수행 대상을 먼저 쓰고 핵심 행동과 결과를 이어 쓰기",
+  "근거에 있는 수행 결과를 먼저 쓰고 그 방법이나 대상을 뒤에 연결하기",
+  "근거에 있는 방법이나 조건을 먼저 쓰고 핵심 수행으로 끝내기",
+  "핵심 개념을 먼저 쓰고 관찰 가능한 행동을 뒤에 배치하기",
+  "핵심 수행 동사로 시작하고 그 대상과 범위를 뒤에 설명하기",
+  "두 수행 요소가 있으면 첫 수행을 원인·방법으로, 둘째 수행을 결과로 연결하기",
+  "두 수행 요소가 있으면 둘째 수행을 먼저 드러낸 뒤 첫 수행을 근거로 연결하기",
+  "수행 대상과 조건을 먼저 묶고 마지막에 핵심 행동을 명사형으로 제시하기",
+  "근거의 목적을 먼저 드러내고 그 목적에 맞는 수행 행동으로 끝내기",
+  "평가기준의 핵심어는 보존하되 조사·어순·절 연결 방식을 바꾸어 쓰기",
+];
 
 function shuffled<T>(values: T[]) {
   const result = [...values];
@@ -50,11 +63,13 @@ export function createCommentVariations(count: number): CommentVariation[] {
   const orderPool = shuffled(focusOrders);
   const verbPool = shuffled(verbStrategies);
   const endingPool = shuffled(endingStyles);
+  const syntaxPool = shuffled(syntaxPatterns);
   return Array.from({ length: count }, (_, index) => ({
     structure: structurePool[index % structurePool.length],
     opening: openingPool[index % openingPool.length],
     focusOrder: orderPool[(index + Math.floor(index / orderPool.length)) % orderPool.length],
     verbStrategy: verbPool[(index + Math.floor(index / verbPool.length)) % verbPool.length],
     endingStyle: endingPool[(index * 2 + Math.floor(index / endingPool.length)) % endingPool.length],
+    syntaxPattern: syntaxPool[index % syntaxPool.length],
   }));
 }
