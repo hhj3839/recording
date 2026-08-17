@@ -98,6 +98,7 @@ export function positiveGrowthCriterion(level: string | undefined, criterion: st
 
 export function criterionToSafeNominalSentence(criterion: string) {
   return normalizeGeneratedCommentWhitespace(criterion)
+    .replace(/만든다\.$/, "만듦.")
     .replace(/한다\.$/, "함.")
     .replace(/간다\.$/, "감.")
     .replace(/된다\.$/, "됨.")
@@ -334,7 +335,7 @@ const semanticAtoms: SemanticAtom[] = [
   { label: "조사하기", criterion: /조사/, comment: /조사/ },
   { label: "조사 결과 정리하기", criterion: /조사.{0,18}정리/, comment: /조사.{0,24}정리|정리.{0,24}조사/ },
   { label: "글로 표현하기", criterion: /글.{0,8}표현|표현.{0,8}글/, comment: /글.{0,10}(?:표현함|나타냄|작성함|씀)|(?:표현함|나타냄|작성함|씀).{0,10}글/ },
-  { label: "자료 만들기", criterion: /자료.{0,10}(?:만들|제작|구성)/, comment: /자료.{0,12}(?:만들|제작|구성|마련)/ },
+  { label: "자료 만들기", criterion: /자료.{0,10}(?:만들|만든|만드는|만듦|제작|구성)/, comment: /자료.{0,12}(?:만들|만든|만드는|만듦|제작|구성|마련)/ },
   { label: "소개하기", criterion: /소개/, comment: /소개/ },
 ];
 

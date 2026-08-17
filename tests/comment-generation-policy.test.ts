@@ -125,6 +125,17 @@ test("creates a grounded nominal fallback from a declarative criterion", () => {
   );
 });
 
+test("converts 만들다 irregular inflection without treating it as sibling-level leakage", () => {
+  const low = "모둠원의 도움을 받아 우리가 사는 곳의 장소 소개 자료를 만든다.";
+  const levels = {
+    high: "한 가지 방법을 골라 장소 소개 자료를 만들고 소개한다.",
+    middle: "모둠원의 도움을 받아 장소 소개 자료를 만들고 소개한다.",
+    low,
+  };
+  assert.equal(criterionToSafeNominalSentence(low), "모둠원의 도움을 받아 우리가 사는 곳의 장소 소개 자료를 만듦.");
+  assert.deepEqual(criterionSemanticIssues("모둠원의 도움을 받아 우리가 사는 곳의 장소 소개 자료를 만듦.", low, levels), []);
+});
+
 test("creates distinct grounded fallbacks for a group collaboration criterion", () => {
   assert.deepEqual(
     criterionToSafeNominalCandidates("모둠 친구들과 함께 동물의 특징을 이용해 생활용품을 설계한다."),
