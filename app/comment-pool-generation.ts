@@ -1,5 +1,4 @@
 import { primaryAiModel } from "./ai-model-policy.ts";
-import { findCommentAreaOverlaps } from "./comment-area-diversity.ts";
 import { commentEvidenceInstructions, commentLengthTarget, ensureGeneratedCommentPeriod, evidenceBlockingIssues, evidenceGroundingWarnings, validateGeneratedCommentPart } from "./comment-generation-policy.ts";
 import type { AiTokenUsage } from "./ai-usage.ts";
 import type { CommentEvidence, CommentEvidenceItem, CommentBatchResult, GeneratedCommentPart, GeneratedCommentRejection } from "./comment-generation.ts";
@@ -116,10 +115,10 @@ export function assignUniquePoolCandidates(group: CommentPoolGroup, rawCandidate
     seen.add(key);
     return true;
   });
-  const overlapKeys = new Set(findCommentAreaOverlaps({ candidates: deduplicated, references: [] }).map((item) => item.key));
-  const unique = deduplicated.filter((candidate) => !overlapKeys.has(`${candidate.studentId}|${candidate.subject}|${candidate.assessmentIndex}`));
-  if (unique.length < deduplicated.length) issues.add("문장 구조 또는 표현 유사도 중복");
-  return { candidates: unique.map((candidate) => candidate.text), issues: [...issues] };
+  // 구조 유사도는 저장 차단 사유가 아니다. 동일한 평가기준에서는 근거를
+  // 보존할수록 문장 구조가 닮을 수 있으므로, 아래 후보는 우선 저장하고
+  // 작업 후반의 다양성 검사에서 겹친 영역만 한 번 재생성하거나 경고한다.
+  return { candidates: deduplicated.map((candidate) => candidate.text), issues: [...issues] };
 }
 
 export async function generateCommentPoolBatch(
