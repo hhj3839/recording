@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { commentAreaIssuesForDisplay, commentEvidenceInstructions, commentLengthTarget, composeGeneratedCommentCandidate, ensureGeneratedCommentPeriod, evidenceBlockingIssues, evidenceGroundingWarnings, generatedCommentFailureMessage, hasCompleteEvidenceCoverage, hasNaturalNominalEnding, normalizeGeneratedCommentCandidate, normalizeGeneratedCommentWhitespace, openingRepetitionRate, replaceSelectedCommentText, resolveGeneratedEvidenceItemId, validateGeneratedComment, validateGeneratedCommentPart } from "../app/comment-generation-policy.ts";
+import { commentAreaIssuesForDisplay, commentEvidenceInstructions, commentLengthTarget, composeGeneratedCommentCandidate, ensureGeneratedCommentPeriod, evidenceBlockingIssues, evidenceGroundingWarnings, generatedCommentFailureMessage, hasCompleteEvidenceCoverage, hasNaturalNominalEnding, normalizeGeneratedCommentCandidate, normalizeGeneratedCommentWhitespace, openingRepetitionRate, repairSafeNominalEnding, replaceSelectedCommentText, resolveGeneratedEvidenceItemId, validateGeneratedComment, validateGeneratedCommentPart } from "../app/comment-generation-policy.ts";
 import { behaviorRepairInstruction, behaviorRepairPlan, behaviorRepairTargets } from "../app/behavior-repair-policy.ts";
 import { assertStrictGeneratedBehaviors, selectBehaviorCandidate } from "../app/behavior-persistence-policy.ts";
 import { validateRecord } from "../app/record-validation.ts";
@@ -63,6 +63,23 @@ test("builds level pools without putting student identifiers in the AI pool requ
   const publicPools = buildPublicCommentPoolRequests(groups);
   assert.equal(JSON.stringify(publicPools).includes("studentId"), false);
   assert.equal(new Set(publicPools[0].variantPlans.map((plan) => JSON.stringify(plan))).size, 3);
+});
+
+test("isolates each student and area during the final individual retries", () => {
+  const evidence = [1, 2, 3].map((studentId) => ({
+    studentId,
+    subject: "국어",
+    items: [{ assessmentIndex: 0, level: "중" as const, criterion: "자료의 내용을 표현할 수 있다.", text: "문법 | 수준: 중 | 기준: 자료의 내용을 표현할 수 있다." }],
+  }));
+  assert.equal(buildCommentPoolGroups(evidence).length, 1);
+  assert.equal(buildCommentPoolGroups(evidence, true).length, 3);
+});
+
+test("safely repairs duplicated nominal endings without guessing irregular verbs", () => {
+  assert.equal(repairSafeNominalEnding("선을 구별하는 함."), "선을 구별함.");
+  assert.equal(repairSafeNominalEnding("식을 계산하는 수행임."), "식을 계산함.");
+  assert.equal(repairSafeNominalEnding("생각을 표현하는 모습임."), "생각을 표현함.");
+  assert.equal(repairSafeNominalEnding("길이를 재는 함."), "길이를 재는 함.");
 });
 
 test("assigns only validated unique pool candidates and reports a shortage", () => {

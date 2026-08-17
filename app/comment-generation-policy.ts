@@ -101,6 +101,14 @@ export function ensureGeneratedCommentPeriod(sentence: string) {
     : normalized;
 }
 
+// AI가 뜻은 맞게 작성했지만 명사형 종결을 겹쳐 쓴 경우에만 안전하게
+// 교정한다. 동사 활용을 추측해야 하는 문형은 손대지 않아 의미 변형을 막는다.
+export function repairSafeNominalEnding(sentence: string) {
+  return ensureGeneratedCommentPeriod(sentence)
+    .replace(/([가-힣]+)하는\s+함\.$/, "$1함.")
+    .replace(/([가-힣]+)하는\s+(?:수행|활동|과정|모습)임\.$/, "$1함.");
+}
+
 export function validateGeneratedComment(comment: string, expectedSentenceCount: number) {
   const normalized = comment.trim();
   const sentences = normalized

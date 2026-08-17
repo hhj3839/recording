@@ -1,6 +1,6 @@
 import { createHmac, timingSafeEqual } from "node:crypto";
 import { upsertRows } from "../db/supabase";
-import { commentEvidenceInstructions, commentLengthTarget, ensureGeneratedCommentPeriod, evidenceBlockingIssues, evidenceGroundingWarnings, generatedCommentFailureMessage, hasCompleteEvidenceCoverage, resolveGeneratedEvidenceItemId, validateGeneratedCommentPart } from "./comment-generation-policy";
+import { commentEvidenceInstructions, commentLengthTarget, repairSafeNominalEnding, evidenceBlockingIssues, evidenceGroundingWarnings, generatedCommentFailureMessage, hasCompleteEvidenceCoverage, resolveGeneratedEvidenceItemId, validateGeneratedCommentPart } from "./comment-generation-policy";
 import { CommentVariation } from "./comment-variation";
 import { archiveComment } from "./record-revisions";
 import { primaryAiModel } from "./ai-model-policy";
@@ -15,6 +15,7 @@ export type CommentEvidence = {
   forceRegenerateItems?: boolean;
   variation?: CommentVariation;
   itemVariations?: Record<number, CommentVariation>;
+  repairIssues?: Record<number, string[]>;
 };
 export type GeneratedComment = { studentId: number; subject: string; comment: string; candidates: string[]; generationLevels?: Array<{ assessmentIndex: number; level: string }> };
 export type GeneratedCommentPart = { studentId: number; subject: string; assessmentIndex: number; evidence: string; text: string; warnings: string[] };
@@ -175,7 +176,7 @@ export async function generateCommentBatch(evidence: CommentEvidence[], avoidCom
             const generated = candidate as { text?: unknown };
             return typeof generated.text === "string" ? [generated.text] : [];
           });
-          const text = candidates.map(ensureGeneratedCommentPeriod).find(Boolean);
+          const text = candidates.map(repairSafeNominalEnding).find(Boolean);
           const itemId = resolveGeneratedEvidenceItemId(expectedIds, value.itemId, rawSentences.length);
           return text && itemId ? [{ itemId, text, candidateLengths: candidates.map((candidate) => Array.from(candidate).length) }] : [];
         })
