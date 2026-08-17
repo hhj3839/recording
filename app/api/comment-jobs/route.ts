@@ -72,6 +72,7 @@ export async function POST(request: Request) {
       selectedStudentIds?: unknown;
       overwriteExisting?: unknown;
       targetAssessmentIndexes?: unknown;
+      forceTargetRegeneration?: unknown;
     };
     if (!body.scores || typeof body.scores !== "object" || Array.isArray(body.scores)) {
       return Response.json({ error: "평가 수준을 다시 확인해 주세요." }, { status: 400 });
@@ -127,7 +128,13 @@ export async function POST(request: Request) {
           ? new Set(requestedIndexes.map(Number).filter((index) => Number.isInteger(index) && index >= 0 && index < subjectPlan.length))
           : null;
         const items = targetSet ? subjectItems.filter((item) => targetSet.has(item.assessmentIndex)) : subjectItems;
-        if (items.length) evidence.push({ studentId: student.studentId, subject, items, subjectItems });
+        if (items.length) evidence.push({
+          studentId: student.studentId,
+          subject,
+          items,
+          subjectItems,
+          forceRegenerateItems: body.forceTargetRegeneration === true && Boolean(targetSet),
+        });
       }
     }
     if (!evidence.length) return Response.json({ error: "전 과목 중 평가 수준을 한 개 이상 입력해 주세요." }, { status: 400 });

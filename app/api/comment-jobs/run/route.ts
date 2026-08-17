@@ -92,6 +92,8 @@ export async function POST(request: Request) {
   for (const saved of savedParts) {
     if (!batchStudentIds.has(Number(saved.student_id)) || !["complete", "warning"].includes(saved.status) || !saved.sentence) continue;
     const studentEvidence = batch.find((item) => item.studentId === Number(saved.student_id));
+    if (studentEvidence?.forceRegenerateItems === true
+      && studentEvidence.items.some((item) => item.assessmentIndex === Number(saved.assessment_index))) continue;
     const expected = (studentEvidence?.subjectItems ?? studentEvidence?.items ?? [])
       .find((item) => item.assessmentIndex === Number(saved.assessment_index));
     if (!expected || expected.text !== saved.evidence) continue;
