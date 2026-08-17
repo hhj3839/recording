@@ -1227,7 +1227,9 @@ function Comments({ assessmentDataBySubject, plan, roster }: { assessmentDataByS
     eligibleStudentIds.has(student.id) && Boolean(comments[`${student.id}|${selectedSubject}`])).length;
   const selectedSubjectIsGenerating = loading && activeJob?.subject === selectedSubject;
   const selectedSubjectParts = commentParts.filter((part) => part.subject === selectedSubject);
-  const failedAreaCount = selectedSubjectParts.filter((part) => part.status === "needs_review").length;
+  const failedAreaCount = selectedSubjectParts.filter((part) =>
+    part.status === "needs_review"
+    && (part.issues.length === 0 || commentAreaIssuesForDisplay(part.status, part.issues).length > 0)).length;
   const reviewAreaCount = selectedSubjectParts.filter((part) =>
     part.status === "warning" && commentAreaIssuesForDisplay(part.status, part.issues).length > 0).length;
   const completedAreaCount = selectedSubjectParts.filter((part) => ["complete", "warning"].includes(part.status)).length;
@@ -1285,7 +1287,7 @@ function Comments({ assessmentDataBySubject, plan, roster }: { assessmentDataByS
                 const areaStatuses = commentParts.filter((part) => part.studentId === student.id && part.subject === selectedSubject);
                 const areaIssues = areaStatuses
                   .map((part) => ({ ...part, visibleIssues: commentAreaIssuesForDisplay(part.status, part.issues) }))
-                  .filter((part) => part.status === "needs_review" || part.visibleIssues.length > 0);
+                  .filter((part) => part.visibleIssues.length > 0 || (part.status === "needs_review" && part.issues.length === 0));
                 const commentReviewIssues = [
                   ...(text && validation.forbidden.length > 0 ? [`금지어 확인: ${validation.forbidden.join(" · ")}`] : []),
                   ...(text && !validation.spellingOk ? validation.spellingIssues.map((issue) => `맞춤법: ${issue}`) : []),
