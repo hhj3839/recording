@@ -12,6 +12,7 @@ export type CommentEvidence = {
   subject: string;
   items: CommentEvidenceItem[];
   subjectItems?: CommentEvidenceItem[];
+  forceRegenerateItems?: boolean;
   variation?: CommentVariation;
   itemVariations?: Record<number, CommentVariation>;
 };

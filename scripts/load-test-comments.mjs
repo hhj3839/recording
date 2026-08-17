@@ -10,6 +10,8 @@ const paidModeApprovals = {
   start: ["RUN_FULL_225_TEST", "225건 전체 실제 AI 검사"],
   "missing-start": ["RUN_MISSING_COMMENT_TEST", "누락 교과 평어 실제 AI 검사"],
   "repair-parts": ["RUN_MISSING_COMMENT_TEST", "실패 평가영역 부분 재생성 검사"],
+  "rebuild-comments": ["RUN_COMMENT_REBUILD", "저장된 평가영역 합본 복원"],
+  "duplicate-parts": ["RUN_DUPLICATE_COMMENT_TEST", "중복 평가영역 부분 재생성 검사"],
 };
 const paidModeApproval = paidModeApprovals[mode];
 if (paidModeApproval && process.env[paidModeApproval[0]] !== "YES") {
@@ -96,6 +98,50 @@ const request = async (route, options = {}) => {
   if (!response.ok) throw new Error(data.error || `${route} failed (${response.status})`);
   return data;
 };
+
+if (mode === "subject-audit") {
+  const [classData, planData, generatedData, usage] = await Promise.all([
+    request("/api/class-data"), request("/api/assessment-plan"), request("/api/generated-comments"), request("/api/usage"),
+  ]);
+  const subject = process.env.COMMENT_REPAIR_SUBJECT || planData.plan[0]?.subject;
+  if (!subject) throw new Error("Audit subject is missing");
+  const expectedSentenceCount = planData.plan.filter((item) => item.subject === subject).length;
+  const activeIds = new Set(classData.students.map((student) => Number(student.id)));
+  const comments = generatedData.comments.filter((item) =>
+    item.subject === subject && activeIds.has(Number(item.studentId)) && String(item.comment || "").trim());
+  const validations = comments.map((item) => ({
+    studentId: Number(item.studentId),
+    ...validateComment(item.comment, expectedSentenceCount),
+  }));
+  const parts = (generatedData.parts ?? []).filter((part) =>
+    part.subject === subject && activeIds.has(Number(part.studentId)));
+  const normalizedParts = parts.map((part) => ({
+    ...part,
+    normalized: String(part.sentence || "").normalize("NFKC").replace(/\s+/g, "").replace(/[.!?。！？]/g, ""),
+  })).filter((part) => part.normalized);
+  const sentenceCounts = new Map();
+  normalizedParts.forEach((part) => {
+    const key = `${part.assessmentIndex}|${part.normalized}`;
+    sentenceCounts.set(key, (sentenceCounts.get(key) ?? 0) + 1);
+  });
+  const duplicateSentences = [...sentenceCounts.values()].filter((count) => count > 1).reduce((sum, count) => sum + count, 0);
+  const issueList = parts.flatMap((part) => Array.isArray(part.issues) ? part.issues : []);
+  process.stdout.write(`${JSON.stringify({
+    mode, subject, students: activeIds.size, savedComments: comments.length,
+    expectedSentenceCount, validComments: validations.filter((item) => item.valid).length,
+    strictSuccessRate: activeIds.size ? Math.round(validations.filter((item) => item.valid).length / activeIds.size * 10000) / 100 : 0,
+    savedParts: parts.length,
+    expectedParts: activeIds.size * expectedSentenceCount,
+    needsReviewParts: parts.filter((part) => part.status === "needs_review" || !String(part.sentence || "").trim()).length,
+    warningParts: parts.filter((part) => part.status === "warning").length,
+    exactDuplicateSentenceRate: normalizedParts.length ? Math.round(duplicateSentences / normalizedParts.length * 10000) / 100 : 0,
+    duplicatePartTargets: [...sentenceCounts.values()].filter((count) => count > 1).reduce((sum, count) => sum + count - 1, 0),
+    groundingWarnings: issueList.filter((issue) => /근거|입력|평가기준|평가 기준/.test(issue)).length,
+    invalidSamples: validations.filter((item) => !item.valid).slice(0, 10),
+    monthlyUsage: usage.monthly, monthlyLimit: usage.limit,
+  })}\n`);
+  process.exit(0);
+}
 
 if (mode === "missing") {
   const [classData, planData, generatedData, usage] = await Promise.all([
@@ -194,6 +240,96 @@ if (mode === "repair-parts") {
   process.stdout.write(`${JSON.stringify({
     mode, subject, jobId: result.job.id, status: result.job.status,
     students: selectedStudentIds.length, failedParts: failedParts.length,
+    estimatedBatches, monthlyUsageBefore: usage.monthly,
+  })}\n`);
+  process.exit(0);
+}
+
+if (mode === "rebuild-comments") {
+  const [classData, planData, generatedData, usage] = await Promise.all([
+    request("/api/class-data"), request("/api/assessment-plan"), request("/api/generated-comments"), request("/api/usage"),
+  ]);
+  const subject = process.env.COMMENT_REPAIR_SUBJECT || planData.plan[0]?.subject;
+  if (!subject) throw new Error("Rebuild subject is missing");
+  const requestedIds = [...new Set(String(process.env.COMMENT_REBUILD_STUDENT_IDS || "")
+    .split(",").map((value) => Number(value.trim())).filter((value) => Number.isInteger(value) && value > 0))];
+  if (!requestedIds.length) throw new Error("COMMENT_REBUILD_STUDENT_IDS is required");
+  const activeIds = new Set(classData.students.map((student) => Number(student.id)));
+  if (requestedIds.some((studentId) => !activeIds.has(studentId))) throw new Error("Rebuild student is not active in the classroom");
+  const subjectPlan = planData.plan.filter((item) => item.subject === subject);
+  const levelLookup = new Map(classData.levels.map((item) => [`${item.studentId}|${item.subject}|${item.assessmentIndex}`, item.level]));
+  const targetAssessmentIndexes = {};
+  for (const studentId of requestedIds) {
+    const savedIndexes = (generatedData.parts ?? []).filter((part) =>
+      Number(part.studentId) === studentId && part.subject === subject
+      && ["complete", "warning"].includes(part.status) && String(part.sentence || "").trim())
+      .map((part) => Number(part.assessmentIndex)).sort((left, right) => left - right);
+    if (savedIndexes.length !== subjectPlan.length) {
+      throw new Error(`Student ${studentId} has ${savedIndexes.length}/${subjectPlan.length} saved areas`);
+    }
+    targetAssessmentIndexes[`${studentId}|${subject}`] = [savedIndexes[0]];
+  }
+  const scores = {
+    [subject]: requestedIds.map((studentId) => ({
+      studentId,
+      levels: subjectPlan.map((_, index) => levelLookup.get(`${studentId}|${subject}|${index}`) ?? "-"),
+    })),
+  };
+  const result = await request("/api/comment-jobs", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ scores, selectedStudentIds: requestedIds, overwriteExisting: false, targetAssessmentIndexes }),
+  });
+  process.stdout.write(`${JSON.stringify({
+    mode, subject, jobId: result.job.id, status: result.job.status,
+    students: requestedIds.length, expectedAiCalls: 0, monthlyUsageBefore: usage.monthly,
+  })}\n`);
+  process.exit(0);
+}
+
+if (mode === "duplicate-parts") {
+  const [classData, planData, generatedData, usage] = await Promise.all([
+    request("/api/class-data"), request("/api/assessment-plan"), request("/api/generated-comments"), request("/api/usage"),
+  ]);
+  const subject = process.env.COMMENT_REPAIR_SUBJECT || planData.plan[0]?.subject;
+  if (!subject) throw new Error("Duplicate repair subject is missing");
+  const subjectPlan = planData.plan.filter((item) => item.subject === subject);
+  const activeIds = new Set(classData.students.map((student) => Number(student.id)));
+  const seen = new Set();
+  const duplicateParts = (generatedData.parts ?? []).filter((part) => {
+    if (part.subject !== subject || !activeIds.has(Number(part.studentId)) || !String(part.sentence || "").trim()) return false;
+    const normalized = String(part.sentence).normalize("NFKC").replace(/\s+/g, "").replace(/[.!?。！？]/g, "");
+    const key = `${part.assessmentIndex}|${normalized}`;
+    if (seen.has(key)) return true;
+    seen.add(key);
+    return false;
+  });
+  if (!duplicateParts.length) throw new Error("No duplicate comment parts found");
+  const targetAssessmentIndexes = {};
+  for (const part of duplicateParts) {
+    const key = `${part.studentId}|${subject}`;
+    targetAssessmentIndexes[key] = [...new Set([...(targetAssessmentIndexes[key] ?? []), Number(part.assessmentIndex)])];
+  }
+  const selectedStudentIds = [...new Set(duplicateParts.map((part) => Number(part.studentId)))];
+  const levelLookup = new Map(classData.levels.map((item) => [`${item.studentId}|${item.subject}|${item.assessmentIndex}`, item.level]));
+  const scores = {
+    [subject]: selectedStudentIds.map((studentId) => ({
+      studentId,
+      levels: subjectPlan.map((_, index) => levelLookup.get(`${studentId}|${subject}|${index}`) ?? "-"),
+    })),
+  };
+  const estimatedBatches = new Set(duplicateParts.map((part) => Number(part.assessmentIndex))).size;
+  if (usage.monthly + estimatedBatches > usage.limit) throw new Error("Monthly AI limit is insufficient for duplicate parts");
+  const result = await request("/api/comment-jobs", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      scores, selectedStudentIds, overwriteExisting: false, targetAssessmentIndexes, forceTargetRegeneration: true,
+    }),
+  });
+  process.stdout.write(`${JSON.stringify({
+    mode, subject, jobId: result.job.id, status: result.job.status,
+    students: selectedStudentIds.length, duplicateParts: duplicateParts.length,
     estimatedBatches, monthlyUsageBefore: usage.monthly,
   })}\n`);
   process.exit(0);
