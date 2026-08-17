@@ -8,7 +8,7 @@ import { generationModel } from "../app/ai-model-policy.ts";
 import { batchCommentRepairs, batchCommentsByAssessmentArea, COMMENT_BATCH_SIZE, COMMENT_REPAIR_EVIDENCE_BATCH_SIZE, MAX_COMMENT_AI_CALLS_PER_BATCH, MAX_COMMENT_DIVERSITY_CALLS_PER_BATCH } from "../app/comment-batching.ts";
 import { batchBehaviors, BEHAVIOR_BATCH_SIZE } from "../app/behavior-batching.ts";
 import { estimateAiCostUsd } from "../app/ai-pricing.ts";
-import { assignUniquePoolCandidates, buildCommentPoolGroups, buildPublicCommentPoolRequests } from "../app/comment-pool-generation.ts";
+import { assignUniquePoolCandidates, buildCommentPoolGroups, buildPublicCommentPoolRequests, commentPoolCandidateCount } from "../app/comment-pool-generation.ts";
 
 test("uses the same low-cost model for the initial request and retry", () => {
   assert.equal(generationModel(0, 2), "gpt-5.4-mini");
@@ -62,7 +62,17 @@ test("builds level pools without putting student identifiers in the AI pool requ
   assert.equal(groups[0].members.length, 3);
   const publicPools = buildPublicCommentPoolRequests(groups);
   assert.equal(JSON.stringify(publicPools).includes("studentId"), false);
-  assert.equal(new Set(publicPools[0].variantPlans.map((plan) => JSON.stringify(plan))).size, 3);
+  assert.equal(publicPools[0].requiredCount, 3);
+  assert.equal(publicPools[0].candidateCount, 5);
+  assert.equal(new Set(publicPools[0].variantPlans.map((plan) => JSON.stringify(plan))).size, 5);
+});
+
+test("requests a forty percent reserve candidate pool to avoid paid retries", () => {
+  assert.equal(commentPoolCandidateCount(1), 2);
+  assert.equal(commentPoolCandidateCount(5), 7);
+  assert.equal(commentPoolCandidateCount(10), 14);
+  assert.equal(commentPoolCandidateCount(25), 35);
+  assert.equal(commentPoolCandidateCount(0), 0);
 });
 
 test("isolates each student and area during the final individual retries", () => {
