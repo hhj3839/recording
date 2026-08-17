@@ -1,5 +1,5 @@
 import { primaryAiModel } from "./ai-model-policy.ts";
-import { commentEvidenceInstructions, commentLengthTarget, ensureGeneratedCommentPeriod, evidenceBlockingIssues, evidenceGroundingWarnings, validateGeneratedCommentPart } from "./comment-generation-policy.ts";
+import { commentEvidenceInstructions, commentLengthTarget, repairSafeNominalEnding, evidenceBlockingIssues, evidenceGroundingWarnings, validateGeneratedCommentPart } from "./comment-generation-policy.ts";
 import type { AiTokenUsage } from "./ai-usage.ts";
 import type { CommentEvidence, CommentEvidenceItem, CommentBatchResult, GeneratedCommentPart, GeneratedCommentRejection } from "./comment-generation.ts";
 import { createCommentVariations, type CommentVariation } from "./comment-variation.ts";
@@ -18,6 +18,7 @@ export type CommentPoolGroup = {
   level: string;
   evidence: string;
   criterion: string;
+  repairIssues: string[];
   members: PoolMember[];
 };
 
@@ -32,12 +33,12 @@ function extractOutputText(payload: unknown): string {
     .map((item) => item.text).join("").trim();
 }
 
-export function buildCommentPoolGroups(evidence: CommentEvidence[]): CommentPoolGroup[] {
+export function buildCommentPoolGroups(evidence: CommentEvidence[], isolateMembers = false): CommentPoolGroup[] {
   const groups = new Map<string, Omit<CommentPoolGroup, "poolId">>();
   for (const entry of evidence) {
     for (const item of entry.items) {
       const criterion = item.criterion ?? item.text;
-      const key = JSON.stringify([entry.subject, item.assessmentIndex, item.level ?? "", item.text, criterion]);
+      const key = JSON.stringify([entry.subject, item.assessmentIndex, item.level ?? "", item.text, criterion, isolateMembers ? entry.studentId : ""]);
       const member = {
         studentId: entry.studentId,
         subject: entry.subject,
@@ -45,13 +46,20 @@ export function buildCommentPoolGroups(evidence: CommentEvidence[]): CommentPool
         variation: entry.itemVariations?.[item.assessmentIndex] ?? entry.variation,
       };
       const current = groups.get(key);
-      if (current) current.members.push(member);
+      if (current) {
+        current.members.push(member);
+        current.repairIssues = [...new Set([
+          ...current.repairIssues,
+          ...(entry.repairIssues?.[item.assessmentIndex] ?? []),
+        ])];
+      }
       else groups.set(key, {
         subject: entry.subject,
         assessmentIndex: item.assessmentIndex,
         level: item.level ?? "",
         evidence: item.text,
         criterion,
+        repairIssues: entry.repairIssues?.[item.assessmentIndex] ?? [],
         members: [member],
       });
     }
@@ -76,6 +84,7 @@ export function buildPublicCommentPoolRequests(groups: CommentPoolGroup[]) {
     evidence: group.evidence,
     criterion: group.criterion,
     levelRules: commentEvidenceInstructions(group.criterion).instruction,
+    repairIssues: group.repairIssues,
     lengthTarget: commentLengthTarget(group.criterion).label,
     requiredCount: group.members.length,
     variantPlans: group.members.map((member, index) => ({ variant: index + 1, ...member.variation })),
@@ -90,7 +99,7 @@ export function assignUniquePoolCandidates(
 ) {
   const issues = new Set<string>();
   const validated = rawCandidates.flatMap((candidate, index) => {
-    const text = ensureGeneratedCommentPeriod(candidate);
+    const text = repairSafeNominalEnding(candidate);
     const format = validateGeneratedCommentPart(text, group.criterion);
     if (!format.valid) {
       issues.add("문장 형식 또는 명사형 종결 검수 미통과");
@@ -145,10 +154,11 @@ export async function generateCommentPoolBatch(
   repair = false,
   model = primaryAiModel(),
   allowDuplicateFallback = false,
+  isolateMembers = false,
 ): Promise<CommentBatchResult> {
   const apiKey = process.env.OPENAI_API_KEY;
   if (!apiKey) throw new Error("AI 생성 설정이 아직 완료되지 않았습니다.");
-  const groups = buildCommentPoolGroups(evidence);
+  const groups = buildCommentPoolGroups(evidence, isolateMembers);
   const poolSchemas = Object.fromEntries(groups.map((group) => [group.poolId, {
     type: "object",
     additionalProperties: false,
@@ -181,7 +191,7 @@ export async function generateCommentPoolBatch(
         },
         {
           role: "user",
-          content: [{ type: "input_text", text: `${repair ? "이전 생성에서 고유하거나 검증된 후보가 부족했다. 부족한 후보 수만큼 새로운 문장을 작성한다." : "각 문장 풀을 작성한다."}\n문장 풀 요청: ${JSON.stringify(requestPools)}\n이미 사용했으므로 그대로 쓰지 않을 문장: ${JSON.stringify(avoidSentences)}` }],
+          content: [{ type: "input_text", text: `${repair ? "이전 생성에서 후보가 검수를 통과하지 못했다. 각 pool의 repairIssues 원인을 바로잡아 부족한 후보만 새로 작성한다." : "각 문장 풀을 작성한다."}\n문장 풀 요청: ${JSON.stringify(requestPools)}\n이미 사용했으므로 그대로 쓰지 않을 문장: ${JSON.stringify(avoidSentences)}` }],
         },
       ],
       text: {

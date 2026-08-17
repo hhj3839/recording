@@ -5,11 +5,12 @@ import { selectMostDiverseComments } from "../../../comment-diversity";
 import { CommentEvidence, GeneratedComment, GeneratedCommentPart, saveGeneratedCommentParts, saveGeneratedComments, signCommentJob, verifyCommentJob } from "../../../comment-generation";
 import { generateCommentPoolBatch } from "../../../comment-pool-generation";
 import { generationModel } from "../../../ai-model-policy";
-import { batchCommentRepairs, MAX_COMMENT_AI_CALLS_PER_BATCH, MAX_COMMENT_DIVERSITY_CALLS_PER_BATCH } from "../../../comment-batching";
+import { MAX_COMMENT_AI_CALLS_PER_BATCH, MAX_COMMENT_DIVERSITY_CALLS_PER_BATCH } from "../../../comment-batching";
 import { CommentAreaPart, findCommentAreaOverlaps } from "../../../comment-area-diversity";
+import { evidenceBlockingIssues, validateGeneratedCommentPart } from "../../../comment-generation-policy";
 
 export const maxDuration = 300;
-const MAX_GENERATION_ATTEMPTS = 4;
+const MAX_GENERATION_ATTEMPTS = 5;
 
 type JobRow = {
   id: string;
@@ -123,9 +124,9 @@ export async function POST(request: Request) {
       errorMessage = `월 AI 요청 한도 ${MONTHLY_AI_LIMIT}회를 사용하여 남은 항목의 자동 재시도를 중단했습니다.`;
       break;
     }
-    const groups = attempt === 0
-      ? [pending]
-      : batchCommentRepairs(pending);
+    // 1회차는 문장 풀, 2~3회차는 부족 후보 묶음, 4~5회차는
+    // 학생·영역별 독립 후보로 요청한다. 한 시도는 한 API 호출만 사용한다.
+    const groups = [pending];
     for (const group of groups) {
       if (aiCallCount >= MAX_COMMENT_AI_CALLS_PER_BATCH) {
         callLimitReached = true;
@@ -139,14 +140,22 @@ export async function POST(request: Request) {
       }
       aiCallCount += 1;
       try {
+        const requestGroup = group.map((entry) => ({
+          ...entry,
+          repairIssues: Object.fromEntries(entry.items.map((item) => [
+            item.assessmentIndex,
+            [...(rejectionIssues.get(`${entry.studentId}|${entry.subject}|${item.assessmentIndex}`) ?? [])],
+          ])),
+        }));
         const generated = await generateCommentPoolBatch(
-          group,
+          requestGroup,
           // 제한된 금지 문장 목록에는 방금 생성·저장한 문장을 먼저 넣어
           // 현재 학급 작업 안의 중복 방지가 과거 기록 때문에 잘리지 않게 한다.
           [...[...generatedParts.values()].map((item) => item.text), ...avoidComments],
           attempt > 0,
           generationModel(attempt, MAX_GENERATION_ATTEMPTS),
-          attempt === MAX_GENERATION_ATTEMPTS - 1,
+          false,
+          attempt >= 3,
         );
         for (const part of generated.parts) {
           const key = `${part.studentId}|${part.subject}|${part.assessmentIndex}`;
@@ -190,6 +199,46 @@ export async function POST(request: Request) {
       return missingItems.length ? [{ ...item, items: missingItems }] : [];
     });
     if (nonRetryableFailure || callLimitReached) break;
+  }
+
+  // 모든 AI 재시도 뒤에도 후보가 없으면 같은 평가영역·같은 수준에서 이미
+  // 통과한 문장을 마지막 안전망으로 재사용한다. 근거·수준 검수는 다시 하며,
+  // 재사용 사실은 경고로 남겨 빈칸보다 교사가 확인 가능한 결과를 우선한다.
+  const fallbackParts: Array<GeneratedCommentPart & { attempts: number; status: "warning"; issues: string[] }> = [];
+  for (const entry of pending) {
+    for (const item of entry.items) {
+      const key = `${entry.studentId}|${entry.subject}|${item.assessmentIndex}`;
+      if (generatedParts.has(key)) continue;
+      const fallback = [...generatedParts.values()].find((candidate) => {
+        if (candidate.subject !== entry.subject || candidate.assessmentIndex !== item.assessmentIndex || !candidate.text) return false;
+        const sourceEntry = batch.find((batchEntry) => batchEntry.studentId === candidate.studentId);
+        const sourceItem = sourceEntry?.items.find((source) => source.assessmentIndex === candidate.assessmentIndex);
+        if (!sourceItem || sourceItem.level !== item.level) return false;
+        return validateGeneratedCommentPart(candidate.text, item.criterion ?? item.text).valid
+          && evidenceBlockingIssues(candidate.text, item.text, item.criterion ?? item.text).length === 0;
+      });
+      if (!fallback) continue;
+      const warning = "같은 평가영역·수준의 검증된 문장을 재사용하여 표현 중복 확인이 필요함";
+      const reused = {
+        studentId: entry.studentId,
+        subject: entry.subject,
+        assessmentIndex: item.assessmentIndex,
+        evidence: item.text,
+        text: fallback.text,
+        warnings: [warning],
+      };
+      generatedParts.set(key, reused);
+      rejectionIssues.delete(key);
+      fallbackParts.push({ ...reused, attempts: MAX_GENERATION_ATTEMPTS, status: "warning", issues: [warning] });
+    }
+  }
+  if (fallbackParts.length) {
+    await saveGeneratedCommentParts({
+      ownerId: job.owner_id,
+      ownerEmail: job.owner_email,
+      classId: Number(job.class_id),
+      parts: fallbackParts,
+    });
   }
 
   const diversityCandidates = [...generatedParts.entries()]
@@ -344,13 +393,12 @@ export async function POST(request: Request) {
 
   const failedInBatch = batch.filter((item) => item.items.some((evidenceItem) =>
     !generatedParts.has(`${item.studentId}|${item.subject}|${evidenceItem.assessmentIndex}`))).length;
-  if (failedInBatch) {
-    const detail = `${subject} 평가영역 배치 ${batchIndex + 1}: ${failedInBatch}개 문장이 생성 후에도 검수를 통과하지 못해 확인 필요로 표시했습니다. 성공한 문장은 저장되었습니다.`;
-    errorMessage = [job.error_message, errorMessage, detail].filter(Boolean).join(" ").slice(-1800);
-  }
   const nextBatch = batchIndex + 1;
   const failedItems = Number(job.failed_items) + failedInBatch;
   const completedItems = Number(job.completed_items) + batch.length - failedInBatch;
+  if (failedItems) {
+    errorMessage = `${subject} 평어 ${completedItems}/${job.total_items}개 영역 저장 완료 · ${failedItems}개 영역 확인 필요`;
+  }
   const terminal = nextBatch >= Number(job.total_batches);
   const latestStatus = (await selectRows<{ status: string }>("generation_jobs", { id: eq(jobId), limit: 1 }))[0]?.status;
   if (latestStatus === "cancelled") {
