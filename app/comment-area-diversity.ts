@@ -49,6 +49,9 @@ export function commentAreaSimilarity(left: CommentAreaPart, right: CommentAreaP
 export function commentAreaOverlapReasons(left: CommentAreaPart, right: CommentAreaPart) {
   if (commentAreaGroupKey(left) !== commentAreaGroupKey(right)) return [];
   const reasons: string[] = [];
+  const normalizedLeft = left.text.normalize("NFKC").replace(/\s+/g, "").replace(/[.!?。！？]/g, "");
+  const normalizedRight = right.text.normalize("NFKC").replace(/\s+/g, "").replace(/[.!?。！？]/g, "");
+  if (normalizedLeft && normalizedLeft === normalizedRight) reasons.push("동일 문장 중복");
   const leftPhrases = fourWordPhrases(styleWords(left.text, left.evidence));
   const rightPhrases = fourWordPhrases(styleWords(right.text, right.evidence));
   if ([...leftPhrases].some((phrase) => rightPhrases.has(phrase))) reasons.push("4단어 연속 중복");

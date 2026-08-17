@@ -117,6 +117,13 @@ test("does not flag unavoidable evidence openings as style duplication", () => {
   assert.deepEqual(commentAreaOverlapReasons(differentArea, first), []);
 });
 
+test("always flags an identical sentence within the same area and level", () => {
+  const evidence = "5단원 | 쓰기 | 목표: 마음을 전하는 글쓰기 | 수준: 중 | 기준: 마음을 전하는 글을 쓰기 위해 노력한다.";
+  const first = { studentId: 1, subject: "국어", assessmentIndex: 4, evidence, text: "마음을 전하는 글을 쓰는 방법을 알고 글을 쓰기 위해 노력함." };
+  const repeated = { ...first, studentId: 2 };
+  assert.equal(commentAreaOverlapReasons(repeated, first).includes("동일 문장 중복"), true);
+});
+
 test("marks only later overlapping area sentences for one diversity repair", () => {
   const evidence = "1단원 | 문법 | 목표: 문장 짜임 이해 | 수준: 중 | 기준: 문장을 짜임에 따라 나눌 수 있다.";
   const parts = [
