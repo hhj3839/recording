@@ -7,6 +7,7 @@ import { parseStudentRosterText } from "./student-roster-parser";
 import { parseAssessmentPlanText } from "./assessment-plan-parser";
 import { assessmentPlanWarnings, validateAssessmentPlanRow } from "./assessment-plan-policy";
 import { commentAreaIssuesForDisplay } from "./comment-generation-policy";
+import { readApiJson } from "./api-response";
 
 type View = "dashboard" | "students" | "plans" | "assessments" | "comments" | "behavior" | "export" | "settings";
 const SHOW_EXPORT_RESULTS = false;
@@ -637,7 +638,7 @@ function PlanManager({ plan, onChanged, current }: { plan: AssessmentPlan[]; onC
   const deleteItem = async (item: AssessmentPlan) => {
     if (!item.id || !window.confirm(`${item.subject} ${item.unit} 평가계획을 삭제할까요?`)) return;
     const response = await fetch(`/api/assessment-plan?id=${item.id}`, { method: "DELETE" });
-    const result = await response.json() as { error?: string };
+    const result = await readApiJson<{ ok?: boolean }>(response, "교과 평어를 초기화하지 못했습니다.");
     if (!response.ok) return setErrors([result.error || "삭제하지 못했습니다."]);
     onChanged(plan.filter((current) => current.id !== item.id));
     setMessage("평가계획을 삭제했습니다.");
@@ -719,7 +720,7 @@ function PlanManager({ plan, onChanged, current }: { plan: AssessmentPlan[]; onC
       const response = await fetch("/api/shared-assessment-plans", {
         method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ name: name.trim() }),
       });
-      const result = await response.json() as { error?: string };
+      const result = await readApiJson<{ ok?: boolean }>(response, "평어를 저장하지 못했습니다.");
       if (!response.ok) throw new Error(result.error || "평가계획을 공유하지 못했습니다.");
       setMessage("현재 평가계획을 모든 교사가 볼 수 있는 공동 계획에 공유했습니다.");
       await loadSharedPlans();
@@ -1003,10 +1004,10 @@ function Comments({ assessmentDataBySubject, plan, roster }: { assessmentDataByS
   const loadGeneratedComments = useCallback(async () => {
     try {
       const response = await fetch("/api/generated-comments", { cache: "no-store" });
-      const result = await response.json() as {
+      const result = await readApiJson<{
         comments?: Array<{ studentId: number; subject: string; comment: string; candidates: string[]; generationLevels: GeneratedLevel[]; confirmed: boolean; updatedAt: string }>;
         parts?: Array<{ studentId: number; subject: string; assessmentIndex: number; sentence: string; status: string; issues: string[] }>;
-      };
+      }>(response, "저장된 교과 평어를 불러오지 못했습니다.");
       if (!response.ok) return;
       setCommentParts(result.parts ?? []);
       setComments(Object.fromEntries((result.comments ?? []).map((item) => [`${item.studentId}|${item.subject}`, item.comment])));
@@ -1022,7 +1023,7 @@ function Comments({ assessmentDataBySubject, plan, roster }: { assessmentDataByS
   useEffect(() => {
     queueMicrotask(() => void loadGeneratedComments());
     fetch("/api/comment-jobs").then(async (response) => {
-      const result = await response.json() as { job?: CommentJob | null };
+      const result = await readApiJson<{ job?: CommentJob | null }>(response, "교과 평어 생성 상태를 불러오지 못했습니다.");
       if (response.ok && result.job) {
         setActiveJob(result.job);
         if (["queued", "running"].includes(result.job.status)) setLoading(true);
@@ -1039,7 +1040,7 @@ function Comments({ assessmentDataBySubject, plan, roster }: { assessmentDataByS
     const timer = window.setInterval(async () => {
       try {
         const response = await fetch("/api/comment-jobs");
-        const result = await response.json() as { job?: CommentJob | null };
+        const result = await readApiJson<{ job?: CommentJob | null }>(response, "교과 평어 생성 상태를 불러오지 못했습니다.");
         if (!response.ok || !result.job) return;
         setActiveJob(result.job);
         setGenerationProgress(`${result.job.completedItems}/${result.job.totalItems}`);
@@ -1120,8 +1121,18 @@ function Comments({ assessmentDataBySubject, plan, roster }: { assessmentDataByS
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ scores, selectedStudentIds: targetIds, overwriteExisting }),
       });
-      const result = await response.json() as { job?: CommentJob; error?: string };
-      if (!response.ok || !result.job) throw new Error(result.error || "백그라운드 생성 작업을 시작하지 못했습니다.");
+      const result = await readApiJson<{ job?: CommentJob }>(response, "백그라운드 생성 작업을 시작하지 못했습니다.");
+      if (!response.ok || !result.job) {
+        const statusResponse = await fetch("/api/comment-jobs", { cache: "no-store" });
+        const statusResult = await readApiJson<{ job?: CommentJob | null }>(statusResponse, "교과 평어 생성 상태를 확인하지 못했습니다.");
+        if (statusResponse.ok && statusResult.job && ["queued", "running"].includes(statusResult.job.status)) {
+          setActiveJob(statusResult.job);
+          setGenerationProgress(`${statusResult.job.completedItems}/${statusResult.job.totalItems}`);
+          setCopied(false);
+          return;
+        }
+        throw new Error(result.error || "백그라운드 생성 작업을 시작하지 못했습니다.");
+      }
       setActiveJob(result.job);
       setGenerationProgress(`${result.job.completedItems}/${result.job.totalItems}`);
       setCopied(false);
@@ -1179,7 +1190,7 @@ function Comments({ assessmentDataBySubject, plan, roster }: { assessmentDataByS
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ studentId, subject, comment: "", confirmed: false, discardPrevious: true }),
         });
-        const clearResult = await clearResponse.json() as { error?: string };
+        const clearResult = await readApiJson<{ ok?: boolean }>(clearResponse, "기존 평어를 삭제하지 못했습니다.");
         if (!clearResponse.ok) {
           setComments((current) => ({ ...current, [key]: previousComment }));
           throw new Error(clearResult.error || "기존 평어를 삭제하지 못했습니다.");
@@ -1199,7 +1210,7 @@ function Comments({ assessmentDataBySubject, plan, roster }: { assessmentDataByS
           selectionEnd: selection?.end,
         }),
       });
-      const result = await response.json() as { comment?: string; error?: string };
+      const result = await readApiJson<{ comment?: string }>(response, "평어를 다시 작성하지 못했습니다.");
       if (!response.ok || !result.comment) throw new Error(result.error || "평어를 다시 작성하지 못했습니다.");
       setComments((current) => ({ ...current, [key]: result.comment! }));
       const nextGenerationLevels = (assessment.assessments ?? []).flatMap((level, assessmentIndex) =>
