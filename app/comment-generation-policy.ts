@@ -170,7 +170,7 @@ const unsupportedGroundingConcepts: Array<{
   { label: "모둠원과 협력", pattern: /모둠(?:원)?.{0,4}(?:협력|협동)/, blocking: false },
   { label: "친구와 협력", pattern: /친구.{0,4}(?:협력|협동)/, blocking: false },
   { label: "끝까지", pattern: /(?:끝|마지막)까지/, blocking: false },
-  { label: "성실하게", pattern: /성실/, blocking: false },
+  { label: "성실하게", pattern: /성실/, blocking: true },
   { label: "꾸준히 참여", pattern: /(?:꾸준|지속적).{0,4}참여/, blocking: false },
   { label: "의미를 파악", pattern: /의미(?:를)?(?:파악|이해)/, blocking: false },
   { label: "스스로", pattern: /(?:스스로|자발적)/, blocking: false },
@@ -192,7 +192,7 @@ const unsupportedGroundingConcepts: Array<{
   { label: "이해하기 쉽게", pattern: /이해하기쉽게/, blocking: true },
   { label: "입력에 없는 구체적 표현 방법", pattern: /(?:그림|시)(?:이나|나|와|과|으로|로)/, blocking: true },
   { label: "말하기·발표 활동", pattern: /(?:말로풀어|말로표현|말하기|발표|구술)/, evidencePattern: /(?:말|대화|목소리|말투|발표|구술|듣기)/, blocking: true },
-  { label: "내용 간추리기·정리하기", pattern: /(?:내용|흐름).{0,10}(?:간추|요약|정리)/, evidencePattern: /(?:간추|요약|정리)/, blocking: true },
+  { label: "내용 간추리기·요약하기", pattern: /(?:간추|요약)/, evidencePattern: /(?:간추|요약)/, blocking: true },
   { label: "관찰되지 않은 태도 수식어", pattern: /(?:차분|안정적|알차|고르게|꾸준)/, evidencePattern: /(?:차분|안정적|알차|고르게|꾸준)/, blocking: true },
   { label: "학습 태도", pattern: /태도/, evidencePattern: /태도|적극적|성실|꾸준|자기주도|주도적|능동적/, blocking: true },
 ];
@@ -225,7 +225,7 @@ export function evidenceBlockingIssues(comment: string, evidence: string, requir
   const required = [
     { evidence: /교사.{0,5}도움|도움.{0,5}교사/, comment: /교사|도움/, label: "교사의 도움" },
     { evidence: /일부/, comment: /일부|몇몇|한부분|부분적으로/, label: "일부 수행" },
-    { evidence: /노력|익혀가|과정/, comment: /노력|애씀|힘씀|익혀가|배워가|과정/, label: "노력·성장 과정" },
+    { evidence: /노력|익혀가|과정/, comment: /노력|애씀|힘씀|힘쓰|익혀가|배워가|과정/, label: "노력·성장 과정" },
     { evidence: /짜임.{0,16}(?:나누|나눌|나눠|구분)/, comment: /짜임.{0,24}(?:나누|나눌|나눠|구분)/, label: "문장의 짜임에 따라 나누기" },
     { evidence: /자료.{0,16}표현/, comment: /자료.{0,20}(?:표현|나타내|옮겨적)/, label: "자료 내용 표현하기" },
     { evidence: /중심문장.{0,12}뒷받침문장.{0,16}파악/, comment: /중심문장.{0,20}뒷받침문장.{0,20}(?:파악|찾)/, label: "중심·뒷받침 문장 파악하기" },

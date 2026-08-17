@@ -262,11 +262,19 @@ test("blocks invented summarizing activities and demeanor fillers", () => {
   const writingEvidence = "작품에서 느낀 재미나 감동의 부분과 그 까닭을 쓸 수 있다.";
   assert.deepEqual(
     evidenceBlockingIssues("재미와 감동의 까닭을 쓰고 내용의 흐름을 간추려 표현하는 모습이 돋보임.", writingEvidence),
-    ["평가 근거에 없는 ‘내용 간추리기·정리하기’ 표현"],
+    ["평가 근거에 없는 ‘내용 간추리기·요약하기’ 표현"],
   );
   assert.deepEqual(
     evidenceBlockingIssues("작품에서 느낀 재미와 감동의 까닭을 차분하게 쓰는 모습임.", writingEvidence),
     ["평가 근거에 없는 ‘관찰되지 않은 태도 수식어’ 표현"],
+  );
+  assert.deepEqual(
+    evidenceBlockingIssues("작품에서 느낀 재미와 감동의 까닭을 쓰고 이를 간추려 표현함.", writingEvidence),
+    ["평가 근거에 없는 ‘내용 간추리기·요약하기’ 표현"],
+  );
+  assert.deepEqual(
+    evidenceBlockingIssues("마음을 전하는 글의 방법을 알고 성실히 힘쓰는 모습임.", "마음을 전하는 글을 쓰기 위해 노력한다."),
+    ["평가 근거에 없는 ‘성실하게’ 표현"],
   );
 });
 
