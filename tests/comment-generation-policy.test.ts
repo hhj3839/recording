@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { commentAreaIssuesForDisplay, commentEvidenceInstructions, commentLengthTarget, composeGeneratedCommentCandidate, ensureGeneratedCommentPeriod, evidenceBlockingIssues, evidenceGroundingWarnings, generatedCommentFailureMessage, hasCompleteEvidenceCoverage, hasNaturalNominalEnding, normalizeGeneratedCommentCandidate, normalizeGeneratedCommentWhitespace, openingRepetitionRate, repairSafeNominalEnding, replaceSelectedCommentText, resolveGeneratedEvidenceItemId, validateGeneratedComment, validateGeneratedCommentPart } from "../app/comment-generation-policy.ts";
+import { commentAreaIssuesForDisplay, commentEvidenceInstructions, commentLengthTarget, composeGeneratedCommentCandidate, criterionToSafeNominalSentence, ensureGeneratedCommentPeriod, evidenceBlockingIssues, evidenceGroundingWarnings, generatedCommentFailureMessage, hasCompleteEvidenceCoverage, hasNaturalNominalEnding, normalizeGeneratedCommentCandidate, normalizeGeneratedCommentWhitespace, openingRepetitionRate, positiveGrowthCriterion, repairSafeNominalEnding, replaceSelectedCommentText, resolveGeneratedEvidenceItemId, validateGeneratedComment, validateGeneratedCommentPart } from "../app/comment-generation-policy.ts";
 import { behaviorRepairInstruction, behaviorRepairPlan, behaviorRepairTargets } from "../app/behavior-repair-policy.ts";
 import { assertStrictGeneratedBehaviors, selectBehaviorCandidate } from "../app/behavior-persistence-policy.ts";
 import { validateRecord } from "../app/record-validation.ts";
@@ -90,6 +90,47 @@ test("safely repairs duplicated nominal endings without guessing irregular verbs
   assert.equal(repairSafeNominalEnding("식을 계산하는 수행임."), "식을 계산함.");
   assert.equal(repairSafeNominalEnding("생각을 표현하는 모습임."), "생각을 표현함.");
   assert.equal(repairSafeNominalEnding("길이를 재는 함."), "길이를 재는 함.");
+});
+
+test("reframes directly negative low criteria without changing the stored source", () => {
+  assert.equal(
+    positiveGrowthCriterion("하", "용수철저울을 사용해 물체의 무게를 비교하는 데 어려움을 겪는다."),
+    "용수철저울을 사용해 물체의 무게를 비교하는 활동에 참여하며 수행 방법을 익혀 간다.",
+  );
+  assert.equal(
+    positiveGrowthCriterion("하", "모둠에서 동물의 특징을 이용해 생활용품을 설계하는 데 협력을 하지 않는다."),
+    "모둠에서 동물의 특징을 이용해 생활용품을 설계하는 활동에 참여하며 협력하는 경험을 쌓아 간다.",
+  );
+  assert.equal(
+    positiveGrowthCriterion("하", "배추흰나비의 한살이를 관찰하였으나, 글과 그림으로 표현하지 못한다."),
+    "배추흰나비의 한살이를 관찰하고, 글과 그림으로 표현하는 활동에 참여한다.",
+  );
+  assert.equal(positiveGrowthCriterion("중", "협력을 하지 않는다."), "협력을 하지 않는다.");
+});
+
+test("creates a grounded nominal fallback from a declarative criterion", () => {
+  assert.equal(
+    criterionToSafeNominalSentence("모둠 친구들과 함께 동물의 특징을 이용해 생활용품을 설계한다."),
+    "모둠 친구들과 함께 동물의 특징을 이용해 생활용품을 설계함.",
+  );
+});
+
+test("rejects direct negative science-record expressions", () => {
+  for (const sentence of [
+    "용수철저울로 무게를 비교하는 데 어려움을 겪음.",
+    "모둠 활동에서 협력을 하지 않음.",
+    "관찰하였으나 글과 그림으로 표현하지 못하는 수준임.",
+  ]) assert.equal(validateGeneratedCommentPart(sentence).valid, false);
+});
+
+test("recognizes collaboration when the criterion explicitly contains group evidence", () => {
+  assert.deepEqual(
+    evidenceGroundingWarnings(
+      "모둠 활동에서 친구와 협력하여 동물의 특징을 이용한 생활용품을 설계함.",
+      "모둠 친구들과 함께 동물의 특징을 이용해 생활용품을 설계한다.",
+    ).filter((issue) => issue.includes("협력")),
+    [],
+  );
 });
 
 test("assigns only validated unique pool candidates and reports a shortage", () => {

@@ -7,7 +7,7 @@ import { generateCommentPoolBatch } from "../../../comment-pool-generation";
 import { generationModel } from "../../../ai-model-policy";
 import { MAX_COMMENT_AI_CALLS_PER_BATCH, MAX_COMMENT_DIVERSITY_CALLS_PER_BATCH } from "../../../comment-batching";
 import { CommentAreaPart, findCommentAreaOverlaps } from "../../../comment-area-diversity";
-import { evidenceBlockingIssues, validateGeneratedCommentPart } from "../../../comment-generation-policy";
+import { criterionToSafeNominalSentence, evidenceBlockingIssues, positiveGrowthCriterion, validateGeneratedCommentPart } from "../../../comment-generation-policy";
 
 export const maxDuration = 300;
 const MAX_GENERATION_ATTEMPTS = 5;
@@ -217,14 +217,25 @@ export async function POST(request: Request) {
         return validateGeneratedCommentPart(candidate.text, item.criterion ?? item.text).valid
           && evidenceBlockingIssues(candidate.text, item.text, item.criterion ?? item.text).length === 0;
       });
-      if (!fallback) continue;
-      const warning = "같은 평가영역·수준의 검증된 문장을 재사용하여 표현 중복 확인이 필요함";
+      const generationCriterion = positiveGrowthCriterion(item.level, item.criterion ?? item.text);
+      const deterministicText = criterionToSafeNominalSentence(generationCriterion);
+      const deterministicValid = !fallback
+        && validateGeneratedCommentPart(deterministicText, generationCriterion).valid
+        && evidenceBlockingIssues(
+          deterministicText,
+          `${item.text} | 생성용 기준: ${generationCriterion}`,
+          generationCriterion,
+        ).length === 0;
+      if (!fallback && !deterministicValid) continue;
+      const warning = fallback
+        ? "같은 평가영역·수준의 검증된 문장을 재사용하여 표현 중복 확인이 필요함"
+        : "평가기준을 안전한 명사형으로 변환하여 표현 중복 확인이 필요함";
       const reused = {
         studentId: entry.studentId,
         subject: entry.subject,
         assessmentIndex: item.assessmentIndex,
         evidence: item.text,
-        text: fallback.text,
+        text: fallback?.text ?? deterministicText,
         warnings: [warning],
       };
       generatedParts.set(key, reused);
