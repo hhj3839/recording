@@ -24,6 +24,11 @@ export type CommentPoolGroup = {
 
 const normalizedSentence = (value: string) => value.normalize("NFKC").replace(/\s+/g, "").replace(/[.!?。！？]/g, "");
 
+export function commentPoolCandidateCount(requiredCount: number) {
+  if (!Number.isInteger(requiredCount) || requiredCount < 1) return 0;
+  return requiredCount + Math.max(1, Math.ceil(requiredCount * 0.4));
+}
+
 function extractOutputText(payload: unknown): string {
   if (!payload || typeof payload !== "object") return "";
   const response = payload as { output_text?: unknown; output?: Array<{ content?: Array<{ type?: string; text?: string }> }> };
@@ -87,7 +92,9 @@ export function buildPublicCommentPoolRequests(groups: CommentPoolGroup[]) {
     repairIssues: group.repairIssues,
     lengthTarget: commentLengthTarget(group.criterion).label,
     requiredCount: group.members.length,
-    variantPlans: group.members.map((member, index) => ({ variant: index + 1, ...member.variation })),
+    candidateCount: commentPoolCandidateCount(group.members.length),
+    variantPlans: createCommentVariations(commentPoolCandidateCount(group.members.length))
+      .map((variation, index) => ({ variant: index + 1, ...variation })),
   }));
 }
 
@@ -167,8 +174,8 @@ export async function generateCommentPoolBatch(
       poolId: { type: "string", enum: [group.poolId] },
       candidates: {
         type: "array",
-        minItems: group.members.length,
-        maxItems: group.members.length,
+        minItems: commentPoolCandidateCount(group.members.length),
+        maxItems: commentPoolCandidateCount(group.members.length),
         items: { type: "string" },
       },
     },
@@ -187,7 +194,7 @@ export async function generateCommentPoolBatch(
       input: [
         {
           role: "system",
-          content: [{ type: "input_text", text: "당신은 초등학교 학교생활기록부 교과 평어의 검증 문장 풀을 작성한다. 학생 개인정보나 학생별 결과를 작성하지 않는다. 각 pool은 하나의 과목·평가영역·평가수준·평가기준에 대응한다. requiredCount만큼 서로 다른 완성 문장을 정확히 작성한다. 모든 후보는 동일한 평가기준의 필수 수행 요소와 수준 의미를 빠짐없이 보존하되 평가기준에 없는 활동·태도·도움·정확성·적극성·수식어를 추가하지 않는다. 상·중·하는 각각 잘함·보통·노력 요함에 대응하지만 실제 표현은 전달된 criterion만 근거로 한다. variantPlans는 사실을 추가하는 지시가 아니라 시작 방식·어순·동사 위치·문장 구조·명사형 종결을 서로 다르게 만드는 설계표이다. 후보끼리 완전히 같은 문장, 같은 첫 구절, 같은 문장 뼈대를 반복하지 않는다. 수행 대상과 동사의 관계를 바꾸지 않는다. 예를 들어 문장을 나누고 자료 내용을 표현한다는 기준을 자료 내용을 나눈다고 바꾸지 않는다. 각 문장은 자연스러운 관찰 기반 명사형 종결과 마침표로 끝낸다. 함·음·임·뛰어남·돋보임·인상적임 같은 자연스러운 명사형은 허용하지만 하였다·합니다·입니다·할 수 있다 같은 서술형은 사용하지 않는다. 길이는 목표일 뿐이며 사실성과 자연스러움을 우선한다. 제목·번호·설명은 출력하지 않는다." }],
+          content: [{ type: "input_text", text: "당신은 초등학교 학교생활기록부 교과 평어의 검증 문장 풀을 작성한다. 학생 개인정보나 학생별 결과를 작성하지 않는다. 각 pool은 하나의 과목·평가영역·평가수준·평가기준에 대응한다. 서버가 검수 후 requiredCount개를 고를 수 있도록 candidateCount만큼 서로 다른 완성 문장을 정확히 작성한다. 모든 후보는 동일한 평가기준의 필수 수행 요소와 수준 의미를 빠짐없이 보존하되 평가기준에 없는 활동·태도·도움·정확성·적극성·수식어를 추가하지 않는다. 상·중·하는 각각 잘함·보통·노력 요함에 대응하지만 실제 표현은 전달된 criterion만 근거로 한다. variantPlans는 사실을 추가하는 지시가 아니라 시작 방식·어순·동사 위치·문장 구조·명사형 종결을 서로 다르게 만드는 설계표이다. 후보끼리 완전히 같은 문장, 같은 첫 구절, 같은 문장 뼈대를 반복하지 않는다. 수행 대상과 동사의 관계를 바꾸지 않는다. 예를 들어 문장을 나누고 자료 내용을 표현한다는 기준을 자료 내용을 나눈다고 바꾸지 않는다. 각 문장은 자연스러운 관찰 기반 명사형 종결과 마침표로 끝낸다. 함·음·임·뛰어남·돋보임·인상적임 같은 자연스러운 명사형은 허용하지만 하였다·합니다·입니다·할 수 있다 같은 서술형은 사용하지 않는다. 길이는 목표일 뿐이며 사실성과 자연스러움을 우선한다. 제목·번호·설명은 출력하지 않는다." }],
         },
         {
           role: "user",
