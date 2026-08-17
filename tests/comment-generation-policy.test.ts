@@ -39,6 +39,18 @@ test("batches up to 25 students by subject and assessment area", () => {
   assert.equal(batches.every((batch) => batch.every((item) => item.subjectItems.length >= item.items.length)), true);
 });
 
+test("preserves the full subject evidence while batching a missing-area repair", () => {
+  const fullSubjectItems = Array.from({ length: 5 }, (_, assessmentIndex) => ({ assessmentIndex }));
+  const [batch] = batchCommentsByAssessmentArea([{
+    subject: "국어",
+    studentId: 1,
+    items: [fullSubjectItems[4]],
+    subjectItems: fullSubjectItems,
+  }]);
+  assert.deepEqual(batch[0].items.map((item) => item.assessmentIndex), [4]);
+  assert.deepEqual(batch[0].subjectItems.map((item) => item.assessmentIndex), [0, 1, 2, 3, 4]);
+});
+
 test("builds level pools without putting student identifiers in the AI pool request", () => {
   const evidence = [1, 2, 3].map((studentId) => ({
     studentId,
