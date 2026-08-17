@@ -1,12 +1,19 @@
 import { createHmac, timingSafeEqual } from "node:crypto";
 import { upsertRows } from "../db/supabase";
-import { commentEvidenceInstructions, commentLengthTarget, levelAppropriatenessIssues, repairSafeNominalEnding, evidenceBlockingIssues, evidenceGroundingWarnings, generatedCommentFailureMessage, hasCompleteEvidenceCoverage, resolveGeneratedEvidenceItemId, validateGeneratedCommentPart } from "./comment-generation-policy";
+import { commentEvidenceInstructions, commentLengthTarget, criterionSemanticIssues, levelAppropriatenessIssues, repairSafeNominalEnding, evidenceBlockingIssues, evidenceGroundingWarnings, generatedCommentFailureMessage, hasCompleteEvidenceCoverage, resolveGeneratedEvidenceItemId, validateGeneratedCommentPart } from "./comment-generation-policy";
 import { CommentVariation } from "./comment-variation";
 import { archiveComment } from "./record-revisions";
 import { primaryAiModel } from "./ai-model-policy";
 import { AiTokenUsage } from "./ai-usage";
 
-export type CommentEvidenceItem = { assessmentIndex: number; text: string; level?: "상" | "중" | "하"; criterion?: string };
+export type CommentLevelCriteria = { high: string; middle: string; low: string };
+export type CommentEvidenceItem = {
+  assessmentIndex: number;
+  text: string;
+  level?: "상" | "중" | "하";
+  criterion?: string;
+  levelCriteria?: CommentLevelCriteria;
+};
 export type CommentEvidence = {
   studentId: number;
   subject: string;
@@ -40,6 +47,7 @@ export async function generateCommentBatch(evidence: CommentEvidence[], avoidCom
     evidence: item.text,
     level: item.level,
     criterion: item.criterion,
+    levelCriteria: item.levelCriteria,
     levelRules: commentEvidenceInstructions(item.criterion ?? item.text).instruction,
     lengthTarget: commentLengthTarget(item.criterion ?? item.text).label,
   }]));
@@ -209,6 +217,11 @@ export async function generateCommentBatch(evidence: CommentEvidence[], avoidCom
         const blockingIssues = evidenceBlockingIssues(row.text, evidenceEntry.text, evidenceEntry.criterion ?? evidenceEntry.text);
         if (blockingIssues.length) {
           rejections.push({ studentId, subject, assessmentIndex: evidenceEntry.assessmentIndex, issues: blockingIssues });
+          continue;
+        }
+        const semanticIssues = criterionSemanticIssues(row.text, evidenceEntry.criterion ?? evidenceEntry.text, evidenceEntry.levelCriteria);
+        if (semanticIssues.length) {
+          rejections.push({ studentId, subject, assessmentIndex: evidenceEntry.assessmentIndex, issues: semanticIssues });
           continue;
         }
         acceptedSentenceRows.push(row);

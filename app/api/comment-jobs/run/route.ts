@@ -7,7 +7,7 @@ import { generateCommentPoolBatch } from "../../../comment-pool-generation";
 import { generationModel } from "../../../ai-model-policy";
 import { MAX_COMMENT_AI_CALLS_PER_BATCH, MAX_COMMENT_DIVERSITY_CALLS_PER_BATCH } from "../../../comment-batching";
 import { CommentAreaPart, findCommentAreaOverlaps } from "../../../comment-area-diversity";
-import { criterionToSafeNominalCandidates, evidenceBlockingIssues, levelAppropriatenessIssues, positiveGrowthCriterion, validateGeneratedCommentPart } from "../../../comment-generation-policy";
+import { criterionSemanticIssues, criterionToSafeNominalCandidates, evidenceBlockingIssues, levelAppropriatenessIssues, positiveGrowthCriterion, validateGeneratedCommentPart } from "../../../comment-generation-policy";
 
 export const maxDuration = 300;
 const MAX_GENERATION_ATTEMPTS = 5;
@@ -216,7 +216,8 @@ export async function POST(request: Request) {
         if (!sourceItem || sourceItem.level !== item.level) return false;
         return validateGeneratedCommentPart(candidate.text, item.criterion ?? item.text).valid
           && levelAppropriatenessIssues(candidate.text, item.level, item.criterion ?? item.text).length === 0
-          && evidenceBlockingIssues(candidate.text, item.text, item.criterion ?? item.text).length === 0;
+          && evidenceBlockingIssues(candidate.text, item.text, item.criterion ?? item.text).length === 0
+          && criterionSemanticIssues(candidate.text, item.criterion ?? item.text, item.levelCriteria).length === 0;
       });
       const generationCriterion = positiveGrowthCriterion(item.level, item.criterion ?? item.text);
       const usedSameLevel = new Set([...generatedParts.values()].flatMap((part) => {
@@ -232,7 +233,8 @@ export async function POST(request: Request) {
         return !usedSameLevel.has(candidateKey)
           && validateGeneratedCommentPart(candidate, generationCriterion).valid
           && levelAppropriatenessIssues(candidate, item.level, generationCriterion).length === 0
-          && evidenceBlockingIssues(candidate, `${item.text} | 생성용 기준: ${generationCriterion}`, generationCriterion).length === 0;
+          && evidenceBlockingIssues(candidate, `${item.text} | 생성용 기준: ${generationCriterion}`, generationCriterion).length === 0
+          && criterionSemanticIssues(candidate, generationCriterion, item.levelCriteria).length === 0;
       });
       if (!deterministicText && !fallback) continue;
       const warning = deterministicText
