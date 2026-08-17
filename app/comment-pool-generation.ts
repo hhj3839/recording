@@ -82,7 +82,12 @@ export function buildPublicCommentPoolRequests(groups: CommentPoolGroup[]) {
   }));
 }
 
-export function assignUniquePoolCandidates(group: CommentPoolGroup, rawCandidates: string[], referenceCandidates: string[] = []) {
+export function assignUniquePoolCandidates(
+  group: CommentPoolGroup,
+  rawCandidates: string[],
+  referenceCandidates: string[] = [],
+  allowReferenceFallback = false,
+) {
   const issues = new Set<string>();
   const validated = rawCandidates.flatMap((candidate, index) => {
     const text = ensureGeneratedCommentPeriod(candidate);
@@ -106,19 +111,32 @@ export function assignUniquePoolCandidates(group: CommentPoolGroup, rawCandidate
   });
   const seen = new Set<string>();
   const referenceKeys = new Set(referenceCandidates.map(normalizedSentence).filter(Boolean));
+  const referenceFallbacks: typeof validated = [];
   const deduplicated = validated.filter((candidate) => {
     const key = normalizedSentence(candidate.text);
-    if (!key || seen.has(key) || referenceKeys.has(key)) {
+    if (!key || seen.has(key)) {
       issues.add("완전히 같은 문장 후보 중복");
       return false;
     }
     seen.add(key);
+    if (referenceKeys.has(key)) {
+      issues.add("완전히 같은 문장 후보 중복");
+      referenceFallbacks.push(candidate);
+      return false;
+    }
     return true;
   });
   // 구조 유사도는 저장 차단 사유가 아니다. 동일한 평가기준에서는 근거를
   // 보존할수록 문장 구조가 닮을 수 있으므로, 아래 후보는 우선 저장하고
   // 작업 후반의 다양성 검사에서 겹친 영역만 한 번 재생성하거나 경고한다.
-  return { candidates: deduplicated.map((candidate) => candidate.text), issues: [...issues] };
+  const fallbackCandidates = allowReferenceFallback
+    ? referenceFallbacks.slice(0, Math.max(0, group.members.length - deduplicated.length))
+    : [];
+  return {
+    candidates: [...deduplicated, ...fallbackCandidates].map((candidate) => candidate.text),
+    fallbackKeys: new Set(fallbackCandidates.map((candidate) => normalizedSentence(candidate.text))),
+    issues: [...issues],
+  };
 }
 
 export async function generateCommentPoolBatch(
@@ -126,6 +144,7 @@ export async function generateCommentPoolBatch(
   avoidComments: string[] = [],
   repair = false,
   model = primaryAiModel(),
+  allowDuplicateFallback = false,
 ): Promise<CommentBatchResult> {
   const apiKey = process.env.OPENAI_API_KEY;
   if (!apiKey) throw new Error("AI 생성 설정이 아직 완료되지 않았습니다.");
@@ -206,7 +225,7 @@ export async function generateCommentPoolBatch(
     const rawCandidates = Array.isArray(poolCandidates)
       ? poolCandidates.filter((item): item is string => typeof item === "string")
       : [];
-    const assigned = assignUniquePoolCandidates(group, rawCandidates, avoidSentences);
+    const assigned = assignUniquePoolCandidates(group, rawCandidates, avoidSentences, allowDuplicateFallback);
     group.members.forEach((member, index) => {
       const text = assigned.candidates[index];
       if (!text) {
@@ -224,7 +243,12 @@ export async function generateCommentPoolBatch(
         assessmentIndex: member.item.assessmentIndex,
         evidence: member.item.text,
         text,
-        warnings: evidenceGroundingWarnings(text, member.item.text),
+        warnings: [
+          ...evidenceGroundingWarnings(text, member.item.text),
+          ...(assigned.fallbackKeys.has(normalizedSentence(text))
+            ? ["완전히 같은 문장을 임시 저장하여 다양화 또는 교사 확인이 필요함"]
+            : []),
+        ],
       });
     });
   }

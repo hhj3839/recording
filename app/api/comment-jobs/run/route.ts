@@ -144,6 +144,7 @@ export async function POST(request: Request) {
           [...[...generatedParts.values()].map((item) => item.text), ...avoidComments],
           attempt > 0,
           generationModel(attempt, MAX_GENERATION_ATTEMPTS),
+          attempt === MAX_GENERATION_ATTEMPTS - 1,
         );
         for (const part of generated.parts) {
           const key = `${part.studentId}|${part.subject}|${part.assessmentIndex}`;
