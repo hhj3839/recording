@@ -251,11 +251,23 @@ test("blocks invented methods and attitudes that are absent from the criterion",
 });
 
 test("blocks an invented speaking activity when the evidence only supports writing", () => {
-  const comment = "작품에서 느낀 재미와 감동을 말로 풀어 내고, 그런 느낌을 가지게 된 까닭을 함께 적는 모습이 안정적임.";
+  const comment = "작품에서 느낀 재미와 감동을 말로 풀어 내고, 그런 느낌을 가지게 된 까닭을 함께 적는 모습임.";
   const writingEvidence = "작품을 읽고 재미나 감동을 느낀 부분과 그 까닭이 무엇인지 쓸 수 있다.";
   assert.deepEqual(evidenceBlockingIssues(comment, writingEvidence), ["평가 근거에 없는 ‘말하기·발표 활동’ 표현"]);
   const speakingEvidence = "자신의 생각을 말로 표현하고 친구들 앞에서 발표할 수 있다.";
   assert.deepEqual(evidenceBlockingIssues(comment, speakingEvidence), []);
+});
+
+test("blocks invented summarizing activities and demeanor fillers", () => {
+  const writingEvidence = "작품에서 느낀 재미나 감동의 부분과 그 까닭을 쓸 수 있다.";
+  assert.deepEqual(
+    evidenceBlockingIssues("재미와 감동의 까닭을 쓰고 내용의 흐름을 간추려 표현하는 모습이 돋보임.", writingEvidence),
+    ["평가 근거에 없는 ‘내용 간추리기·정리하기’ 표현"],
+  );
+  assert.deepEqual(
+    evidenceBlockingIssues("작품에서 느낀 재미와 감동의 까닭을 차분하게 쓰는 모습임.", writingEvidence),
+    ["평가 근거에 없는 ‘관찰되지 않은 태도 수식어’ 표현"],
+  );
 });
 
 test("requires every independent performance element from the selected criterion", () => {

@@ -94,7 +94,7 @@ export async function generateCommentBatch(evidence: CommentEvidence[], avoidCom
   }));
   const avoidanceHints = [...new Set(avoidComments.map((item) => item.split(/[.!?]/)[0]?.trim().slice(0, 90)).filter(Boolean))].slice(0, 20);
   const repairInstruction = repair
-    ? "이전 응답에서 저장되지 않은 영역만 보완한다. 표현 다양화보다 평가기준의 수행 수준과 필수 조건을 빠짐없이 보존하는 것을 우선한다. 평가기준을 독립된 수행 요소로 나누어 하나도 생략하지 않는다. 특히 평가기준에 교사의 도움, 노력, 일부 수행, 나누기, 표현하기, 파악하기, 간추리기가 있으면 그 의미를 반드시 문장에 포함한다. 평가기준을 한 문장의 자연스러운 학교생활기록부 문체로 가깝게 바꾸어 쓰고, 입력에 없는 태도나 활동은 덧붙이지 않는다. 길이는 60~80자를 목표로 하고 최소 55자 이상으로 쓰며 itemId마다 정확히 한 문장을 반환한다."
+    ? "이전 응답에서 저장되지 않은 영역만 보완한다. 표현 다양화보다 평가기준의 수행 수준과 필수 조건을 빠짐없이 보존하는 것을 우선한다. 평가기준을 독립된 수행 요소로 나누어 하나도 생략하지 않는다. 특히 평가기준에 교사의 도움, 노력, 일부 수행, 나누기, 표현하기, 파악하기, 간추리기가 있으면 그 의미를 반드시 문장에 포함한다. 평가기준을 한 문장의 자연스러운 학교생활기록부 문체로 가깝게 바꾸어 쓰고, 입력에 없는 태도·활동·수행 방법은 덧붙이지 않는다. 길이를 늘리려고 차분하게·안정적으로·알차게·고르게·꾸준히 같은 수식어나 말하기·발표·간추리기 같은 새 활동을 추가하지 않는다. 60~80자는 목표일 뿐이며 근거만으로 자연스럽게 완성되면 더 짧아도 된다. itemId마다 정확히 한 문장을 반환한다."
     : "각 문장은 반드시 60자 이상 80자 이하를 목표로 하되 자연스러운 완성 문장을 우선한다. 각 영역의 itemVariations를 표현 방식으로만 적용하고 같은 요청 안에서 첫 10~15자를 반복하지 않는다.";
   const response = await fetch("https://api.openai.com/v1/responses", {
     method: "POST",
@@ -111,7 +111,7 @@ export async function generateCommentBatch(evidence: CommentEvidence[], avoidCom
         },
         {
           role: "user",
-          content: [{ type: "input_text", text: `${repairInstruction}\n근거 사전과 학생별 근거 ID를 연결하여 각각 교과 평어를 작성해 줘. 모든 text는 반드시 자연스러운 명사형 종결로 끝내고, 작성 후 행동·태도·과정·수행 정도를 연결된 근거와 대조하여 근거에서 확인할 수 없는 표현은 삭제해. itemVariations의 지시문 자체는 결과에 쓰지 마.\n근거 사전: ${JSON.stringify(evidenceDictionary)}\n학생 입력: ${JSON.stringify(requestEvidence)}\n피해야 할 기존 시작 표현: ${JSON.stringify(avoidanceHints)}` }],
+          content: [{ type: "input_text", text: `${repairInstruction}\n근거 사전과 학생별 근거 ID를 연결하여 각각 교과 평어를 작성해 줘. 각 text의 모든 행동·태도·과정·수행 방법은 연결된 itemId의 evidence와 criterion에서 직접 확인할 수 있어야 한다. 문장 다양화나 길이 확보를 위해 다른 itemId의 내용 또는 일반적인 칭찬·태도 수식어를 가져오지 않는다. 모든 text는 반드시 자연스러운 명사형 종결로 끝내고, 작성 후 연결된 근거에서 확인할 수 없는 표현은 삭제해. itemVariations의 지시문 자체는 결과에 쓰지 마.\n근거 사전: ${JSON.stringify(evidenceDictionary)}\n학생 입력: ${JSON.stringify(requestEvidence)}\n피해야 할 기존 시작 표현: ${JSON.stringify(avoidanceHints)}` }],
         },
       ],
       text: {
