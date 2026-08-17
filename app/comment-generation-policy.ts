@@ -307,8 +307,13 @@ export function isCommentLengthReviewIssue(issue: string) {
   return /^권장 (?:45~65|50~60|55~75|60~80|60~85)자 범위를 벗어난 \d+자 문장$/.test(issue.trim());
 }
 
+export function isCommentSimilarityReviewIssue(issue: string) {
+  return /(?:유사 표현|표현 유사도)/.test(issue.trim());
+}
+
 export function commentAreaIssuesForDisplay(status: string, issues: string[]) {
-  const visible = issues.filter((issue) => !isCommentLengthReviewIssue(issue));
+  const visible = issues.filter((issue) =>
+    !isCommentLengthReviewIssue(issue) && !isCommentSimilarityReviewIssue(issue));
   return status === "needs_review" || visible.length ? visible : [];
 }
 

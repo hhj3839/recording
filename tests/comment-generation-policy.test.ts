@@ -625,6 +625,12 @@ test("does not show sentence length as an area review issue", () => {
   );
 });
 
+test("does not show similar-expression diagnostics as an error type", () => {
+  assert.deepEqual(commentAreaIssuesForDisplay("warning", ["표현 유사도 84%"]), []);
+  assert.deepEqual(commentAreaIssuesForDisplay("needs_review", ["유사 표현 재생성이 완료되지 않아 교사 확인이 필요함"]), []);
+  assert.deepEqual(commentAreaIssuesForDisplay("needs_review", ["평가 기준의 필수 조건 누락"]), ["평가 기준의 필수 조건 누락"]);
+});
+
 test("replaces the exact selected range even when the same phrase is repeated", () => {
   const current = "자료를 분류함. 자료를 분류함.";
   const secondStart = current.lastIndexOf("자료를 분류함.");
