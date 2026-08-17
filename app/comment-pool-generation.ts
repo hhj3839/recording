@@ -1,5 +1,5 @@
 import { primaryAiModel } from "./ai-model-policy.ts";
-import { commentEvidenceInstructions, commentLengthTarget, repairSafeNominalEnding, evidenceBlockingIssues, evidenceGroundingWarnings, validateGeneratedCommentPart } from "./comment-generation-policy.ts";
+import { commentEvidenceInstructions, commentLengthTarget, positiveGrowthCriterion, repairSafeNominalEnding, evidenceBlockingIssues, evidenceGroundingWarnings, validateGeneratedCommentPart } from "./comment-generation-policy.ts";
 import type { AiTokenUsage } from "./ai-usage.ts";
 import type { CommentEvidence, CommentEvidenceItem, CommentBatchResult, GeneratedCommentPart, GeneratedCommentRejection } from "./comment-generation.ts";
 import { createCommentVariations, type CommentVariation } from "./comment-variation.ts";
@@ -42,7 +42,7 @@ export function buildCommentPoolGroups(evidence: CommentEvidence[], isolateMembe
   const groups = new Map<string, Omit<CommentPoolGroup, "poolId">>();
   for (const entry of evidence) {
     for (const item of entry.items) {
-      const criterion = item.criterion ?? item.text;
+      const criterion = positiveGrowthCriterion(item.level, item.criterion ?? item.text);
       const key = JSON.stringify([entry.subject, item.assessmentIndex, item.level ?? "", item.text, criterion, isolateMembers ? entry.studentId : ""]);
       const member = {
         studentId: entry.studentId,
@@ -112,7 +112,8 @@ export function assignUniquePoolCandidates(
       issues.add("문장 형식 또는 명사형 종결 검수 미통과");
       return [];
     }
-    const blocking = evidenceBlockingIssues(text, group.evidence, group.criterion);
+    const groundingEvidence = `${group.evidence} | 생성용 기준: ${group.criterion}`;
+    const blocking = evidenceBlockingIssues(text, groundingEvidence, group.criterion);
     if (blocking.length) {
       blocking.forEach((issue) => issues.add(issue));
       return [];
@@ -261,7 +262,7 @@ export async function generateCommentPoolBatch(
         evidence: member.item.text,
         text,
         warnings: [
-          ...evidenceGroundingWarnings(text, member.item.text),
+          ...evidenceGroundingWarnings(text, `${member.item.text} | 생성용 기준: ${group.criterion}`),
           ...(assigned.fallbackKeys.has(normalizedSentence(text))
             ? ["완전히 같은 문장을 임시 저장하여 다양화 또는 교사 확인이 필요함"]
             : []),

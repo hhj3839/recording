@@ -78,7 +78,32 @@ export const commentForbiddenExpressions = [
   "이해하지 못함",
   "소극적임",
   "불성실함",
+  "어려움을 겪음",
+  "어려움을 나타냄",
+  "협력을 하지 않음",
+  "협력하지 않음",
+  "표현하지 못",
+  "알고도",
+  "수준임",
 ];
+
+export function positiveGrowthCriterion(level: string | undefined, criterion: string) {
+  const normalized = normalizeGeneratedCommentWhitespace(criterion);
+  if (level !== "하") return normalized;
+  return normalized
+    .replace(/(.+?)하는 데 어려움을 겪는다\.?$/, "$1하는 활동에 참여하며 수행 방법을 익혀 간다.")
+    .replace(/(?:모둠에서\s*)?(.+?)하는 데 협력을 하지 않는다\.?$/, "모둠에서 $1하는 활동에 참여하며 협력하는 경험을 쌓아 간다.")
+    .replace(/(.+?)하였으나,?\s*(.+?)하지 못한다\.?$/, "$1하고, $2하는 활동에 참여한다.");
+}
+
+export function criterionToSafeNominalSentence(criterion: string) {
+  return normalizeGeneratedCommentWhitespace(criterion)
+    .replace(/한다\.$/, "함.")
+    .replace(/간다\.$/, "감.")
+    .replace(/된다\.$/, "됨.")
+    .replace(/있다\.$/, "있음.")
+    .replace(/이다\.$/, "임.");
+}
 
 export function hasNaturalNominalEnding(sentence: string) {
   const trimmed = sentence.trim();
@@ -183,8 +208,8 @@ const unsupportedGroundingConcepts: Array<{
   { label: "자신 있게", pattern: /자신(?:감)?있|자신감을?(?:가지|보이)/, blocking: false },
   { label: "적극적으로", pattern: /적극적/, blocking: false },
   { label: "자기주도적으로", pattern: /자기주도적/, blocking: false },
-  { label: "모둠원과 협력", pattern: /모둠(?:원)?.{0,4}(?:협력|협동)/, blocking: false },
-  { label: "친구와 협력", pattern: /친구.{0,4}(?:협력|협동)/, blocking: false },
+  { label: "모둠원과 협력", pattern: /모둠(?:원)?.{0,12}(?:협력|협동)/, evidencePattern: /모둠|협력|협동/, blocking: false },
+  { label: "친구와 협력", pattern: /친구.{0,8}(?:함께|협력|협동)/, evidencePattern: /친구.{0,8}함께|협력|협동/, blocking: false },
   { label: "끝까지", pattern: /(?:끝|마지막)까지/, blocking: true },
   { label: "성실하게", pattern: /성실/, blocking: true },
   { label: "꾸준히 참여", pattern: /(?:꾸준|지속적).{0,4}참여/, blocking: false },
