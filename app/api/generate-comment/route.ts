@@ -3,7 +3,7 @@ import { checkAiUsage, MONTHLY_AI_LIMIT, recordAiUsage } from "../../ai-usage";
 import { createCommentVariations } from "../../comment-variation";
 import { eq, selectRows } from "../../../db/supabase";
 import { primaryAiModel } from "../../ai-model-policy";
-import { normalizeGeneratedCommentWhitespace, replaceSelectedCommentText, validateGeneratedComment } from "../../comment-generation-policy";
+import { commentLengthTarget, normalizeGeneratedCommentWhitespace, replaceSelectedCommentText, validateGeneratedCommentPart } from "../../comment-generation-policy";
 
 type Level = "상" | "중" | "하" | "미응시" | "평가 예정" | "-";
 
@@ -132,8 +132,14 @@ export async function POST(request: Request) {
       .join("\n");
 
     const activeEvidenceCount = levels.filter((level) => ["상", "중", "하"].includes(level)).length;
+    const activeLengthTargets = plan.flatMap((item, index) => {
+      const level = levels[index];
+      if (!['상', '중', '하'].includes(level)) return [];
+      const criterion = level === "상" ? item.high : level === "중" ? item.middle : item.low;
+      return [{ assessmentIndex: index, criterion, target: commentLengthTarget(criterion).label }];
+    });
     const modeInstruction = mode === "regenerate"
-      ? `이 학생의 기존 평어를 참고하거나 수정하지 말고, 아래 평가 근거만 사용하여 평어 전체를 처음부터 새로 작성해 줘. 평가 영역마다 정확히 1문장씩 총 ${activeEvidenceCount}문장을 작성하고, 각 문장은 60~80자를 목표로 하며 반드시 자연스러운 명사형 종결과 마침표로 끝내. 근거에 없는 행동·태도·과정을 추가하지 마.`
+      ? `이 학생의 기존 평어를 참고하거나 수정하지 말고, 아래 평가 근거만 사용하여 평어 전체를 처음부터 새로 작성해 줘. 평가 영역마다 정확히 1문장씩 총 ${activeEvidenceCount}문장을 작성하고, 영역별 권장 길이 ${JSON.stringify(activeLengthTargets)}를 목표로 하며 반드시 자연스러운 명사형 종결과 마침표로 끝내. 길이를 채우려고 근거에 없는 행동·태도·과정을 추가하지 마.`
       : mode === "shorter"
       ? `기존 평어를 평가 근거에서 벗어나지 않게 더 짧고 간결하게 다시 작성해 줘.\n기존 평어: ${currentComment}`
       : mode === "specific"
@@ -195,8 +201,11 @@ export async function POST(request: Request) {
       ? normalizeGeneratedCommentWhitespace(rawGeneratedText)
       : rawGeneratedText;
     if (!generatedText) return Response.json({ error: "AI가 문장을 반환하지 않았습니다. 다시 시도해 주세요." }, { status: 502 });
-    if (mode === "regenerate" && !validateGeneratedComment(generatedText, activeEvidenceCount).valid) {
-      return Response.json({ error: "새 평어가 영역별 문장 형식 검수를 통과하지 못했습니다. 다시 시도해 주세요." }, { status: 502 });
+    if (mode === "regenerate") {
+      const sentences = generatedText.split(/(?<=\.)\s+/).map((sentence) => sentence.trim()).filter(Boolean);
+      const formatsOk = sentences.length === activeEvidenceCount && sentences.every((sentence, index) =>
+        validateGeneratedCommentPart(sentence, activeLengthTargets[index]?.criterion ?? "").valid);
+      if (!formatsOk) return Response.json({ error: "새 평어가 영역별 필수 형식 검수를 통과하지 못했습니다. 다시 시도해 주세요." }, { status: 502 });
     }
     const comment = mode === "selection"
       ? replaceSelectedCommentText(currentComment, generatedText, selectionStart, selectionEnd)

@@ -1,6 +1,12 @@
 import { randomInt } from "node:crypto";
 
-export type CommentVariation = { structure: string; opening: string; focusOrder: string };
+export type CommentVariation = {
+  structure: string;
+  opening: string;
+  focusOrder: string;
+  verbStrategy: string;
+  endingStyle: string;
+};
 
 const structures = ["수행 결과 중심", "근거의 행동 순서 중심", "대상과 행동 연결", "방법과 결과 연결", "핵심 행동의 어순 변환", "목적어와 서술어 연결"];
 const openings = [
@@ -14,6 +20,20 @@ const openings = [
   "수준 기준의 핵심 내용을 구체적인 행동으로 바꾸어 시작",
 ];
 const focusOrders = ["수행 대상 뒤 근거의 행동", "근거의 행동 뒤 수행 대상", "방법 뒤 근거의 결과", "근거의 결과 뒤 수행 방법"];
+const verbStrategies = [
+  "평가기준의 첫 동사를 그대로 시작에 쓰지 말고 문장 중간에 자연스럽게 배치",
+  "평가기준의 핵심 수행 동사를 문장 끝의 명사형 서술어로 배치",
+  "평가기준에 있는 두 수행을 연결하되 뒤 수행을 핵심 서술어로 배치",
+  "수행 대상과 결과를 먼저 제시하고 근거에 있는 동작을 뒤에서 설명",
+  "근거의 핵심 동작을 의미가 같은 자연스러운 학교생활기록부 표현으로 전환",
+];
+const endingStyles = [
+  "근거의 핵심 동작을 살린 자연스러운 ~함. 종결",
+  "능력이나 수행 정도가 근거에 있을 때만 ~뛰어남. 종결",
+  "태도가 근거에 있을 때만 ~돋보임. 종결, 없으면 수행 동사의 ~함. 종결",
+  "성장이나 변화가 근거에 있을 때만 ~인상적임. 종결, 없으면 수행 동사의 ~함. 종결",
+  "상태·이해가 근거에 적합하면 ~임.·~음. 종결, 아니면 수행 동사의 ~함. 종결",
+];
 
 function shuffled<T>(values: T[]) {
   const result = [...values];
@@ -28,9 +48,13 @@ export function createCommentVariations(count: number): CommentVariation[] {
   const structurePool = shuffled(structures);
   const openingPool = shuffled(openings);
   const orderPool = shuffled(focusOrders);
+  const verbPool = shuffled(verbStrategies);
+  const endingPool = shuffled(endingStyles);
   return Array.from({ length: count }, (_, index) => ({
     structure: structurePool[index % structurePool.length],
     opening: openingPool[index % openingPool.length],
     focusOrder: orderPool[(index + Math.floor(index / orderPool.length)) % orderPool.length],
+    verbStrategy: verbPool[(index + Math.floor(index / verbPool.length)) % verbPool.length],
+    endingStyle: endingPool[(index * 2 + Math.floor(index / endingPool.length)) % endingPool.length],
   }));
 }

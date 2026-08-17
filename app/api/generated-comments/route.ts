@@ -16,7 +16,7 @@ export async function GET() {
       }),
     ]);
     return Response.json({
-      comments: rows.map((row) => ({ studentId: row.student_id, subject: row.subject, comment: row.comment, candidates: row.candidates ?? [], confirmed: Boolean(row.confirmed), confirmedAt: row.confirmed_at, updatedAt: row.updated_at })),
+      comments: rows.map((row) => ({ studentId: row.student_id, subject: row.subject, comment: row.comment, candidates: row.candidates ?? [], generationLevels: row.generation_levels ?? [], confirmed: Boolean(row.confirmed), confirmedAt: row.confirmed_at, updatedAt: row.updated_at })),
       parts: partRows.map((row) => ({
         studentId: Number(row.student_id), subject: String(row.subject), assessmentIndex: Number(row.assessment_index),
         sentence: String(row.sentence), status: String(row.status), issues: Array.isArray(row.issues) ? row.issues : [],
@@ -29,13 +29,22 @@ export async function GET() {
 
 export async function PUT(request: Request) {
   try {
-    const body = await request.json() as { studentId?: unknown; subject?: unknown; comment?: unknown; confirmed?: unknown; discardPrevious?: unknown };
+    const body = await request.json() as { studentId?: unknown; subject?: unknown; comment?: unknown; confirmed?: unknown; discardPrevious?: unknown; generationLevels?: unknown };
     const studentId = Number(body.studentId);
     const subject = typeof body.subject === "string" ? body.subject : "";
     const comment = typeof body.comment === "string" ? body.comment.trim().slice(0, 4000) : "";
     if (!Number.isInteger(studentId) || !subject) return Response.json({ error: "평어 정보를 확인해 주세요." }, { status: 400 });
     const confirmed = body.confirmed === true;
     const discardPrevious = body.discardPrevious === true;
+    const generationLevels = Array.isArray(body.generationLevels)
+      ? body.generationLevels.flatMap((item) => {
+          if (!item || typeof item !== "object") return [];
+          const row = item as { assessmentIndex?: unknown; level?: unknown };
+          const assessmentIndex = Number(row.assessmentIndex);
+          const level = typeof row.level === "string" ? row.level : "";
+          return Number.isInteger(assessmentIndex) && ["상", "중", "하"].includes(level) ? [{ assessmentIndex, level }] : [];
+        })
+      : null;
     const validation = validateRecord(comment);
     const { user, classId } = await getDataScope();
     await requireOwnedStudentIds([studentId], user.id, classId);
@@ -62,6 +71,7 @@ export async function PUT(request: Request) {
     const updatedAt = new Date().toISOString();
     await upsertRows("generated_comments", [{
       student_id: studentId, subject, comment, confirmed, confirmed_at: confirmed ? updatedAt : null, updated_at: updatedAt, owner_email: user.email, owner_id: user.id, class_id: classId,
+      ...(generationLevels ? { generation_levels: generationLevels } : {}),
     }], "class_id,student_id,subject");
     return Response.json({ ok: true, confirmed, validation, updatedAt });
   } catch (error) {

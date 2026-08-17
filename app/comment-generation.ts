@@ -1,6 +1,6 @@
 import { createHmac, timingSafeEqual } from "node:crypto";
 import { upsertRows } from "../db/supabase";
-import { commentEvidenceInstructions, ensureGeneratedCommentPeriod, evidenceBlockingIssues, evidenceGroundingWarnings, generatedCommentFailureMessage, hasCompleteEvidenceCoverage, resolveGeneratedEvidenceItemId, validateGeneratedComment, validateGeneratedCommentPart } from "./comment-generation-policy";
+import { commentEvidenceInstructions, commentLengthTarget, ensureGeneratedCommentPeriod, evidenceBlockingIssues, evidenceGroundingWarnings, generatedCommentFailureMessage, hasCompleteEvidenceCoverage, resolveGeneratedEvidenceItemId, validateGeneratedCommentPart } from "./comment-generation-policy";
 import { CommentVariation } from "./comment-variation";
 import { archiveComment } from "./record-revisions";
 import { primaryAiModel } from "./ai-model-policy";
@@ -15,7 +15,7 @@ export type CommentEvidence = {
   variation?: CommentVariation;
   itemVariations?: Record<number, CommentVariation>;
 };
-export type GeneratedComment = { studentId: number; subject: string; comment: string; candidates: string[] };
+export type GeneratedComment = { studentId: number; subject: string; comment: string; candidates: string[]; generationLevels?: Array<{ assessmentIndex: number; level: string }> };
 export type GeneratedCommentPart = { studentId: number; subject: string; assessmentIndex: number; evidence: string; text: string; warnings: string[] };
 export type GeneratedCommentRejection = { studentId: number; subject: string; assessmentIndex: number; issues: string[] };
 export type CommentBatchResult = { comments: GeneratedComment[]; parts: GeneratedCommentPart[]; rejections: GeneratedCommentRejection[]; usage: AiTokenUsage };
@@ -39,6 +39,7 @@ export async function generateCommentBatch(evidence: CommentEvidence[], avoidCom
     level: item.level,
     criterion: item.criterion,
     levelRules: commentEvidenceInstructions(item.criterion ?? item.text).instruction,
+    lengthTarget: commentLengthTarget(item.criterion ?? item.text).label,
   }]));
   const evidenceIds = new Map(evidenceItems.map((item, index) => [item.key, `e${index + 1}`]));
   const requestEvidence = evidence.map((item) => ({
@@ -94,8 +95,8 @@ export async function generateCommentBatch(evidence: CommentEvidence[], avoidCom
   }));
   const avoidanceHints = [...new Set(avoidComments.map((item) => item.split(/[.!?]/)[0]?.trim().slice(0, 90)).filter(Boolean))].slice(0, 20);
   const repairInstruction = repair
-    ? "이전 응답에서 저장되지 않은 영역만 보완한다. 표현 다양화보다 평가기준의 수행 수준과 필수 조건을 빠짐없이 보존하는 것을 우선한다. 평가기준을 독립된 수행 요소로 나누어 하나도 생략하지 않는다. 특히 평가기준에 교사의 도움, 노력, 일부 수행, 나누기, 표현하기, 파악하기, 간추리기가 있으면 그 의미를 반드시 문장에 포함한다. 평가기준을 한 문장의 자연스러운 학교생활기록부 문체로 가깝게 바꾸어 쓰고, 입력에 없는 태도·활동·수행 방법은 덧붙이지 않는다. 길이를 늘리려고 차분하게·안정적으로·알차게·고르게·꾸준히 같은 수식어나 말하기·발표·간추리기 같은 새 활동을 추가하지 않는다. 60~80자는 목표일 뿐이며 근거만으로 자연스럽게 완성되면 더 짧아도 된다. itemId마다 정확히 한 문장을 반환한다."
-    : "각 문장은 반드시 60자 이상 80자 이하를 목표로 하되 자연스러운 완성 문장을 우선한다. 각 영역의 itemVariations를 표현 방식으로만 적용하고 같은 요청 안에서 첫 10~15자를 반복하지 않는다.";
+    ? "이전 응답에서 저장되지 않은 영역만 보완한다. 표현 다양화보다 평가기준의 수행 수준과 필수 조건을 빠짐없이 보존하는 것을 우선한다. 평가기준을 독립된 수행 요소로 나누어 하나도 생략하지 않는다. 특히 평가기준에 교사의 도움, 노력, 일부 수행, 나누기, 표현하기, 파악하기, 간추리기가 있으면 그 의미를 반드시 문장에 포함한다. 평가기준을 한 문장의 자연스러운 학교생활기록부 문체로 가깝게 바꾸어 쓰고, 입력에 없는 태도·활동·수행 방법은 덧붙이지 않는다. 길이를 늘리려고 차분하게·안정적으로·알차게·고르게·꾸준히 같은 수식어나 말하기·발표·간추리기 같은 새 활동을 추가하지 않는다. 근거 사전의 lengthTarget은 목표일 뿐이며 근거만으로 자연스럽게 완성되면 더 짧거나 길어도 된다. itemId마다 정확히 한 문장을 반환한다."
+    : "각 문장은 근거 사전의 lengthTarget을 목표로 하되 자연스러운 완성 문장과 사실 보존을 우선한다. 각 영역의 itemVariations는 시작·어순·동사 배치·종결 방식만 결정하며 입력에 없는 사실을 추가하는 지시가 아니다. 같은 요청 안에서 첫 10~15자와 문장 뼈대를 반복하지 않는다.";
   const response = await fetch("https://api.openai.com/v1/responses", {
     method: "POST",
     headers: { Authorization: `Bearer ${apiKey}`, "Content-Type": "application/json" },
@@ -107,7 +108,7 @@ export async function generateCommentBatch(evidence: CommentEvidence[], avoidCom
       input: [
         {
           role: "system",
-          content: [{ type: "input_text", text: "당신은 초등학교 담임교사의 학생평가 작성 전문가이며 학교생활기록부 교과학습발달상황에 사용할 교과 평어를 작성한다. 학생 입력의 itemIds에 연결된 각 평가 영역마다 해당 수준에 맞는 평가 문장을 정확히 1개씩 작성한다. 입력된 영역 개수와 문장 수는 반드시 같아야 하며 영역명·수준·평가기준을 그대로 근거로 삼고 입력에 없는 영역·수준·사실을 만들지 않는다. 평가기준 문장을 그대로 복사하지 말고 실제 관찰 가능한 행동 중심으로 자연스럽게 바꾸어 쓴다. 성취기준과 평가요소, 수업·평가 활동에서 수행한 내용과 결과가 구체적으로 드러나게 하고 일반적인 칭찬보다 구체적인 행동을 제시한다. 학습 태도는 연결된 평가 근거에서 확인되는 경우에만 수행 결과와 함께 기술한다. 모든 문장은 서로 다른 내용과 문형으로 긍정적이고 발전적인 관점에서 작성한다. 상은 잘함, 중은 보통, 하는 노력 요함에 대응하되 각 수준에 연결된 실제 기준만 반영한다. 상 수준은 입력된 상 기준에 나타난 수행 정도, 중 수준은 입력된 중 기준의 수행 범위, 하 수준은 입력된 하 기준의 도움·노력·과정을 그대로 반영한다. 다른 수준 기준에만 있는 정확하게·실감 나게·다양한 방법·이해하기 쉽게 같은 표현을 가져오지 않는다. 수준 이름만 보고 적극성·자기주도성·꾸준함·협력·교사의 도움을 추측하지 않으며, 이런 태도와 과정은 평가 근거에 같은 의미가 명시된 경우에만 쓴다. 근거에 없는 태도나 과정을 문장 길이 확보 또는 표현 다양화 목적으로 추가하지 않는다. 부족함, 미흡함, 못함, 어려워함, 이해하지 못함, 소극적임, 불성실함을 쓰지 않는다. 각 itemId마다 candidates를 정확히 1개 작성하고 후보는 {text} 형식의 완성 문장으로 작성한다. text는 60~80자를 목표로 한다. 모든 문장은 반드시 학교생활기록부에 적합한 관찰 기반 명사형 종결 표현과 마침표로 끝낸다. 허용 예시는 ‘정확하게 설명함.’, ‘적극적으로 참여함.’, ‘자신의 생각을 구체적으로 표현함.’, ‘문제를 해결하는 능력이 뛰어남.’, ‘학습 내용을 적용하는 태도가 돋보임.’, ‘꾸준히 성장하는 모습이 인상적임.’이다. 여기서 명사형 종결은 문자 그대로 ‘함.’만 뜻하지 않으며 함·음·임 계열의 자연스러운 표현을 뜻한다. ‘하였다.’, ‘합니다.’, ‘입니다.’, ‘할 수 있다.’, ‘모습이다.’ 같은 서술형 종결은 절대 사용하지 않는다. 서술어를 기계적으로 이어 붙이지 말고 문장 전체를 소리 내어 읽었을 때 자연스러운지 확인한다. 각 영역은 itemVariations의 시작 방식·문장 구조·전개 순서를 반영하되 ‘평가 활동’, ‘평가 요소’, ‘평가 근거’, ‘성취기준’, ‘수준 기준’ 같은 메타 표현을 결과 문장에 직접 쓰지 않는다. 같은 묶음에서는 학생마다 첫 10~15자, 첫 핵심 동사, 문장 구조가 서로 달라야 한다. 평가기준 원문의 첫 구절을 모든 학생에게 그대로 반복하지 않고 avoidComments에 포함된 기존 문장의 첫 구절도 다시 사용하지 않는다. 다양성을 위해 입력에 없는 활동이나 태도를 만들지는 않는다. 최종 본문은 입력 영역 순서대로 문장을 이어 붙인 한 문단이며 각 문장은 마침표 뒤 한 칸으로 구분한다. 제목·번호·설명·따옴표·상중하 표시는 쓰지 않는다. results 객체의 result1, result2 등 각 고정 슬롯을 빠짐없이 작성한다. 각 슬롯의 studentId와 subject는 스키마가 지정한 값을 그대로 사용하고 sentences는 지정된 itemIds와 같은 순서로 작성한다. candidates는 정확히 1개이다." }],
+          content: [{ type: "input_text", text: "당신은 초등학교 담임교사의 학생평가 작성 전문가이며 학교생활기록부 교과학습발달상황에 사용할 교과 평어를 작성한다. 학생 입력의 itemIds에 연결된 각 평가 영역마다 해당 수준에 맞는 평가 문장을 정확히 1개씩 작성한다. 입력된 영역 개수와 문장 수는 반드시 같아야 하며 영역명·수준·평가기준을 그대로 근거로 삼고 입력에 없는 영역·수준·사실을 만들지 않는다. 평가기준 문장을 그대로 복사하지 말고 실제 관찰 가능한 행동 중심으로 자연스럽게 바꾸어 쓴다. 성취기준과 평가요소, 수업·평가 활동에서 수행한 내용과 결과가 구체적으로 드러나게 하고 일반적인 칭찬보다 구체적인 행동을 제시한다. 학습 태도는 연결된 평가 근거에서 확인되는 경우에만 수행 결과와 함께 기술한다. 모든 문장은 서로 다른 내용과 문형으로 긍정적이고 발전적인 관점에서 작성한다. 상은 잘함, 중은 보통, 하는 노력 요함에 대응하되 각 수준에 연결된 실제 기준만 반영한다. 상 수준은 입력된 상 기준에 나타난 수행 정도, 중 수준은 입력된 중 기준의 수행 범위, 하 수준은 입력된 하 기준의 도움·노력·과정을 그대로 반영한다. 다른 수준 기준에만 있는 정확하게·실감 나게·다양한 방법·이해하기 쉽게 같은 표현을 가져오지 않는다. 수준 이름만 보고 적극성·자기주도성·꾸준함·협력·교사의 도움을 추측하지 않으며, 이런 태도와 과정은 평가 근거에 같은 의미가 명시된 경우에만 쓴다. 근거에 없는 태도나 과정을 문장 길이 확보 또는 표현 다양화 목적으로 추가하지 않는다. 부족함, 미흡함, 못함, 어려워함, 이해하지 못함, 소극적임, 불성실함을 쓰지 않는다. 각 itemId마다 candidates를 정확히 1개 작성하고 후보는 {text} 형식의 완성 문장으로 작성한다. text는 근거 사전의 lengthTarget을 목표로 하되 평가기준의 정보량보다 길이를 우선하지 않는다. 짧은 기준을 억지로 늘리지 않고 모든 핵심 수행 요소를 담은 자연스러운 문장을 작성한다. 모든 문장은 반드시 학교생활기록부에 적합한 관찰 기반 명사형 종결 표현과 마침표로 끝낸다. 허용 예시는 ‘정확하게 설명함.’, ‘적극적으로 참여함.’, ‘자신의 생각을 구체적으로 표현함.’, ‘문제를 해결하는 능력이 뛰어남.’, ‘학습 내용을 적용하는 태도가 돋보임.’, ‘꾸준히 성장하는 모습이 인상적임.’이다. 여기서 명사형 종결은 문자 그대로 ‘함.’만 뜻하지 않으며 함·음·임 계열의 자연스러운 표현을 뜻한다. ‘하였다.’, ‘합니다.’, ‘입니다.’, ‘할 수 있다.’, ‘모습이다.’ 같은 서술형 종결은 절대 사용하지 않는다. 서술어를 기계적으로 이어 붙이지 말고 문장 전체를 소리 내어 읽었을 때 자연스러운지 확인한다. 각 영역은 itemVariations의 시작 방식·문장 구조·전개 순서·동사 배치·종결 방식을 표현상의 차이로만 반영하되 ‘평가 활동’, ‘평가 요소’, ‘평가 근거’, ‘성취기준’, ‘수준 기준’ 같은 메타 표현을 결과 문장에 직접 쓰지 않는다. 같은 묶음에서는 학생마다 첫 10~15자, 첫 핵심 동사, 문장 구조가 서로 달라야 한다. 평가기준 원문의 첫 구절을 모든 학생에게 그대로 반복하지 않고 avoidComments에 포함된 기존 문장의 첫 구절도 다시 사용하지 않는다. 다양성을 위해 입력에 없는 활동이나 태도를 만들지는 않는다. 사실성과 수준 의미가 다양성보다 항상 우선한다. 최종 본문은 입력 영역 순서대로 문장을 이어 붙인 한 문단이며 각 문장은 마침표 뒤 한 칸으로 구분한다. 제목·번호·설명·따옴표·상중하 표시는 쓰지 않는다. results 객체의 result1, result2 등 각 고정 슬롯을 빠짐없이 작성한다. 각 슬롯의 studentId와 subject는 스키마가 지정한 값을 그대로 사용하고 sentences는 지정된 itemIds와 같은 순서로 작성한다. candidates는 정확히 1개이다." }],
         },
         {
           role: "user",
@@ -183,7 +184,7 @@ export async function generateCommentBatch(evidence: CommentEvidence[], avoidCom
       const evidenceEntry = source?.items.find((entry) =>
         evidenceIds.get(`${studentId}|${subject}|${entry.assessmentIndex}`) === row.itemId);
       if (evidenceEntry) {
-        const format = validateGeneratedCommentPart(row.text);
+        const format = validateGeneratedCommentPart(row.text, evidenceEntry.criterion ?? evidenceEntry.text);
         if (!format.valid) {
           rejections.push({
             studentId,
@@ -210,24 +211,23 @@ export async function generateCommentBatch(evidence: CommentEvidence[], avoidCom
           assessmentIndex: evidenceEntry.assessmentIndex,
           evidence: evidenceEntry.text,
           text: row.text,
-          warnings: evidenceGroundingWarnings(row.text, evidenceEntry.text),
+          warnings: [...format.warnings, ...evidenceGroundingWarnings(row.text, evidenceEntry.text)],
         });
       }
     }
     const complete = hasCompleteEvidenceCoverage(expectedIds, acceptedSentenceRows.map((row) => row.itemId));
     const ordered = expectedIds.map((id) => acceptedSentenceRows.find((row) => row.itemId === id)?.text ?? "");
     const sentenceFormatsOk = ordered.length > 0
-      && ordered.every((sentence) => validateGeneratedCommentPart(sentence).valid);
+      && ordered.every((sentence, index) => validateGeneratedCommentPart(sentence, source?.items[index]?.criterion ?? source?.items[index]?.text ?? "").valid);
     if (!complete || !sentenceFormatsOk) {
       failureMessages.push(generatedCommentFailureMessage({
         expectedIds,
         returnedIds: acceptedSentenceRows.map((row) => row.itemId),
-        invalidSentenceCount: ordered.filter((sentence) => !sentence || !validateGeneratedCommentPart(sentence).valid).length,
+        invalidSentenceCount: ordered.filter((sentence, index) => !sentence || !validateGeneratedCommentPart(sentence, source?.items[index]?.criterion ?? source?.items[index]?.text ?? "").valid).length,
       }));
     }
     const candidates = sentenceFormatsOk ? [ordered.join(" ")] : [];
-    const format = candidates.length ? validateGeneratedComment(candidates[0], expectedIds.length) : null;
-    return allowed.has(`${studentId}|${subject}`) && candidates.length && complete && format?.valid
+    return allowed.has(`${studentId}|${subject}`) && candidates.length && complete
       ? [{ studentId, subject, comment: candidates[0], candidates }]
       : [];
   }) : [];
@@ -272,6 +272,7 @@ export async function saveGeneratedComments(input: {
     subject: item.subject,
     comment: item.comment,
     candidates: item.candidates,
+    generation_levels: item.generationLevels ?? [],
     confirmed: false,
     confirmed_at: null,
     updated_at: updatedAt,

@@ -68,7 +68,7 @@ const navItems: { id: View; label: string; icon: string }[] = [
   { id: "behavior", label: "행동특성", icon: "◎" },
 ];
 
-function ReviewWarning({ issues }: { issues: string[] }) {
+function ReviewWarning({ issues, label = "오류", advisory = false }: { issues: string[]; label?: string; advisory?: boolean }) {
   const warningRef = useRef<HTMLButtonElement>(null);
   const [open, setOpen] = useState(false);
   const [position, setPosition] = useState({ left: 12, top: 12 });
@@ -92,8 +92,8 @@ function ReviewWarning({ issues }: { issues: string[] }) {
     setOpen(true);
   };
   return <div className="review-warning-wrap">
-    <button ref={warningRef} className="review-warning" type="button" aria-expanded={open} onMouseEnter={show} onMouseLeave={() => { if (document.activeElement !== warningRef.current) setOpen(false); }} onFocus={show} onBlur={() => setOpen(false)} onClick={show}>⚠ 오류 {issues.length}건</button>
-    {open && createPortal(<span className="review-warning-tooltip" role="tooltip" style={{ left: position.left, top: position.top }}><strong>검수 필요 사항</strong>{issues.map((issue, issueIndex) => <i key={issueIndex}>{issue}</i>)}</span>, document.body)}
+    <button ref={warningRef} className={`review-warning${advisory ? " advisory" : ""}`} type="button" aria-expanded={open} onMouseEnter={show} onMouseLeave={() => { if (document.activeElement !== warningRef.current) setOpen(false); }} onFocus={show} onBlur={() => setOpen(false)} onClick={show}>⚠ {label} {issues.length}건</button>
+    {open && createPortal(<span className={`review-warning-tooltip${advisory ? " advisory" : ""}`} role="tooltip" style={{ left: position.left, top: position.top }}><strong>{advisory ? "교사 확인 권장 사항" : "검수 필요 사항"}</strong>{issues.map((issue, issueIndex) => <i key={issueIndex}>{issue}</i>)}</span>, document.body)}
   </div>;
 }
 
@@ -982,9 +982,12 @@ function Assessments({ data, setData, plan, activeSubject, setActiveSubject, onS
 function Comments({ assessmentDataBySubject, plan, roster }: { assessmentDataBySubject: Record<string, AssessmentStudent[]>; plan: AssessmentPlan[]; roster: AssessmentStudent[] }) {
   type CommentJob = { id: string; status: string; subject: string; totalItems: number; completedItems: number; failedItems: number; totalBatches: number; currentBatch: number; error?: string; completedAt?: string | null };
   type CommentSelection = { text: string; start: number; end: number };
+  type CommentGenerationMode = "empty" | "modified" | "all";
+  type GeneratedLevel = { assessmentIndex: number; level: string };
   const subjects = [...new Set(plan.map((item) => item.subject))];
   const [selectedSubject, setSelectedSubject] = useState(subjects[0] ?? "국어");
   const [comments, setComments] = useState<Record<string, string>>({});
+  const [generatedLevels, setGeneratedLevels] = useState<Record<string, GeneratedLevel[]>>({});
   const [commentParts, setCommentParts] = useState<Array<{ studentId: number; subject: string; assessmentIndex: number; sentence: string; status: string; issues: string[] }>>([]);
   const [loading, setLoading] = useState(false);
   const [generationProgress, setGenerationProgress] = useState("");
@@ -995,16 +998,19 @@ function Comments({ assessmentDataBySubject, plan, roster }: { assessmentDataByS
   const [activeJob, setActiveJob] = useState<CommentJob | null>(null);
   const [rewriteBusyKey, setRewriteBusyKey] = useState("");
   const [selectedText, setSelectedText] = useState<Record<string, CommentSelection>>({});
+  const [generationDialogOpen, setGenerationDialogOpen] = useState(false);
+  const [generationMode, setGenerationMode] = useState<CommentGenerationMode>("modified");
   const loadGeneratedComments = useCallback(async () => {
     try {
       const response = await fetch("/api/generated-comments", { cache: "no-store" });
       const result = await response.json() as {
-        comments?: Array<{ studentId: number; subject: string; comment: string; candidates: string[]; confirmed: boolean; updatedAt: string }>;
+        comments?: Array<{ studentId: number; subject: string; comment: string; candidates: string[]; generationLevels: GeneratedLevel[]; confirmed: boolean; updatedAt: string }>;
         parts?: Array<{ studentId: number; subject: string; assessmentIndex: number; sentence: string; status: string; issues: string[] }>;
       };
       if (!response.ok) return;
       setCommentParts(result.parts ?? []);
       setComments(Object.fromEntries((result.comments ?? []).map((item) => [`${item.studentId}|${item.subject}`, item.comment])));
+      setGeneratedLevels(Object.fromEntries((result.comments ?? []).map((item) => [`${item.studentId}|${item.subject}`, item.generationLevels ?? []])));
       setSubjectGeneratedAt((result.comments ?? []).reduce<Record<string, string>>((latest, item) => {
         if (!latest[item.subject] || latest[item.subject] < item.updatedAt) latest[item.subject] = item.updatedAt;
         return latest;
@@ -1066,29 +1072,41 @@ function Comments({ assessmentDataBySubject, plan, roster }: { assessmentDataByS
       setError("클립보드 복사 권한을 확인해 주세요.");
     }
   };
-  const generateSubjectComments = async (retryStudentIds?: number[]) => {
+  const currentLevelSnapshot = (studentId: number) => {
+    const student = assessmentDataBySubject[selectedSubject]?.find((item) => item.id === studentId);
+    return (student?.assessments ?? []).flatMap((level, assessmentIndex) =>
+      ["상", "중", "하"].includes(level) ? [{ assessmentIndex, level }] : []);
+  };
+  const sameLevelSnapshot = (left: GeneratedLevel[], right: GeneratedLevel[]) =>
+    JSON.stringify([...left].sort((a, b) => a.assessmentIndex - b.assessmentIndex))
+      === JSON.stringify([...right].sort((a, b) => a.assessmentIndex - b.assessmentIndex));
+  const subjectEligibleIds = (assessmentDataBySubject[selectedSubject] ?? [])
+    .filter((student) => student.assessments.some((level) => ["상", "중", "하"].includes(level)))
+    .map((student) => student.id);
+  const emptySubjectIds = subjectEligibleIds.filter((id) => !comments[`${id}|${selectedSubject}`]?.trim());
+  const modifiedSubjectIds = subjectEligibleIds.filter((id) => {
+    const saved = generatedLevels[`${id}|${selectedSubject}`] ?? [];
+    return Boolean(comments[`${id}|${selectedSubject}`]?.trim()) && saved.length > 0 && !sameLevelSnapshot(saved, currentLevelSnapshot(id));
+  });
+  const subjectGenerationModeCount = (mode: CommentGenerationMode) => mode === "empty"
+    ? emptySubjectIds.length : mode === "modified" ? modifiedSubjectIds.length : subjectEligibleIds.length;
+  const openSubjectGenerationDialog = () => {
+    if (!roster.length) return setError("등록된 학생이 없습니다.");
+    if (!subjectEligibleIds.length) return setError(`${selectedSubject}에서 상·중·하 평가수준이 입력된 학생이 없습니다.`);
+    setGenerationMode(modifiedSubjectIds.length ? "modified" : emptySubjectIds.length ? "empty" : "all");
+    setGenerationDialogOpen(true);
+    setError("");
+  };
+  const generateSubjectComments = async (mode: CommentGenerationMode) => {
     if (!roster.length) return setError("등록된 학생이 없습니다.");
     const subjectStudents = assessmentDataBySubject[selectedSubject] ?? [];
-    const eligibleIds = subjectStudents
-      .filter((student) => student.assessments.some((level) => ["상", "중", "하"].includes(level)))
-      .map((student) => student.id);
+    const eligibleIds = subjectEligibleIds;
     if (!eligibleIds.length) return setError(`${selectedSubject}에서 상·중·하 평가수준이 입력된 학생이 없습니다.`);
-    const isRetry = Boolean(retryStudentIds?.length);
-    let targetIds = retryStudentIds?.length ? retryStudentIds.filter((id) => eligibleIds.includes(id)) : eligibleIds;
-    let overwriteExisting = false;
-    if (!retryStudentIds?.length) {
-      const filledIds = eligibleIds.filter((id) => Boolean(comments[`${id}|${selectedSubject}`]?.trim()));
-      if (filledIds.length) {
-        if (window.confirm(`${selectedSubject} 평어가 ${filledIds.length}명에게 이미 있습니다.\n\n확인: 비어 있는 학생만 생성\n취소: 다른 선택 보기`)) {
-          targetIds = eligibleIds.filter((id) => !filledIds.includes(id));
-        } else if (window.confirm(`기존 ${filledIds.length}명의 평어도 덮어쓰고 ${eligibleIds.length}명 전체를 다시 생성할까요?\n교사가 수정한 내용도 바뀝니다.`)) overwriteExisting = true;
-        else return;
-      }
-    }
-    if (!targetIds.length) return setError(isRetry
-      ? `${selectedSubject}에서 다시 생성할 수 있는 학생이 없습니다.`
-      : `${selectedSubject} 평어가 모든 생성 대상 학생에게 이미 작성되어 있습니다.`);
+    const targetIds = mode === "empty" ? emptySubjectIds : mode === "modified" ? modifiedSubjectIds : eligibleIds;
+    const overwriteExisting = mode !== "empty";
+    if (!targetIds.length) return setError(mode === "empty" ? "결과가 비어 있는 학생이 없습니다." : "평가수준을 수정한 학생이 없습니다.");
     setLoading(true);
+    setGenerationDialogOpen(false);
     setError("");
     setGenerationProgress("작업 등록 중…");
     try {
@@ -1124,16 +1142,17 @@ function Comments({ assessmentDataBySubject, plan, roster }: { assessmentDataByS
     const result = await response.json() as { error?: string };
     if (!response.ok) return setError(result.error || "교과 평어를 초기화하지 못했습니다.");
     setComments((current) => Object.fromEntries(Object.entries(current).filter(([key]) => !key.endsWith(`|${selectedSubject}`))));
+    setGeneratedLevels((current) => Object.fromEntries(Object.entries(current).filter(([key]) => !key.endsWith(`|${selectedSubject}`))));
     setCommentParts((current) => current.filter((part) => part.subject !== selectedSubject));
     setSubjectGeneratedAt((current) => { const next = { ...current }; delete next[selectedSubject]; return next; });
     setError("");
   };
-  const saveComment = async (studentId: number, subject: string, comment: string) => {
+  const saveComment = async (studentId: number, subject: string, comment: string, generationLevelSnapshot?: GeneratedLevel[]) => {
     try {
       const response = await fetch("/api/generated-comments", {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ studentId, subject, comment, confirmed: false }),
+        body: JSON.stringify({ studentId, subject, comment, confirmed: false, generationLevels: generationLevelSnapshot }),
       });
       const result = await response.json() as { error?: string };
       if (!response.ok) throw new Error(result.error || "평어를 저장하지 못했습니다.");
@@ -1183,7 +1202,10 @@ function Comments({ assessmentDataBySubject, plan, roster }: { assessmentDataByS
       const result = await response.json() as { comment?: string; error?: string };
       if (!response.ok || !result.comment) throw new Error(result.error || "평어를 다시 작성하지 못했습니다.");
       setComments((current) => ({ ...current, [key]: result.comment! }));
-      await saveComment(studentId, subject, result.comment);
+      const nextGenerationLevels = (assessment.assessments ?? []).flatMap((level, assessmentIndex) =>
+        ["상", "중", "하"].includes(level) ? [{ assessmentIndex, level }] : []);
+      await saveComment(studentId, subject, result.comment, nextGenerationLevels);
+      setGeneratedLevels((current) => ({ ...current, [key]: nextGenerationLevels }));
       setCommentParts((current) => current.filter((part) => part.studentId !== studentId || part.subject !== subject));
       if (mode === "selection") {
         setSelectedText((current) => { const next = { ...current }; delete next[key]; return next; });
@@ -1204,17 +1226,39 @@ function Comments({ assessmentDataBySubject, plan, roster }: { assessmentDataByS
   const completedCount = roster.filter((student) =>
     eligibleStudentIds.has(student.id) && Boolean(comments[`${student.id}|${selectedSubject}`])).length;
   const selectedSubjectIsGenerating = loading && activeJob?.subject === selectedSubject;
+  const selectedSubjectParts = commentParts.filter((part) => part.subject === selectedSubject);
+  const failedAreaCount = selectedSubjectParts.filter((part) => part.status === "needs_review").length;
+  const reviewAreaCount = selectedSubjectParts.filter((part) =>
+    part.status === "warning" && commentAreaIssuesForDisplay(part.status, part.issues).length > 0).length;
+  const completedAreaCount = selectedSubjectParts.filter((part) => ["complete", "warning"].includes(part.status)).length;
   return (
     <section>
       <div className="page-heading comments-page-heading">
         <div><p className="eyebrow">작성 결과</p><h1>교과 평어</h1><p>평가수준 입력을 마친 과목부터 학생별 평어를 생성할 수 있습니다.</p></div>
         <div className="subject-generation-controls">
           <div><span>{formattedLastGeneratedAt ? `마지막 생성 ${formattedLastGeneratedAt}` : "생성 기록 없음"}</span><strong>{eligibleCount}명 중 {completedCount}명 생성 완료</strong></div>
-          <button className="subject-generate-button" onClick={() => void generateSubjectComments()} disabled={loading || !eligibleCount}>{selectedSubjectIsGenerating ? generationProgress || `${selectedSubject} 생성 중…` : `✦ ${selectedSubject} 평어 생성`}</button>
+          <button className="subject-generate-button" onClick={openSubjectGenerationDialog} disabled={loading || !eligibleCount}>{selectedSubjectIsGenerating ? generationProgress || `${selectedSubject} 생성 중…` : `✦ ${selectedSubject} 평어 생성`}</button>
           <button className="secondary result-copy-button" onClick={() => void copySubjectComments()} disabled={!roster.some((student) => comments[`${student.id}|${selectedSubject}`])}>{copied ? "복사됨 ✓" : "평어만 복사하기"}</button>
           <button className="subject-reset-button" title="학생 명단·평가계획·평가수준은 유지하고 현재 과목의 생성된 평어만 초기화합니다." onClick={() => void clearSubjectComments()} disabled={loading || !completedCount}><span aria-hidden="true">↺</span>{selectedSubject} 결과 초기화</button>
         </div>
       </div>
+      {generationDialogOpen && <div className="generation-dialog-backdrop" onMouseDown={(event) => { if (event.target === event.currentTarget) setGenerationDialogOpen(false); }}>
+        <div className="generation-dialog" role="dialog" aria-modal="true" aria-labelledby="comment-generation-title">
+          <div><p className="eyebrow">AI 생성</p><h2 id="comment-generation-title">{selectedSubject} 평어 생성 대상 선택</h2><p>생성할 학생 범위를 선택하세요. 기존 결과는 선택한 범위에 따라서만 교체됩니다.</p></div>
+          <div className="generation-options">
+            {([
+              ["empty", "결과가 비어 있는 학생만 생성", "기존 평어를 유지하고 아직 작성되지 않은 학생만 생성합니다."],
+              ["modified", "평가수준을 수정한 학생만 생성", "마지막 생성 이후 상·중·하 입력이 달라진 학생만 다시 생성합니다."],
+              ["all", "생성 대상 학생 전체 다시 생성", "해당 과목의 기존 평어를 포함해 대상 학생 전체를 새로 생성합니다."],
+            ] as const).map(([mode, title, description]) => <label className={generationMode === mode ? "selected" : ""} key={mode}>
+              <input type="radio" name="comment-generation-mode" value={mode} checked={generationMode === mode} onChange={() => setGenerationMode(mode)} />
+              <span><strong>{title}</strong><small>{description}</small></span><b>{subjectGenerationModeCount(mode)}명</b>
+            </label>)}
+          </div>
+          {generationMode === "all" && completedCount > 0 && <p className="generation-overwrite-warning">기존 {selectedSubject} 평어가 새 결과로 교체됩니다.</p>}
+          <div className="generation-dialog-actions"><button className="secondary" onClick={() => setGenerationDialogOpen(false)}>취소</button><button onClick={() => void generateSubjectComments(generationMode)} disabled={subjectGenerationModeCount(generationMode) === 0}>{subjectGenerationModeCount(generationMode)}명 생성하기</button></div>
+        </div>
+      </div>}
       <div className="review-layout comments-review-layout">
         <div className="review-content">
           <div className="workspace-toolbar comments-toolbar comments-subject-toolbar">
@@ -1222,7 +1266,13 @@ function Comments({ assessmentDataBySubject, plan, roster }: { assessmentDataByS
           </div>
           {error && <p className="generation-error">! {error}</p>}
           {notice && <p className="student-message" role="status">{notice}</p>}
-          {selectedSubjectIsGenerating && <div className="comment-loading class-loading"><span>✦</span><p>{selectedSubject} 평어를 생성하고 있어요. 페이지를 이동해도 계속 진행됩니다.</p></div>}
+          {(selectedSubjectIsGenerating || selectedSubjectParts.length > 0) && <div className="comment-generation-status" role="status">
+            {selectedSubjectIsGenerating && <span className="running">자동 생성·보완 중 <b>{generationProgress || `${activeJob?.completedItems ?? 0}/${activeJob?.totalItems ?? 0}`}</b></span>}
+            {completedAreaCount > 0 && <span className="complete">저장 완료 <b>{completedAreaCount}영역</b></span>}
+            {reviewAreaCount > 0 && <span className="review">교사 확인 권장 <b>{reviewAreaCount}영역</b></span>}
+            {failedAreaCount > 0 && <span className="failed">생성 실패 <b>{failedAreaCount}영역</b></span>}
+          </div>}
+          {selectedSubjectIsGenerating && <div className="comment-loading class-loading"><span>✦</span><p>{selectedSubject} 평어를 생성하고 있어요. 성공한 영역은 바로 저장되며 페이지를 이동해도 계속 진행됩니다.</p></div>}
           <div className="comments-table-wrap">
             <table className="comments-table subject-comments-table">
               <thead><tr><th>번호</th><th>이름</th><th>평어</th><th>검수</th></tr></thead>
@@ -1246,6 +1296,8 @@ function Comments({ assessmentDataBySubject, plan, roster }: { assessmentDataByS
                     return reasons.map((reason) => `${domain} 영역: ${reason}`);
                   }),
                 ];
+                const hasBlockingCommentIssue = !validation.endingsOk || validation.forbidden.length > 0
+                  || areaIssues.some((part) => part.status === "needs_review");
                 const comparisons = roster.filter((other) => other.id !== student.id).map((other) => ({
                   student: other,
                   ...recordSimilarityDetails(text, comments[`${other.id}|${selectedSubject}`] ?? ""),
@@ -1272,7 +1324,7 @@ function Comments({ assessmentDataBySubject, plan, roster }: { assessmentDataByS
                     {selectedText[key] && <small className="comment-selection-hint">“{selectedText[key].text.slice(0, 36)}{selectedText[key].text.length > 36 ? "…" : ""}” 선택됨</small>}
                   </td>
                   <td className="validation-cell issue-only-validation comment-review-cell">
-                    <div className="comment-review-controls"><ReviewWarning issues={commentReviewIssues} />{similarStudents.length > 0 && closest && <div className="similarity-detail compact-similarity"><strong>{closest.student.name} 학생과 {Math.round(closest.score * 100)}%</strong></div>}<div className="comment-row-actions review-cell-actions comment-review-actions"><button className="regenerate-button" disabled={!hasLevel || !!rewriteBusyKey} onMouseDown={(event) => event.preventDefault()} onClick={() => void rewriteComment(student.id, selectedSubject, "regenerate")}>{rewriteBusyKey === `${key}|regenerate` ? "생성 중…" : "다시 생성"}</button><button disabled={!selectedText[key] || !!rewriteBusyKey} title={selectedText[key] ? "선택한 부분만 평가 근거에 맞게 바꿉니다." : "평어에서 바꿀 문장이나 표현을 먼저 선택하세요."} onMouseDown={(event) => event.preventDefault()} onClick={() => void rewriteComment(student.id, selectedSubject, "selection")}>{rewriteBusyKey === `${key}|selection` ? "변경 중…" : "선택한 부분 바꾸기"}</button></div></div>
+                    <div className="comment-review-controls"><ReviewWarning issues={commentReviewIssues} label={hasBlockingCommentIssue ? "오류" : "확인 권장"} advisory={!hasBlockingCommentIssue} />{similarStudents.length > 0 && closest && <div className="similarity-detail compact-similarity"><strong>{closest.student.name} 학생과 {Math.round(closest.score * 100)}%</strong></div>}<div className="comment-row-actions review-cell-actions comment-review-actions"><button className="regenerate-button" disabled={!hasLevel || !!rewriteBusyKey} onMouseDown={(event) => event.preventDefault()} onClick={() => void rewriteComment(student.id, selectedSubject, "regenerate")}>{rewriteBusyKey === `${key}|regenerate` ? "생성 중…" : "다시 생성"}</button><button disabled={!selectedText[key] || !!rewriteBusyKey} title={selectedText[key] ? "선택한 부분만 평가 근거에 맞게 바꿉니다." : "평어에서 바꿀 문장이나 표현을 먼저 선택하세요."} onMouseDown={(event) => event.preventDefault()} onClick={() => void rewriteComment(student.id, selectedSubject, "selection")}>{rewriteBusyKey === `${key}|selection` ? "변경 중…" : "선택한 부분 바꾸기"}</button></div></div>
                   </td>
                 </tr>;
               })}</tbody>
