@@ -327,6 +327,17 @@ test("warns about unsupported attitude claims without discarding the sentence", 
   );
 });
 
+test("accepts directly equivalent effort and posture wording from the criterion", () => {
+  assert.deepEqual(
+    evidenceBlockingIssues("생활 속에서 바른 자세를 꾸준히 실천하려는 태도가 돋보임.", "바른 자세를 생활 속에서 실천하려고 노력할 수 있다."),
+    [],
+  );
+  assert.equal(
+    evidenceBlockingIssues("자료를 정확하게 정리함.", "자료를 정리할 수 있다.").length > 0,
+    true,
+  );
+});
+
 test("blocks invented methods and attitudes that are absent from the criterion", () => {
   assert.deepEqual(
     evidenceBlockingIssues("재미와 감동을 느낀 부분을 그림이나 시로 표현함.", "재미와 감동을 느낀 부분을 다양한 방법으로 표현할 수 있다."),
