@@ -1237,7 +1237,7 @@ function Comments({ assessmentDataBySubject, plan, roster }: { assessmentDataByS
                   .map((part) => ({ ...part, visibleIssues: commentAreaIssuesForDisplay(part.status, part.issues) }))
                   .filter((part) => part.status === "needs_review" || part.visibleIssues.length > 0);
                 const commentReviewIssues = [
-                  ...(!validation.endingsOk ? ["음·임 종결 확인"] : []),
+                  ...(!validation.endingsOk ? ["명사형 종결 확인"] : []),
                   ...(validation.forbidden.length > 0 ? [`금지어 확인: ${validation.forbidden.join(" · ")}`] : []),
                   ...(!validation.spellingOk ? validation.spellingIssues.map((issue) => `맞춤법: ${issue}`) : []),
                   ...areaIssues.flatMap((part) => {
