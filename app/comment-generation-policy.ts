@@ -191,6 +191,7 @@ const unsupportedGroundingConcepts: Array<{
   { label: "다양한 방법", pattern: /다양한방법/, blocking: true },
   { label: "이해하기 쉽게", pattern: /이해하기쉽게/, blocking: true },
   { label: "입력에 없는 구체적 표현 방법", pattern: /(?:그림|시)(?:이나|나|와|과|으로|로)/, blocking: true },
+  { label: "말하기·발표 활동", pattern: /(?:말로풀어|말로표현|말하기|발표|구술)/, evidencePattern: /(?:말|대화|목소리|말투|발표|구술|듣기)/, blocking: true },
   { label: "학습 태도", pattern: /태도/, evidencePattern: /태도|적극적|성실|꾸준|자기주도|주도적|능동적/, blocking: true },
 ];
 
