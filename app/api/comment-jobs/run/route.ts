@@ -139,7 +139,9 @@ export async function POST(request: Request) {
       try {
         const generated = await generateCommentPoolBatch(
           group,
-          [...avoidComments, ...[...generatedParts.values()].map((item) => item.text)],
+          // 제한된 금지 문장 목록에는 방금 생성·저장한 문장을 먼저 넣어
+          // 현재 학급 작업 안의 중복 방지가 과거 기록 때문에 잘리지 않게 한다.
+          [...[...generatedParts.values()].map((item) => item.text), ...avoidComments],
           attempt > 0,
           generationModel(attempt, MAX_GENERATION_ATTEMPTS),
         );
@@ -230,7 +232,11 @@ export async function POST(request: Request) {
       try {
         const regenerated = await generateCommentPoolBatch(
           diversityTargets,
-          [...avoidComments, ...fixedReferences.map((part) => part.text), ...diversityCandidates.map((part) => part.text)],
+          [
+            ...fixedReferences.map((part) => part.text),
+            ...diversityCandidates.map((part) => part.text),
+            ...avoidComments,
+          ],
           true,
           generationModel(1, MAX_GENERATION_ATTEMPTS),
         );

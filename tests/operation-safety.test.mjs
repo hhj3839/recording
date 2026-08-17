@@ -62,6 +62,12 @@ test("comment prompt uses adaptive lengths and natural nominal endings", () => {
   assert.match(page, /\["명사형 종결 확인"\]/);
 });
 
+test("prioritizes current class sentences in the bounded duplicate-avoidance list", () => {
+  const route = readFileSync("app/api/comment-jobs/run/route.ts", "utf8");
+  assert.match(route, /\.\.\.\[\.\.\.generatedParts\.values\(\)\]\.map\(\(item\) => item\.text\), \.\.\.avoidComments/);
+  assert.match(route, /\.\.\.fixedReferences\.map[\s\S]*\.\.\.diversityCandidates\.map[\s\S]*\.\.\.avoidComments/);
+});
+
 test("always refreshes generated result counts without browser caching", () => {
   const page = readFileSync("app/page.tsx", "utf8");
   assert.equal((page.match(/fetch\("\/api\/generated-comments", \{ cache: "no-store" \}\)/g) ?? []).length, 4);
