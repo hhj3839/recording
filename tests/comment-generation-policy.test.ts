@@ -306,6 +306,13 @@ test("keeps natural comments in the broad display range without inventing prefix
   assert.equal(normalizeGeneratedCommentCandidate(tooShort).startsWith("수업에서 "), false);
 });
 
+test("accepts a short direct sentence when the selected criterion has little information", () => {
+  const criterion = "모둠원의 도움을 받아 오래된 물건을 조사한다.";
+  const result = validateGeneratedCommentPart("모둠원의 도움을 받아 오래된 물건을 조사함.", criterion);
+  assert.equal(result.acceptedMinimum, 20);
+  assert.equal(result.valid, true);
+});
+
 test("stores a natural long subject comment without turning target length into a warning", () => {
   const long = "작품 속 인물의 상황을 살펴 알맞은 표정과 몸짓, 목소리와 말투를 선택하고 대화의 흐름과 장면의 분위기에 맞추어 인물의 마음이 분명하게 드러나도록 표현함.";
   const result = validateGeneratedCommentPart(long);

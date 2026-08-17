@@ -1,8 +1,11 @@
-export function selectCommentLoadScope(mode, students, subjects) {
+export function selectCommentLoadScope(mode, students, subjects, preferredSubject = "") {
   const sampleScope = mode === "sample" || mode === "preflight";
+  const selectedSubject = preferredSubject && subjects.includes(preferredSubject)
+    ? preferredSubject
+    : subjects[0];
   return {
     selectedStudents: sampleScope ? students.slice(0, 5) : students,
-    selectedSubjects: mode === "start" ? subjects : subjects.slice(0, 1),
+    selectedSubjects: mode === "start" ? subjects : selectedSubject ? [selectedSubject] : [],
   };
 }
 

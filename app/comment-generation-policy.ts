@@ -209,14 +209,18 @@ export function composeGeneratedCommentCandidate(body: string, ending: string) {
 }
 
 export function validateGeneratedCommentPart(comment: string, evidence = "") {
-  void evidence;
   const strict = validateGeneratedComment(comment, 1);
   const length = strict.lengths[0] ?? 0;
-  const acceptedLength = length >= 35 && length <= 90;
+  // 정보량이 짧은 평가기준은 근거 없는 수식어로 35자를 채우게 하지 않는다.
+  // 기준을 직접 자연스럽게 명사형으로 바꾼 짧은 문장은 보존한다.
+  const evidenceLength = Array.from(normalizeGeneratedCommentWhitespace(evidence)).length;
+  const acceptedMinimum = evidence && evidenceLength < 38 ? 20 : 35;
+  const acceptedLength = length >= acceptedMinimum && length <= 90;
   const warnings: string[] = [];
   return {
     ...strict,
     acceptedLength,
+    acceptedMinimum,
     warnings,
     valid: strict.sentenceCountOk
       && acceptedLength

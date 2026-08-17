@@ -27,6 +27,15 @@ test("subject and full scopes remain unchanged", () => {
   assert.equal(selectCommentLoadScope("start", students, subjects).selectedSubjects.length, 9);
 });
 
+test("comment gates can target one explicitly approved subject", () => {
+  const preflight = selectCommentLoadScope("preflight", students, subjects, "사회");
+  const sample = selectCommentLoadScope("sample", students, subjects, "사회");
+  assert.deepEqual(preflight, sample);
+  assert.equal(sample.selectedStudents.length, 5);
+  assert.deepEqual(sample.selectedSubjects, ["사회"]);
+  assert.deepEqual(selectCommentLoadScope("sample", students, subjects, "없는 과목").selectedSubjects, ["국어"]);
+});
+
 test("behavior preflight and sample prioritize the same five strict failures", () => {
   const ready = Array.from({ length: 25 }, (_, index) => ({ studentId: index + 101, strict: ![5, 11, 14, 16, 17, 19, 20, 24].includes(index) }));
   const expectedIds = [106, 112, 115, 117, 118];
