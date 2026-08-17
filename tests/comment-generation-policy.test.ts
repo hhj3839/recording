@@ -81,6 +81,19 @@ test("does not replace a unique stored sentence with a candidate matching a fixe
   assert.equal(result.issues.includes("완전히 같은 문장 후보 중복"), true);
 });
 
+test("keeps grounded candidates even when their structures are similar", () => {
+  const [group] = buildCommentPoolGroups([1, 2].map((studentId) => ({
+    studentId,
+    subject: "국어",
+    items: [{ assessmentIndex: 0, level: "중" as const, criterion: "마음을 전하는 글을 쓰는 방법을 알고, 마음을 전하는 글을 쓰기 위해 노력한다.", text: "쓰기 | 수준: 중 | 기준: 마음을 전하는 글을 쓰는 방법을 알고, 마음을 전하는 글을 쓰기 위해 노력한다." }],
+  })));
+  const result = assignUniquePoolCandidates(group, [
+    "마음을 전하는 글을 쓰는 방법을 알고, 글을 쓰기 위해 노력함.",
+    "마음을 전하는 글의 작성 방법을 알고, 마음을 담아 글을 쓰기 위해 힘씀.",
+  ]);
+  assert.equal(result.candidates.length, 2);
+});
+
 test("groups missing comment evidence into at most ten areas per repair call", () => {
   const pending = Array.from({ length: 5 }, (_, index) => ({
     studentId: index + 1,
