@@ -120,6 +120,7 @@ export async function POST(request: Request) {
             assessmentIndex: index,
             level,
             criterion,
+            levelCriteria: { high: item.high, middle: item.middle, low: item.low },
             text: `${item.unit} | ${item.domain} | 목표: ${item.goal} | 관점: ${item.perspective} | 수준: ${level} | 기준: ${criterion}`,
           }];
         });

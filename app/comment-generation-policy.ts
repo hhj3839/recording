@@ -154,7 +154,12 @@ export function ensureGeneratedCommentPeriod(sentence: string) {
 export function repairSafeNominalEnding(sentence: string) {
   return ensureGeneratedCommentPeriod(sentence)
     .replace(/([가-힣]+)하는\s+함\.$/, "$1함.")
-    .replace(/([가-힣]+)하는\s+(?:수행|활동|과정|모습)임\.$/, "$1함.");
+    .replace(/([가-힣]+)하는\s+(?:수행|활동|과정|모습)임\.$/, "$1함.")
+    .replace(/만드는\s+(?:모습|과정)임\.$/, "만듦.")
+    .replace(/조사하는\s+(?:모습|과정)임\.$/, "조사함.")
+    .replace(/표현하는\s+(?:모습|과정)임\.$/, "표현함.")
+    .replace(/소개하는\s+(?:모습|과정)임\.$/, "소개함.")
+    .replace(/참여하는\s+(?:모습|과정)임\.$/, "참여함.");
 }
 
 export function validateGeneratedComment(comment: string, expectedSentenceCount: number) {
@@ -173,7 +178,12 @@ export function validateGeneratedComment(comment: string, expectedSentenceCount:
     || /(?:모습을\s+보|힘을\s+(?:기|파)|글을\s+써|뜻을\s+담아\s+내)\s+(?:표현|설명|정리|이해|구별|활용|실천|수행)함\.$/.test(sentence)
     || /(?:글의\s+쓰는|글쓰는)\s+방법/.test(sentence)
     || /(?:표현|설명|정리|이해|파악|구별|활용|실천|수행)\s+(?:(?:결과|활동|과정)(?:을|를)?)?\s*(?:수행|표현|이해|파악)함\.$/.test(sentence)
-    || /[가-힣]+(?:는|은)\s+(?:이해|표현|설명|정리|구별|활용|수행)함\.$/.test(sentence));
+    || /[가-힣]+(?:는|은)\s+(?:이해|표현|설명|정리|구별|활용|수행)함\.$/.test(sentence)
+    || /(?:만드는|조사하는|표현하는|소개하는|참여하는)\s+(?:모습|과정)임\.$/.test(sentence)
+    || /도움\s*없이가\s*아니라/.test(sentence)
+    || /(?:조사하여\s*정리하여|들으며\s*토의하며)/.test(sentence)
+    || /함\s*,/.test(sentence)
+    || /장소를\s+소개\s+자료로/.test(sentence));
   return {
     sentences,
     lengths,
@@ -301,6 +311,49 @@ export function evidenceBlockingIssues(comment: string, evidence: string, requir
   ].filter((item) => item.evidence.test(normalizedRequiredEvidence) && !item.comment.test(normalizedComment))
     .map((item) => `평가 기준의 필수 조건 ‘${item.label}’ 누락`);
   return [...unsupported, ...required];
+}
+
+export type CommentLevelCriteria = { high: string; middle: string; low: string };
+
+type SemanticAtom = { label: string; criterion: RegExp; comment: RegExp };
+
+// 평가기준에서 직접 확인할 수 있는 수행요소만 검사한다. 목표·관점은 문맥
+// 자료일 뿐 필수 수행이나 학생의 실제 행동으로 승격하지 않는다.
+const semanticAtoms: SemanticAtom[] = [
+  { label: "도움을 받아 수행하기", criterion: /(?:교사|친구|모둠원).{0,10}도움|도움.{0,10}(?:교사|친구|모둠원)/, comment: /(?:교사|친구|모둠원).{0,12}도움|도움.{0,12}(?:교사|친구|모둠원)/ },
+  { label: "한 가지 방법 선택하기", criterion: /(?:한가지|하나의).{0,12}방법|방법.{0,12}(?:한가지|하나를).{0,8}(?:선택|골라)/, comment: /(?:한가지|하나의).{0,12}방법|방법.{0,12}(?:한가지|하나를).{0,8}(?:선택|골라)/ },
+  { label: "바른 자세로 토의하기", criterion: /바른자세.{0,12}토의|토의.{0,12}바른자세/, comment: /바른자세.{0,12}토의|토의.{0,12}바른자세/ },
+  { label: "조건과 이유 말하기", criterion: /조건.{0,12}(?:이유|까닭).{0,12}(?:말|발표)|(?:말|발표).{0,18}조건.{0,12}(?:이유|까닭)/, comment: /조건.{0,12}(?:이유|까닭).{0,12}(?:말|밝|설명)|(?:말|밝|설명).{0,18}조건.{0,12}(?:이유|까닭)/ },
+  { label: "친구의 생각 듣기", criterion: /친구.{0,10}생각.{0,8}(?:듣|경청)/, comment: /친구.{0,10}생각.{0,8}(?:듣|경청)/ },
+  { label: "토의에 참여하기", criterion: /토의/, comment: /토의/ },
+  { label: "다양한 조사 방법 알기", criterion: /(?:다양한|여러).{0,8}조사방법|조사.{0,8}(?:다양한|여러).{0,8}방법/, comment: /(?:다양한|여러).{0,8}조사방법|조사.{0,8}(?:다양한|여러).{0,8}방법/ },
+  { label: "조사하기", criterion: /조사/, comment: /조사/ },
+  { label: "조사 결과 정리하기", criterion: /조사.{0,18}정리/, comment: /조사.{0,24}정리|정리.{0,24}조사/ },
+  { label: "글로 표현하기", criterion: /글.{0,8}표현|표현.{0,8}글/, comment: /글.{0,10}(?:표현함|나타냄|작성함|씀)|(?:표현함|나타냄|작성함|씀).{0,10}글/ },
+  { label: "자료 만들기", criterion: /자료.{0,10}(?:만들|제작|구성)/, comment: /자료.{0,12}(?:만들|제작|구성|마련)/ },
+  { label: "소개하기", criterion: /소개/, comment: /소개/ },
+];
+
+export function criterionSemanticIssues(
+  comment: string,
+  selectedCriterion: string,
+  levelCriteria?: CommentLevelCriteria,
+) {
+  const normalizedComment = normalizeGroundingText(comment);
+  const selected = normalizeGroundingText(selectedCriterion);
+  const required = semanticAtoms
+    .filter((atom) => atom.criterion.test(selected) && !atom.comment.test(normalizedComment))
+    .map((atom) => `평가 기준의 필수 수행 ‘${atom.label}’ 누락`);
+  if (!levelCriteria) return required;
+  const siblings = [levelCriteria.high, levelCriteria.middle, levelCriteria.low]
+    .map(normalizeGroundingText)
+    .filter((criterion) => criterion !== selected);
+  const leaked = semanticAtoms
+    .filter((atom) => !atom.criterion.test(selected)
+      && atom.comment.test(normalizedComment)
+      && siblings.some((criterion) => atom.criterion.test(criterion)))
+    .map((atom) => `선택하지 않은 평가수준의 수행 ‘${atom.label}’ 포함`);
+  return [...new Set([...required, ...leaked])];
 }
 
 export function isCommentLengthReviewIssue(issue: string) {

@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { commentAreaIssuesForDisplay, commentEvidenceInstructions, commentLengthTarget, composeGeneratedCommentCandidate, criterionToSafeNominalCandidates, criterionToSafeNominalSentence, ensureGeneratedCommentPeriod, evidenceBlockingIssues, evidenceGroundingWarnings, generatedCommentFailureMessage, hasCompleteEvidenceCoverage, hasNaturalNominalEnding, levelAppropriatenessIssues, normalizeGeneratedCommentCandidate, normalizeGeneratedCommentWhitespace, openingRepetitionRate, positiveGrowthCriterion, repairSafeNominalEnding, replaceSelectedCommentText, resolveGeneratedEvidenceItemId, validateGeneratedComment, validateGeneratedCommentPart } from "../app/comment-generation-policy.ts";
+import { commentAreaIssuesForDisplay, commentEvidenceInstructions, commentLengthTarget, composeGeneratedCommentCandidate, criterionSemanticIssues, criterionToSafeNominalCandidates, criterionToSafeNominalSentence, ensureGeneratedCommentPeriod, evidenceBlockingIssues, evidenceGroundingWarnings, generatedCommentFailureMessage, hasCompleteEvidenceCoverage, hasNaturalNominalEnding, levelAppropriatenessIssues, normalizeGeneratedCommentCandidate, normalizeGeneratedCommentWhitespace, openingRepetitionRate, positiveGrowthCriterion, repairSafeNominalEnding, replaceSelectedCommentText, resolveGeneratedEvidenceItemId, validateGeneratedComment, validateGeneratedCommentPart } from "../app/comment-generation-policy.ts";
 import { behaviorRepairInstruction, behaviorRepairPlan, behaviorRepairTargets } from "../app/behavior-repair-policy.ts";
 import { assertStrictGeneratedBehaviors, selectBehaviorCandidate } from "../app/behavior-persistence-policy.ts";
 import { validateRecord } from "../app/record-validation.ts";
@@ -614,6 +614,63 @@ test("grounds attitude concepts across common Korean spacing and inflection vari
       "자료를 기준에 따라 정리할 수 있다.",
     ),
     ["평가 근거에 없는 ‘자기주도적으로’ 표현 확인 필요"],
+  );
+});
+
+test("repairs or rejects indirect and malformed nominal endings", () => {
+  assert.equal(repairSafeNominalEnding("모둠원의 도움을 받아 장소 소개 자료를 만드는 모습임."), "모둠원의 도움을 받아 장소 소개 자료를 만듦.");
+  for (const sentence of [
+    "모둠원의 도움 없이가 아니라 한 가지 방법으로 자료를 만듦.",
+    "오래된 물건을 조사하여 정리하여 글로 표현함.",
+    "친구의 생각을 들으며 토의하며 조건을 말함.",
+    "오래된 물건을 조사함, 다양한 조사 방법을 알고 있음.",
+  ]) assert.equal(validateGeneratedCommentPart(sentence).valid, false);
+});
+
+test("requires selected social-studies performance atoms and blocks sibling-level leakage", () => {
+  const placeLevels = {
+    high: "여러 가지 소개 방법 중 한 가지를 골라 우리 고장의 여러 장소를 소개하는 자료를 만들고 소개할 수 있다.",
+    middle: "모둠원의 도움을 받아 우리 고장의 장소 소개 자료를 만들고 소개할 수 있다.",
+    low: "모둠원의 도움을 받아 우리 고장의 장소 소개 자료를 만들 수 있다.",
+  };
+  assert.deepEqual(
+    criterionSemanticIssues("모둠원의 도움을 받아 우리 고장의 장소 소개 자료를 만들고 소개함.", placeLevels.high, placeLevels),
+    ["평가 기준의 필수 수행 ‘한 가지 방법 선택하기’ 누락", "선택하지 않은 평가수준의 수행 ‘도움을 받아 수행하기’ 포함"],
+  );
+  assert.deepEqual(
+    criterionSemanticIssues("여러 소개 방법 중 한 가지를 골라 우리 고장의 장소 소개 자료를 만들고 소개함.", placeLevels.high, placeLevels),
+    [],
+  );
+
+  const discussionLevels = {
+    high: "살기 좋은 곳의 조건과 그 이유를 한 가지 말하고 친구들의 생각을 들으며 바른 자세로 토의할 수 있다.",
+    middle: "살기 좋은 곳의 조건과 그 이유를 한 가지 말하고 토의에 참여할 수 있다.",
+    low: "친구들의 생각을 들으며 토의에 참여할 수 있다.",
+  };
+  assert.deepEqual(
+    criterionSemanticIssues("살기 좋은 곳의 조건과 이유를 말하며 친구들의 생각을 듣고 토의함.", discussionLevels.high, discussionLevels),
+    ["평가 기준의 필수 수행 ‘바른 자세로 토의하기’ 누락"],
+  );
+  assert.deepEqual(
+    criterionSemanticIssues("친구들의 생각을 들으며 살기 좋은 곳의 조건과 이유를 말하고 토의에 참여함.", discussionLevels.low, discussionLevels),
+    ["선택하지 않은 평가수준의 수행 ‘조건과 이유 말하기’ 포함"],
+  );
+});
+
+test("requires diverse investigation methods and completed written expression", () => {
+  assert.deepEqual(
+    criterionSemanticIssues(
+      "오래된 물건의 조사 방법을 알고 조사 결과를 정리함.",
+      "오래된 물건을 조사하는 다양한 방법을 알고 조사한 후 정리할 수 있다.",
+    ),
+    ["평가 기준의 필수 수행 ‘다양한 조사 방법 알기’ 누락"],
+  );
+  assert.deepEqual(
+    criterionSemanticIssues(
+      "지역 이름의 유래와 옛이야기를 조사하여 정리한 뒤 글로 표현하기 위해 준비함.",
+      "지역 이름의 유래와 옛이야기를 조사하여 정리하고 글로 표현할 수 있다.",
+    ),
+    ["평가 기준의 필수 수행 ‘글로 표현하기’ 누락"],
   );
 });
 
