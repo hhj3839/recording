@@ -1,5 +1,5 @@
 import { primaryAiModel } from "./ai-model-policy.ts";
-import { buildCommonCommentGenerationGuide, commentEvidenceInstructions, commentLengthTarget, commentPredicatePolicy, criterionSemanticIssues, levelAppropriatenessIssues, positiveGrowthCriterion, repairSafeNominalEnding, evidenceBlockingIssues, evidenceGroundingWarnings, validateGeneratedCommentPart } from "./comment-generation-policy.ts";
+import { buildCanonicalCommentSentence, buildCommonCommentGenerationGuide, commentEvidenceInstructions, commentLengthTarget, commentPredicatePolicy, criterionSemanticIssues, levelAppropriatenessIssues, positiveGrowthCriterion, repairSafeNominalEnding, evidenceBlockingIssues, evidenceGroundingWarnings, validateGeneratedCommentPart } from "./comment-generation-policy.ts";
 import type { AiTokenUsage } from "./ai-usage.ts";
 import type { CommentEvidence, CommentEvidenceItem, CommentBatchResult, GeneratedCommentPart, GeneratedCommentRejection } from "./comment-generation.ts";
 import { createCommentVariations, type CommentVariation } from "./comment-variation.ts";
@@ -18,6 +18,7 @@ export type CommentPoolGroup = {
   level: string;
   evidence: string;
   criterion: string;
+  canonicalSentence: string;
   levelCriteria?: CommentEvidenceItem["levelCriteria"];
   repairIssues: string[];
   members: PoolMember[];
@@ -67,6 +68,7 @@ export function buildCommentPoolGroups(evidence: CommentEvidence[], isolateMembe
         level: item.level ?? "",
         evidence: item.text,
         criterion,
+        canonicalSentence: buildCanonicalCommentSentence(criterion),
         levelCriteria: item.levelCriteria,
         repairIssues: entry.repairIssues?.[item.assessmentIndex] ?? [],
         members: [member],
@@ -92,6 +94,7 @@ export function buildPublicCommentPoolRequests(groups: CommentPoolGroup[]) {
     level: group.level,
     evidence: group.evidence,
     criterion: group.criterion,
+    canonicalSentence: group.canonicalSentence,
     levelCriteria: group.levelCriteria,
     levelRules: commentEvidenceInstructions(group.criterion).instruction,
     predicatePolicy: commentPredicatePolicy(group.criterion),
@@ -112,7 +115,7 @@ export function assignUniquePoolCandidates(
   allowReferenceFallback = false,
 ) {
   const issues = new Set<string>();
-  const validated = rawCandidates.flatMap((candidate, index) => {
+  let validated = rawCandidates.flatMap((candidate, index) => {
     const text = repairSafeNominalEnding(candidate);
     const format = validateGeneratedCommentPart(text, group.criterion);
     if (!format.valid) {
@@ -143,6 +146,25 @@ export function assignUniquePoolCandidates(
       text,
     }];
   });
+  // AI 후보가 부족하면 평가기준에서 만든 기준 문장을 먼저 보충한다.
+  // 이 문장은 자유 생성물이 아니며 같은 의미·수준 검수를 그대로 통과해야 한다.
+  if (validated.length < group.members.length && group.canonicalSentence) {
+    const canonical = group.canonicalSentence;
+    const groundingEvidence = `${group.evidence} | 생성용 기준: ${group.criterion}`;
+    const canonicalValid = validateGeneratedCommentPart(canonical, group.criterion).valid
+      && levelAppropriatenessIssues(canonical, group.level, group.criterion).length === 0
+      && evidenceBlockingIssues(canonical, groundingEvidence, group.criterion).length === 0
+      && criterionSemanticIssues(canonical, group.criterion, group.levelCriteria).length === 0;
+    if (canonicalValid && !validated.some((candidate) => normalizedSentence(candidate.text) === normalizedSentence(canonical))) {
+      validated = [{
+        studentId: 0,
+        subject: group.subject,
+        assessmentIndex: group.assessmentIndex,
+        evidence: group.evidence,
+        text: canonical,
+      }, ...validated];
+    }
+  }
   const seen = new Set<string>();
   const referenceKeys = new Set(referenceCandidates.map(normalizedSentence).filter(Boolean));
   const referenceFallbacks: typeof validated = [];
@@ -216,7 +238,7 @@ export async function generateCommentPoolBatch(
         },
         {
           role: "user",
-          content: [{ type: "input_text", text: `${repair ? "이전 생성에서 후보가 검수를 통과하지 못했다. 각 pool의 repairIssues 원인을 바로잡아 부족한 후보만 새로 작성한다." : "각 문장 풀을 작성한다."}\n문장 풀 요청: ${JSON.stringify(requestPools)}\n이미 사용했으므로 그대로 쓰지 않을 문장: ${JSON.stringify(avoidSentences)}` }],
+          content: [{ type: "input_text", text: `${repair ? "이전 생성에서 후보가 검수를 통과하지 못했다. 각 pool의 repairIssues 원인을 바로잡아 부족한 후보만 새로 작성한다." : "각 문장 풀을 작성한다."}\n각 pool의 canonicalSentence는 평가기준의 사실·수준·수행 순서를 보존한 기준 문장이다. 후보를 자유롭게 새로 창작하지 말고 canonicalSentence에서 조사·연결어·절의 시작 위치만 제한적으로 바꿔라. 수행 대상, 핵심 동사, 도움 여부, 일부·전체 범위, 완료·노력 상태를 바꾸거나 새 행동을 추가하지 마라. 자연스러운 변형 수가 부족하면 다양성보다 정확성을 우선하라.\n문장 풀 요청: ${JSON.stringify(requestPools)}\n이미 사용했으므로 그대로 쓰지 않을 문장: ${JSON.stringify(avoidSentences)}` }],
         },
       ],
       text: {

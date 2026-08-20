@@ -102,6 +102,18 @@ export function positiveGrowthCriterion(level: string | undefined, criterion: st
 
 export function criterionToSafeNominalSentence(criterion: string) {
   return normalizeGeneratedCommentWhitespace(criterion)
+    .replace(/쓸\s*수\s*있다\.$/, "씀.")
+    .replace(/만들\s*수\s*있다\.$/, "만듦.")
+    .replace(/나눌\s*수\s*있다\.$/, "나눔.")
+    .replace(/간추릴\s*수\s*있다\.$/, "간추림.")
+    .replace(/알\s*수\s*있다\.$/, "앎.")
+    .replace(/읽을\s*수\s*있다\.$/, "읽음.")
+    .replace(/적을\s*수\s*있다\.$/, "적음.")
+    .replace(/찾을\s*수\s*있다\.$/, "찾음.")
+    .replace(/들을\s*수\s*있다\.$/, "들음.")
+    .replace(/([가-힣]+)볼\s*수\s*있다\.$/, "$1봄.")
+    .replace(/([가-힣]+)할\s*수\s*있다\.$/, "$1함.")
+    .replace(/될\s*수\s*있다\.$/, "됨.")
     .replace(/만든다\.$/, "만듦.")
     .replace(/한다\.$/, "함.")
     .replace(/간다\.$/, "감.")
@@ -110,9 +122,15 @@ export function criterionToSafeNominalSentence(criterion: string) {
     .replace(/이다\.$/, "임.");
 }
 
+export function buildCanonicalCommentSentence(criterion: string) {
+  const normalized = normalizeGeneratedCommentWhitespace(criterion);
+  if (!normalized) return "";
+  return repairSafeNominalEnding(criterionToSafeNominalSentence(normalized));
+}
+
 export function criterionToSafeNominalCandidates(criterion: string) {
   const normalized = normalizeGeneratedCommentWhitespace(criterion);
-  const candidates = [criterionToSafeNominalSentence(normalized)];
+  const candidates = [buildCanonicalCommentSentence(normalized)];
   const discussion = normalized.match(/^(.+?)의 조건과 그 이유를 한 가지 말하고,?\s*친구들의 생각을 들으며 바른 자세로 토의에 임한다\.$/);
   if (discussion) {
     const subject = discussion[1].trim();
@@ -154,7 +172,9 @@ export function hasNaturalNominalEnding(sentence: string) {
   const last = normalized.at(-1);
   if (!last) return false;
   const code = last.charCodeAt(0);
-  return code >= 0xac00 && code <= 0xd7a3 && (code - 0xac00) % 28 === 16;
+  // 일반 명사형 받침 ㅁ뿐 아니라 만들다→만듦, 알다→앎처럼
+  // ㄹㅁ으로 활용되는 올바른 명사형도 허용한다.
+  return code >= 0xac00 && code <= 0xd7a3 && [10, 16].includes((code - 0xac00) % 28);
 }
 
 export function ensureGeneratedCommentPeriod(sentence: string) {
@@ -305,7 +325,9 @@ export function validateGeneratedCommentPart(comment: string, evidence = "") {
   // 정보량이 짧은 평가기준은 근거 없는 수식어로 35자를 채우게 하지 않는다.
   // 기준을 직접 자연스럽게 명사형으로 바꾼 짧은 문장은 보존한다.
   const evidenceLength = Array.from(normalizeGeneratedCommentWhitespace(evidence)).length;
-  const acceptedMinimum = evidence && evidenceLength < 38 ? 20 : 35;
+  const isCanonical = Boolean(evidence)
+    && normalizeGeneratedCommentWhitespace(comment) === buildCanonicalCommentSentence(evidence);
+  const acceptedMinimum = isCanonical ? 10 : evidence && evidenceLength < 38 ? 20 : 35;
   const acceptedLength = length >= acceptedMinimum && length <= 90;
   const predicateIssues = evidence ? commentPredicateIssues(comment, evidence) : [];
   const warnings: string[] = [];
@@ -471,7 +493,7 @@ const genericPerformanceAtoms = [
   { label: "정리하기", criterion: /정리/, comment: /정리|갈무리/ },
   { label: "표현하기", criterion: /표현|나타내/, comment: /표현|나타냄|드러냄/ },
   { label: "글 쓰기", criterion: /(?:글|까닭|이유).{0,24}(?:쓰|작성)/, comment: /(?:글|까닭|이유).{0,28}(?:씀|작성|적음|쓰기(?:위해|에)\s*(?:노력함|힘씀))/ },
-  { label: "만들기", criterion: /만들|제작/, comment: /만들|제작/ },
+  { label: "만들기", criterion: /만들|제작/, comment: /만들|만듦|제작/ },
   { label: "소개하기", criterion: /소개/, comment: /소개/ },
   { label: "발표하기", criterion: /발표/, comment: /발표/ },
   { label: "토의하기", criterion: /토의/, comment: /토의/ },
