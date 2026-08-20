@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { commentAreaIssuesForDisplay, commentEvidenceInstructions, commentLengthTarget, commentPredicateIssues, commentPredicatePolicy, composeGeneratedCommentCandidate, criterionSemanticIssues, criterionToSafeNominalCandidates, criterionToSafeNominalSentence, ensureGeneratedCommentPeriod, evidenceBlockingIssues, evidenceGroundingWarnings, generatedCommentFailureMessage, hasCompleteEvidenceCoverage, hasNaturalNominalEnding, levelAppropriatenessIssues, normalizeGeneratedCommentCandidate, normalizeGeneratedCommentWhitespace, openingRepetitionRate, positiveGrowthCriterion, repairSafeNominalEnding, replaceSelectedCommentText, resolveGeneratedEvidenceItemId, validateGeneratedComment, validateGeneratedCommentPart } from "../app/comment-generation-policy.ts";
+import { buildCommonCommentGenerationGuide, commentAreaIssuesForDisplay, commentEvidenceInstructions, commentLengthTarget, commentPredicateIssues, commentPredicatePolicy, composeGeneratedCommentCandidate, criterionSemanticIssues, criterionToSafeNominalCandidates, criterionToSafeNominalSentence, ensureGeneratedCommentPeriod, evidenceBlockingIssues, evidenceGroundingWarnings, generatedCommentFailureMessage, hasCompleteEvidenceCoverage, hasNaturalNominalEnding, levelAppropriatenessIssues, normalizeGeneratedCommentCandidate, normalizeGeneratedCommentWhitespace, openingRepetitionRate, positiveGrowthCriterion, repairSafeNominalEnding, replaceSelectedCommentText, resolveGeneratedEvidenceItemId, validateGeneratedComment, validateGeneratedCommentPart } from "../app/comment-generation-policy.ts";
 import { behaviorRepairInstruction, behaviorRepairPlan, behaviorRepairTargets } from "../app/behavior-repair-policy.ts";
 import { assertStrictGeneratedBehaviors, selectBehaviorCandidate } from "../app/behavior-persistence-policy.ts";
 import { validateRecord } from "../app/record-validation.ts";
@@ -75,7 +75,32 @@ test("builds level pools without putting student identifiers in the AI pool requ
   assert.equal(JSON.stringify(publicPools).includes("studentId"), false);
   assert.equal(publicPools[0].requiredCount, 3);
   assert.equal(publicPools[0].candidateCount, 5);
+  assert.deepEqual(publicPools[0].commonGuide.requiredActions, ["표현하기"]);
+  assert.equal(publicPools[0].commonGuide.completion, "completed");
   assert.equal(new Set(publicPools[0].variantPlans.map((plan) => JSON.stringify(plan))).size, 5);
+});
+
+test("derives the same common generation guide from any subject criterion", () => {
+  assert.deepEqual(
+    buildCommonCommentGenerationGuide("교사의 도움을 받아 식물을 관찰하고 특징을 일부 분류하여 기록할 수 있다."),
+    {
+      requiredActions: ["관찰하기", "분류하기", "기록하기"],
+      support: "입력에 명시된 도움을 받아 수행",
+      scope: ["일부 수행"],
+      completion: "completed",
+      rules: [
+        "평가기준에 있는 모든 독립 수행을 한 문장에 보존함",
+        "각 수행 대상과 동사를 원문의 관계대로 연결함",
+        "입력에 없는 활동·태도·방법·수행 정도를 추가하지 않음",
+        "완료 수행을 내용임·결과임·모습임·해 봄으로 약화하지 않고 직접 동사로 종결함",
+        "자연스러운 관찰 기반 명사형 문장과 마침표로 완결함",
+      ],
+    },
+  );
+  const process = buildCommonCommentGenerationGuide("자료를 비교하여 설명하기 위해 노력한다.");
+  assert.deepEqual(process.requiredActions, ["비교하기", "설명하기"]);
+  assert.equal(process.completion, "process");
+  assert.equal(process.rules.some((rule) => rule.includes("완료 수행으로 높이지 않음")), true);
 });
 
 test("scales the reserve candidate pool to the number of required sentences", () => {

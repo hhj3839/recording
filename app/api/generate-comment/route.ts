@@ -3,7 +3,7 @@ import { checkAiUsage, recordAiUsage } from "../../ai-usage";
 import { createCommentVariations } from "../../comment-variation";
 import { eq, selectRows } from "../../../db/supabase";
 import { primaryAiModel } from "../../ai-model-policy";
-import { commentLengthTarget, criterionSemanticIssues, evidenceBlockingIssues, normalizeGeneratedCommentWhitespace, replaceSelectedCommentText, validateGeneratedCommentPart } from "../../comment-generation-policy";
+import { buildCommonCommentGenerationGuide, commentLengthTarget, criterionSemanticIssues, evidenceBlockingIssues, normalizeGeneratedCommentWhitespace, replaceSelectedCommentText, validateGeneratedCommentPart } from "../../comment-generation-policy";
 
 type Level = "상" | "중" | "하" | "미응시" | "평가 예정" | "-";
 
@@ -136,7 +136,12 @@ export async function POST(request: Request) {
       const level = levels[index];
       if (!['상', '중', '하'].includes(level)) return [];
       const criterion = level === "상" ? item.high : level === "중" ? item.middle : item.low;
-      return [{ assessmentIndex: index, criterion, target: commentLengthTarget(criterion).label }];
+      return [{
+        assessmentIndex: index,
+        criterion,
+        target: commentLengthTarget(criterion).label,
+        commonGuide: buildCommonCommentGenerationGuide(criterion),
+      }];
     });
     const modeInstruction = mode === "regenerate"
       ? `이 학생의 기존 평어를 참고하거나 수정하지 말고, 아래 평가 근거만 사용하여 평어 전체를 처음부터 새로 작성해 줘. 평가 영역마다 정확히 1문장씩 총 ${activeEvidenceCount}문장을 작성하고, 영역별 권장 길이 ${JSON.stringify(activeLengthTargets)}를 목표로 하며 반드시 자연스러운 명사형 종결과 마침표로 끝내. 길이를 채우려고 근거에 없는 행동·태도·과정을 추가하지 마.`
@@ -181,7 +186,7 @@ export async function POST(request: Request) {
             role: "user",
             content: [{
               type: "input_text",
-              text: `${modeInstruction}\n\n표현 방식: ${JSON.stringify(variation)}\n피해야 할 기존 평어: ${JSON.stringify(avoidComments.map((item) => item.slice(0, 500)))}\n\n평가 근거:\n${evidence}`,
+              text: `${modeInstruction}\n\n모든 과목에 공통 적용할 영역별 생성 가이드: ${JSON.stringify(activeLengthTargets.map((item) => ({ assessmentIndex: item.assessmentIndex, ...item.commonGuide })))}\n이 가이드는 과목별 예시가 아니라 입력된 평가기준에서 추출한 필수 제약이다. 각 영역의 requiredActions를 모두 보존하고 support·scope·completion을 바꾸지 마.\n\n표현 방식: ${JSON.stringify(variation)}\n피해야 할 기존 평어: ${JSON.stringify(avoidComments.map((item) => item.slice(0, 500)))}\n\n평가 근거:\n${evidence}`,
             }],
           },
         ],
