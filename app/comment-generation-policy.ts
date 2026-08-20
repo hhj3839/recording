@@ -482,6 +482,38 @@ const genericPerformanceAtoms = [
   { label: "실천하기", criterion: /실천/, comment: /실천/ },
 ] as const;
 
+export function buildCommonCommentGenerationGuide(criterion: string) {
+  const normalized = normalizeGroundingText(criterion);
+  const actions = genericPerformanceAtoms
+    .filter((atom) => atom.criterion.test(normalized))
+    .map((atom) => atom.label);
+  const support = /(?:교사|친구|모둠원).{0,10}도움|도움.{0,10}(?:교사|친구|모둠원)/.test(normalized)
+    ? "입력에 명시된 도움을 받아 수행"
+    : "도움 여부를 추측하지 않음";
+  const scope = [
+    ...(/일부/.test(normalized) ? ["일부 수행"] : []),
+    ...(/(?:비교적|대체로)/.test(normalized) ? ["입력에 명시된 보통 수행 정도"] : []),
+    ...(/(?:한가지|하나의)/.test(normalized) ? ["한 가지 범위"] : []),
+    ...(/(?:정확|능숙|구체적|다양한|이해하기쉽게|실감나게)/.test(normalized) ? ["입력에 명시된 높은 수행 정도"] : []),
+  ];
+  const predicate = commentPredicatePolicy(criterion);
+  return {
+    requiredActions: [...new Set(actions)],
+    support,
+    scope,
+    completion: predicate.completionMode,
+    rules: [
+      "평가기준에 있는 모든 독립 수행을 한 문장에 보존함",
+      "각 수행 대상과 동사를 원문의 관계대로 연결함",
+      "입력에 없는 활동·태도·방법·수행 정도를 추가하지 않음",
+      predicate.completionMode === "completed"
+        ? "완료 수행을 내용임·결과임·모습임·해 봄으로 약화하지 않고 직접 동사로 종결함"
+        : "입력에 명시된 노력·성장·과정 의미를 완료 수행으로 높이지 않음",
+      "자연스러운 관찰 기반 명사형 문장과 마침표로 완결함",
+    ],
+  } as const;
+}
+
 export function criterionSemanticIssues(
   comment: string,
   selectedCriterion: string,

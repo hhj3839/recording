@@ -1,5 +1,5 @@
 import { primaryAiModel } from "./ai-model-policy.ts";
-import { commentEvidenceInstructions, commentLengthTarget, commentPredicatePolicy, criterionSemanticIssues, levelAppropriatenessIssues, positiveGrowthCriterion, repairSafeNominalEnding, evidenceBlockingIssues, evidenceGroundingWarnings, validateGeneratedCommentPart } from "./comment-generation-policy.ts";
+import { buildCommonCommentGenerationGuide, commentEvidenceInstructions, commentLengthTarget, commentPredicatePolicy, criterionSemanticIssues, levelAppropriatenessIssues, positiveGrowthCriterion, repairSafeNominalEnding, evidenceBlockingIssues, evidenceGroundingWarnings, validateGeneratedCommentPart } from "./comment-generation-policy.ts";
 import type { AiTokenUsage } from "./ai-usage.ts";
 import type { CommentEvidence, CommentEvidenceItem, CommentBatchResult, GeneratedCommentPart, GeneratedCommentRejection } from "./comment-generation.ts";
 import { createCommentVariations, type CommentVariation } from "./comment-variation.ts";
@@ -95,6 +95,7 @@ export function buildPublicCommentPoolRequests(groups: CommentPoolGroup[]) {
     levelCriteria: group.levelCriteria,
     levelRules: commentEvidenceInstructions(group.criterion).instruction,
     predicatePolicy: commentPredicatePolicy(group.criterion),
+    commonGuide: buildCommonCommentGenerationGuide(group.criterion),
     repairIssues: group.repairIssues,
     lengthTarget: commentLengthTarget(group.criterion).label,
     requiredCount: group.members.length,
