@@ -53,20 +53,17 @@ test("job status polling wakes queued background generation without creating a n
   }
 });
 
-test("comment jobs assign approved pools before reserving AI for unsupported exceptions", () => {
+test("comment jobs generate and validate shared pools before canonical fallback", () => {
   const source = readFileSync("app/api/comment-jobs/run/route.ts", "utf8");
-  const baselineIndex = source.indexOf("const baselineParts =");
   const aiLoopIndex = source.indexOf("for (let attempt = 0;");
-  assert.equal(baselineIndex > 0, true);
-  assert.equal(aiLoopIndex > baselineIndex, true);
-  const preparation = source.slice(baselineIndex, aiLoopIndex);
-  assert.match(preparation, /await saveGeneratedCommentParts/);
-  assert.match(preparation, /status: "complete"/);
-  assert.match(preparation, /assignApprovedCommentPools\(batch\)/);
-  assert.match(preparation, /기준 문장을 만들 수 없었던 예외 영역만 AI 복구 대상으로 보낸다/);
-  assert.doesNotMatch(preparation, /baselineSeededKeys/);
+  const fallbackIndex = source.indexOf("assignApprovedCommentPools(pending)");
+  assert.equal(aiLoopIndex > 0, true);
+  assert.equal(fallbackIndex > aiLoopIndex, true);
+  assert.match(source.slice(0, aiLoopIndex), /평가영역·수준별 공용 문장 풀 생성 대상으로 보낸다/);
+  assert.match(source.slice(aiLoopIndex, fallbackIndex), /generateCommentPoolBatch/);
+  assert.match(source.slice(fallbackIndex), /평가기준 문장을 재사용함/);
+  assert.doesNotMatch(source.slice(0, aiLoopIndex), /assignApprovedCommentPools\(batch\)/);
   assert.match(source, /generatedParts\.set\(key, part\)/);
-  assert.match(source, /기준 문장을 유지했습니다/);
 });
 
 test("comment prompt uses adaptive lengths and natural nominal endings", () => {

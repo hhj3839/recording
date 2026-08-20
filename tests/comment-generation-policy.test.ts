@@ -209,14 +209,14 @@ test("derives the same common generation guide from any subject criterion", () =
   assert.equal(process.rules.some((rule) => rule.includes("완료 수행으로 높이지 않음")), true);
 });
 
-test("scales the reserve candidate pool to the number of required sentences", () => {
-  assert.equal(commentPoolCandidateCount(1), 3);
-  assert.equal(commentPoolCandidateCount(5), 7);
-  assert.equal(commentPoolCandidateCount(6), 8);
-  assert.equal(commentPoolCandidateCount(10), 13);
-  assert.equal(commentPoolCandidateCount(11), 14);
-  assert.equal(commentPoolCandidateCount(20), 24);
-  assert.equal(commentPoolCandidateCount(25), 30);
+test("builds a bounded shared pool and cycles it for larger classes", () => {
+  assert.equal(commentPoolCandidateCount(1), 5);
+  assert.equal(commentPoolCandidateCount(5), 5);
+  assert.equal(commentPoolCandidateCount(6), 6);
+  assert.equal(commentPoolCandidateCount(10), 10);
+  assert.equal(commentPoolCandidateCount(11), 11);
+  assert.equal(commentPoolCandidateCount(20), 20);
+  assert.equal(commentPoolCandidateCount(25), 20);
   assert.equal(commentPoolCandidateCount(0), 0);
 });
 
