@@ -796,11 +796,17 @@ function PlanManager({ plan, onChanged, current }: { plan: AssessmentPlan[]; onC
   }, []);
   const startPoolProduction = async () => {
     if (!plan.length || poolBusy) return;
-    if (!window.confirm(`평가영역·수준별 승인 문장 20개를 목표로 AI 평어를 제작합니다.\n현재 제작 또는 보완이 필요한 묶음은 ${poolSummary.needsGeneration || plan.length * 3}개입니다.\n\nAI API를 사용해 제작을 시작할까요?`)) return;
+    const subject = poolGroups.find((group) => group.fingerprint === selectedPoolFingerprint)?.subject
+      ?? plan[0]?.subject ?? "";
+    const subjectGroups = poolGroups.filter((group) => group.subject === subject);
+    const subjectPending = subjectGroups.filter((group) => group.approvedCount < group.targetCount).length;
+    if (!subject || !window.confirm(`${subject} 평가영역·수준별 승인 문장 20개를 목표로 AI 평어를 제작합니다.\n현재 제작 또는 보완이 필요한 묶음은 ${subjectPending}개이며 최대 ${subjectPending * 2}회 호출합니다.\n\nAI API를 사용해 제작을 시작할까요?`)) return;
     setPoolBusy(true);
     setErrors([]);
     try {
-      const response = await fetch("/api/comment-pools", { method: "POST" });
+      const response = await fetch("/api/comment-pools", {
+        method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ subject }),
+      });
       const result = await readApiJson<{ ready?: boolean; jobId?: string; total?: number }>(response, "AI 평어 제작을 시작하지 못했습니다.");
       if (!response.ok) throw new Error(result.error || "AI 평어 제작을 시작하지 못했습니다.");
       if (result.ready) {
