@@ -775,6 +775,49 @@ test("blocks invented stock openings and required assistance omissions", () => {
   );
 });
 
+test("preserves independent performance actions across subjects and grades", () => {
+  const cases = [
+    {
+      criterion: "식물의 생김새를 관찰하고 특징에 따라 분류하여 결과를 기록할 수 있다.",
+      incomplete: "식물의 생김새를 관찰하고 특징에 따라 분류함.",
+      missing: "기록하기",
+      complete: "식물의 생김새를 관찰하고 특징에 따라 분류하여 결과를 기록함.",
+    },
+    {
+      criterion: "두 해결 방법을 비교하고 알맞은 방법을 적용하여 문제를 해결할 수 있다.",
+      incomplete: "두 해결 방법을 비교하고 알맞은 방법으로 문제를 해결함.",
+      missing: "적용하기",
+      complete: "두 해결 방법을 비교하고 알맞은 방법을 적용하여 문제를 해결함.",
+    },
+    {
+      criterion: "작품의 특징을 조사하여 정리하고 글로 표현할 수 있다.",
+      incomplete: "작품의 특징을 조사하여 글로 표현함.",
+      missing: "정리하기",
+      complete: "작품의 특징을 조사하여 정리하고 글로 표현함.",
+    },
+  ];
+  for (const item of cases) {
+    assert.equal(
+      criterionSemanticIssues(item.incomplete, item.criterion).some((issue) => issue.includes(item.missing)),
+      true,
+      item.incomplete,
+    );
+    assert.deepEqual(criterionSemanticIssues(item.complete, item.criterion), []);
+  }
+});
+
+test("blocks completed performance weakened into a generic result or trial", () => {
+  const criterion = "자료를 조사하여 정리할 수 있다.";
+  for (const sentence of [
+    "자료를 조사하여 정리한 내용임.",
+    "자료를 조사하여 정리한 결과임.",
+    "자료를 조사하여 정리해 봄.",
+  ]) {
+    assert.equal(commentPredicateIssues(sentence, criterion).length > 0, true, sentence);
+  }
+  assert.deepEqual(commentPredicateIssues("자료를 조사하여 정리함.", criterion), []);
+});
+
 test("blocks an invented learning process when the criterion already states the attained knowledge", () => {
   const evidence = "마음을 전하는 글을 쓰는 방법을 알고, 마음을 전하는 글을 쓰기 위해 노력한다.";
   assert.deepEqual(
