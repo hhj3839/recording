@@ -229,16 +229,17 @@ export async function POST(request: Request) {
           : [];
       }));
       const deterministicText = criterionToSafeNominalCandidates(generationCriterion).find((candidate) => {
-        const candidateKey = candidate.normalize("NFKC").replace(/\s+/g, "").replace(/[.!?]/g, "");
-        return !usedSameLevel.has(candidateKey)
-          && validateGeneratedCommentPart(candidate, generationCriterion).valid
+        return validateGeneratedCommentPart(candidate, generationCriterion).valid
           && levelAppropriatenessIssues(candidate, item.level, generationCriterion).length === 0
           && evidenceBlockingIssues(candidate, `${item.text} | 생성용 기준: ${generationCriterion}`, generationCriterion).length === 0
           && criterionSemanticIssues(candidate, generationCriterion, item.levelCriteria).length === 0;
       });
       if (!deterministicText && !fallback) continue;
+      const deterministicKey = deterministicText?.normalize("NFKC").replace(/\s+/g, "").replace(/[.!?]/g, "") ?? "";
       const warning = deterministicText
-        ? "평가기준을 안전한 명사형 문형으로 변환하여 교사 확인이 필요함"
+        ? usedSameLevel.has(deterministicKey)
+          ? "검증된 기준 문장을 재사용하여 표현 중복 확인이 필요함"
+          : "평가기준을 안전한 기준 문장으로 변환하여 교사 확인이 필요함"
         : "같은 평가영역·수준의 검증된 문장을 재사용하여 표현 중복 확인이 필요함";
       const reused = {
         studentId: entry.studentId,

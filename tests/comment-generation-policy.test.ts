@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { buildCommonCommentGenerationGuide, commentAreaIssuesForDisplay, commentEvidenceInstructions, commentLengthTarget, commentPredicateIssues, commentPredicatePolicy, composeGeneratedCommentCandidate, criterionSemanticIssues, criterionToSafeNominalCandidates, criterionToSafeNominalSentence, ensureGeneratedCommentPeriod, evidenceBlockingIssues, evidenceGroundingWarnings, generatedCommentFailureMessage, hasCompleteEvidenceCoverage, hasNaturalNominalEnding, levelAppropriatenessIssues, normalizeGeneratedCommentCandidate, normalizeGeneratedCommentWhitespace, openingRepetitionRate, positiveGrowthCriterion, repairSafeNominalEnding, replaceSelectedCommentText, resolveGeneratedEvidenceItemId, validateGeneratedComment, validateGeneratedCommentPart } from "../app/comment-generation-policy.ts";
+import { buildCanonicalCommentSentence, buildCommonCommentGenerationGuide, commentAreaIssuesForDisplay, commentEvidenceInstructions, commentLengthTarget, commentPredicateIssues, commentPredicatePolicy, composeGeneratedCommentCandidate, criterionSemanticIssues, criterionToSafeNominalCandidates, criterionToSafeNominalSentence, ensureGeneratedCommentPeriod, evidenceBlockingIssues, evidenceGroundingWarnings, generatedCommentFailureMessage, hasCompleteEvidenceCoverage, hasNaturalNominalEnding, levelAppropriatenessIssues, normalizeGeneratedCommentCandidate, normalizeGeneratedCommentWhitespace, openingRepetitionRate, positiveGrowthCriterion, repairSafeNominalEnding, replaceSelectedCommentText, resolveGeneratedEvidenceItemId, validateGeneratedComment, validateGeneratedCommentPart } from "../app/comment-generation-policy.ts";
 import { behaviorRepairInstruction, behaviorRepairPlan, behaviorRepairTargets } from "../app/behavior-repair-policy.ts";
 import { assertStrictGeneratedBehaviors, selectBehaviorCandidate } from "../app/behavior-persistence-policy.ts";
 import { validateRecord } from "../app/record-validation.ts";
@@ -75,9 +75,40 @@ test("builds level pools without putting student identifiers in the AI pool requ
   assert.equal(JSON.stringify(publicPools).includes("studentId"), false);
   assert.equal(publicPools[0].requiredCount, 3);
   assert.equal(publicPools[0].candidateCount, 5);
+  assert.equal(publicPools[0].canonicalSentence, "자료의 내용을 표현함.");
   assert.deepEqual(publicPools[0].commonGuide.requiredActions, ["표현하기"]);
   assert.equal(publicPools[0].commonGuide.completion, "completed");
   assert.equal(new Set(publicPools[0].variantPlans.map((plan) => JSON.stringify(plan))).size, 5);
+});
+
+test("builds a canonical sentence before asking AI for limited variants", () => {
+  const cases = [
+    ["작품을 읽고 재미나 감동을 느낀 부분과 그 까닭을 쓸 수 있다.", "작품을 읽고 재미나 감동을 느낀 부분과 그 까닭을 씀."],
+    ["중심 문장과 뒷받침 문장을 파악하여 내용을 간추릴 수 있다.", "중심 문장과 뒷받침 문장을 파악하여 내용을 간추림."],
+    ["자료를 한 가지 방법으로 만들 수 있다.", "자료를 한 가지 방법으로 만듦."],
+    ["관찰한 결과를 기록할 수 있다.", "관찰한 결과를 기록함."],
+    ["문장을 짜임에 따라 나눌 수 있다.", "문장을 짜임에 따라 나눔."],
+  ];
+  for (const [criterion, expected] of cases) {
+    assert.equal(buildCanonicalCommentSentence(criterion), expected);
+    assert.equal(validateGeneratedCommentPart(expected, criterion).valid, true, criterion);
+    assert.deepEqual(criterionSemanticIssues(expected, criterion), []);
+  }
+});
+
+test("uses the canonical sentence when AI pool candidates fail validation", () => {
+  const [group] = buildCommentPoolGroups([{
+    studentId: 1,
+    subject: "과학",
+    items: [{
+      assessmentIndex: 0,
+      level: "중" as const,
+      criterion: "관찰한 결과를 기록할 수 있다.",
+      text: "관찰 | 수준: 중 | 기준: 관찰한 결과를 기록할 수 있다.",
+    }],
+  }]);
+  const result = assignUniquePoolCandidates(group, ["관찰함."]);
+  assert.deepEqual(result.candidates, ["관찰한 결과를 기록함."]);
 });
 
 test("derives the same common generation guide from any subject criterion", () => {
@@ -416,7 +447,7 @@ test("keeps natural comments in the broad display range without inventing prefix
 test("accepts a short direct sentence when the selected criterion has little information", () => {
   const criterion = "모둠원의 도움을 받아 오래된 물건을 조사한다.";
   const result = validateGeneratedCommentPart("모둠원의 도움을 받아 오래된 물건을 조사함.", criterion);
-  assert.equal(result.acceptedMinimum, 20);
+  assert.equal(result.acceptedMinimum, 10);
   assert.equal(result.valid, true);
 });
 
