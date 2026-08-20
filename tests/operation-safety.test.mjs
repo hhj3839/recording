@@ -53,17 +53,21 @@ test("job status polling wakes queued background generation without creating a n
   }
 });
 
-test("comment jobs generate and validate shared pools before canonical fallback", () => {
-  const source = readFileSync("app/api/comment-jobs/run/route.ts", "utf8");
-  const aiLoopIndex = source.indexOf("for (let attempt = 0;");
-  const fallbackIndex = source.indexOf("assignApprovedCommentPools(pending)");
-  assert.equal(aiLoopIndex > 0, true);
-  assert.equal(fallbackIndex > aiLoopIndex, true);
-  assert.match(source.slice(0, aiLoopIndex), /평가영역·수준별 공용 문장 풀 생성 대상으로 보낸다/);
-  assert.match(source.slice(aiLoopIndex, fallbackIndex), /generateCommentPoolBatch/);
-  assert.match(source.slice(fallbackIndex), /평가기준 문장을 재사용함/);
-  assert.doesNotMatch(source.slice(0, aiLoopIndex), /assignApprovedCommentPools\(batch\)/);
-  assert.match(source, /generatedParts\.set\(key, part\)/);
+test("comment jobs assign prepared approved pools without a paid AI call", () => {
+  const route = readFileSync("app/api/comment-jobs/run/route.ts", "utf8");
+  const producer = readFileSync("app/api/comment-pools/run/route.ts", "utf8");
+  assert.match(route, /comment_pool_versions/);
+  assert.match(route, /comment_pool_sentences/);
+  assert.match(route, /status: eq\("approved"\)/);
+  assert.match(route, /학생 평어 생성 단계에서는 OpenAI를 호출하지 않는다/);
+  assert.doesNotMatch(route, /api\.openai\.com|generateCommentPoolBatch|recordAiUsage/);
+  assert.match(route, /assignApprovedCommentPools\(pending\)/);
+  assert.match(producer, /api\.openai\.com\/v1\/responses/);
+  assert.match(producer, /source: "canonical"/);
+  const single = readFileSync("app/api/generate-comment/route.ts", "utf8");
+  assert.match(single.slice(0, single.indexOf("const apiKey")), /mode === "regenerate"[\s\S]*comment_pool_sentences[\s\S]*source: "approved-pool"/);
+  const pump = readFileSync("app/api/comment-jobs/pump/route.ts", "utf8");
+  assert.match(pump, /job_type === "comment-pools" \? "\/api\/comment-pools\/run"/);
 });
 
 test("comment prompt uses adaptive lengths and natural nominal endings", () => {
@@ -79,12 +83,13 @@ test("comment prompt uses adaptive lengths and natural nominal endings", () => {
   assert.doesNotMatch(page, /text && !validation\.endingsOk/);
 });
 
-test("prioritizes current class sentences in the bounded duplicate-avoidance list", () => {
+test("requires prepared pools and cycles approved sentences instead of mutating them", () => {
+  const startRoute = readFileSync("app/api/comment-jobs/route.ts", "utf8");
   const route = readFileSync("app/api/comment-jobs/run/route.ts", "utf8");
-  assert.match(route, /\.\.\.\[\.\.\.generatedParts\.values\(\)\]\.map\(\(item\) => item\.text\), \.\.\.avoidComments/);
-  assert.match(route, /\.\.\.fixedReferences\.map[\s\S]*\.\.\.refreshedDiversityCandidates\.map[\s\S]*\.\.\.avoidComments/);
-  assert.match(route, /완전히 같은 문장은 AI를 다시 부르기 전에/);
-  assert.match(route, /items = item\.items\.filter\(\(entry\) => exactOverlapKeys\.has/);
+  assert.match(startRoute, /COMMENT_POOLS_REQUIRED/);
+  assert.match(startRoute, /approved_count/);
+  assert.match(route, /\(jobOffset \+ index \+ item\.assessmentIndex\) % candidates\.length/);
+  assert.doesNotMatch(route, /repairSafeNominalEnding|criterionToSafeNominalCandidates/);
 });
 
 test("always refreshes generated result counts without browser caching", () => {

@@ -4,6 +4,8 @@ import { createCommentVariations } from "../../comment-variation";
 import { eq, selectRows } from "../../../db/supabase";
 import { primaryAiModel } from "../../ai-model-policy";
 import { buildCommonCommentGenerationGuide, commentLengthTarget, criterionSemanticIssues, evidenceBlockingIssues, normalizeGeneratedCommentWhitespace, replaceSelectedCommentText, validateGeneratedCommentPart } from "../../comment-generation-policy";
+import { buildCommentPoolSpecs } from "../../comment-pool-library";
+import { assembleRotatedComment } from "../../comment-assembly";
 
 type Level = "상" | "중" | "하" | "미응시" | "평가 예정" | "-";
 
@@ -116,6 +118,41 @@ export async function POST(request: Request) {
       && (!Number.isInteger(selectionStart) || !Number.isInteger(selectionEnd)
         || currentComment.slice(selectionStart, selectionEnd).trim() !== selectedText)) {
       return Response.json({ error: "선택한 부분이 현재 평어와 달라졌습니다. 바꿀 부분을 다시 선택해 주세요." }, { status: 400 });
+    }
+
+    if (mode === "regenerate") {
+      const specs = buildCommentPoolSpecs(plan.map((item, index) => ({ ...item, id: index + 1 })));
+      const selectedSpecs = levels.flatMap((level, index) => {
+        if (level !== "상" && level !== "중" && level !== "하") return [];
+        const spec = specs.find((entry) => entry.assessmentIndex === index && entry.level === level);
+        return spec ? [spec] : [];
+      });
+      const fingerprints = selectedSpecs.map((spec) => spec.fingerprint);
+      const versions = fingerprints.length ? await selectRows<{ id: number; fingerprint: string }>("comment_pool_versions", {
+        fingerprint: `in.(${fingerprints.join(",")})`,
+      }) : [];
+      const versionByFingerprint = new Map(versions.map((version) => [version.fingerprint, Number(version.id)]));
+      const versionIds = versions.map((version) => Number(version.id));
+      const sentences = versionIds.length ? await selectRows<{ pool_version_id: number; sentence: string }>("comment_pool_sentences", {
+        pool_version_id: `in.(${versionIds.join(",")})`, status: eq("approved"), order: "id.asc",
+      }) : [];
+      const sentencesByVersion = new Map<number, string[]>();
+      for (const row of sentences) {
+        const values = sentencesByVersion.get(Number(row.pool_version_id)) ?? [];
+        if (row.sentence) values.push(row.sentence);
+        sentencesByVersion.set(Number(row.pool_version_id), values);
+      }
+      const offset = (Number.isInteger(studentId) ? studentId : 0) + Math.floor(Date.now() / 1000);
+      const parts = selectedSpecs.flatMap((spec) => {
+        const versionId = versionByFingerprint.get(spec.fingerprint);
+        const candidates = versionId ? (sentencesByVersion.get(versionId) ?? []) : [];
+        return candidates.length ? [{ assessmentIndex: spec.assessmentIndex, text: candidates[(offset + spec.assessmentIndex) % candidates.length] }] : [];
+      });
+      if (parts.length !== selectedSpecs.length) {
+        return Response.json({ error: "평가계획 관리의 AI 평어 탭에서 필요한 평어를 먼저 제작해 주세요.", code: "COMMENT_POOLS_REQUIRED" }, { status: 409 });
+      }
+      const comment = assembleRotatedComment(parts, Number.isInteger(studentId) ? studentId : 0);
+      return comment ? Response.json({ comment, source: "approved-pool" }) : Response.json({ error: "새 평어를 조립하지 못했습니다." }, { status: 500 });
     }
 
     const apiKey = process.env.OPENAI_API_KEY;

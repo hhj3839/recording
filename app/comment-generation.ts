@@ -9,6 +9,8 @@ import { AiTokenUsage } from "./ai-usage";
 export type CommentLevelCriteria = { high: string; middle: string; low: string };
 export type CommentEvidenceItem = {
   assessmentIndex: number;
+  assessmentPlanId?: number;
+  poolFingerprint?: string;
   text: string;
   level?: "상" | "중" | "하";
   criterion?: string;

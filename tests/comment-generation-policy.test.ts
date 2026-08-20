@@ -12,6 +12,36 @@ import { commentAreaOverlapReasons } from "../app/comment-area-diversity.ts";
 import { assignApprovedCommentPools, assignUniquePoolCandidates, buildApprovedCommentPool, buildCanonicalBaselinePart, buildCommentPoolGroups, buildPublicCommentPoolRequests, commentPoolCandidateCount, spreadCandidatesByOpening } from "../app/comment-pool-generation.ts";
 import { assembleRotatedComment } from "../app/comment-assembly.ts";
 import { readApiJson } from "../app/api-response.ts";
+import { approvePoolCandidates, buildCommentPoolSpecs, COMMENT_POOL_TARGET } from "../app/comment-pool-library.ts";
+
+const poolPlan = (overrides: Partial<{ id: number; subject: string; unit: string; goal: string; domain: string; perspective: string; high: string; middle: string; low: string }> = {}) => ({
+  id: 1, subject: "사회", unit: "우리 고장", goal: "지역의 모습을 이해한다.", domain: "지리 인식",
+  perspective: "지역 자료를 조사하고 정리하는가?", high: "지역 자료를 다양한 방법으로 조사하여 체계적으로 정리함.",
+  middle: "지역 자료를 조사하여 정리함.", low: "교사의 도움을 받아 지역 자료를 조사하여 정리함.", ...overrides,
+});
+
+test("creates three reusable pool identities without student data", () => {
+  const first = buildCommentPoolSpecs([poolPlan()]);
+  const copied = buildCommentPoolSpecs([poolPlan({ id: 99 })]);
+  assert.equal(first.length, 3);
+  assert.deepEqual(first.map((item) => item.fingerprint), copied.map((item) => item.fingerprint));
+  assert.notEqual(first[0].fingerprint, first[1].fingerprint);
+  assert.equal(JSON.stringify(first).includes("student"), false);
+});
+
+test("changes the reusable pool identity when its semantic criterion changes", () => {
+  const before = buildCommentPoolSpecs([poolPlan()]);
+  const after = buildCommentPoolSpecs([poolPlan({ high: "지역 자료를 조사하고 발표함." })]);
+  assert.notEqual(before[0].fingerprint, after[0].fingerprint);
+});
+
+test("approves validated pool candidates up to the fixed twenty sentence target", () => {
+  const spec = buildCommentPoolSpecs([poolPlan()])[1];
+  const candidate = spec.canonicalSentence;
+  const approved = approvePoolCandidates(Array.from({ length: 25 }, (_, index) => index ? `${candidate.slice(0, -1)} ${index}함.` : candidate), spec);
+  assert.ok(approved.approved.length <= COMMENT_POOL_TARGET);
+  assert.ok(approved.approved.includes(candidate));
+});
 
 test("uses the same low-cost model for the initial request and retry", () => {
   assert.equal(generationModel(0, 2), "gpt-5.4-mini");

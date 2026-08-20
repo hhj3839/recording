@@ -26,6 +26,17 @@ type AssessmentPlan = {
   caution: string;
   sortOrder?: number;
 };
+type CommentPoolGroupView = {
+  fingerprint: string;
+  subject: string;
+  unit: string;
+  domain: string;
+  assessmentIndex: number;
+  level: "상" | "중" | "하";
+  status: string;
+  approvedCount: number;
+  targetCount: number;
+};
 type ClassroomInfo = {
   id?: number;
   schoolName: string;
@@ -521,6 +532,7 @@ function StudentManager({ roster, onAdded, onChanged, onDeleted, onImported }: {
 }
 
 function PlanManager({ plan, onChanged, current }: { plan: AssessmentPlan[]; onChanged: (plan: AssessmentPlan[]) => void; current: ClassroomInfo | null }) {
+  const [planSection, setPlanSection] = useState<"plan" | "ai">("plan");
   const [planText, setPlanText] = useState("");
   const [preview, setPreview] = useState<AssessmentPlan[]>([]);
   const [errors, setErrors] = useState<string[]>([]);
@@ -538,6 +550,12 @@ function PlanManager({ plan, onChanged, current }: { plan: AssessmentPlan[]; onC
   const [sharedGrade, setSharedGrade] = useState("all");
   const [sharedSubject, setSharedSubject] = useState("all");
   const [sharedPreview, setSharedPreview] = useState<{ name: string; items: AssessmentPlan[] } | null>(null);
+  const [poolGroups, setPoolGroups] = useState<CommentPoolGroupView[]>([]);
+  const [poolSummary, setPoolSummary] = useState({ total: 0, ready: 0, usable: 0, needsGeneration: 0 });
+  const [selectedPoolFingerprint, setSelectedPoolFingerprint] = useState("");
+  const [poolSentences, setPoolSentences] = useState<Array<{ id: number; sentence: string }>>([]);
+  const [poolBusy, setPoolBusy] = useState(false);
+  const [poolJob, setPoolJob] = useState<{ id: string; status: string; completed: number; total: number; failed: number; error: string } | null>(null);
   const columns: Array<[keyof AssessmentPlan, string]> = [
     ["subject", "과목"], ["unit", "단원"], ["goal", "평가목표"], ["domain", "영역"],
     ["type", "평가 유형"], ["perspective", "평가 관점"], ["high", "상"], ["middle", "중"],
@@ -765,6 +783,67 @@ function PlanManager({ plan, onChanged, current }: { plan: AssessmentPlan[]; onC
     if (!response.ok) return setErrors([result.error || "공동 평가계획을 삭제하지 못했습니다."]);
     await loadSharedPlans();
   };
+  const loadPoolStatus = useCallback(async (fingerprint = "") => {
+    const response = await fetch(`/api/comment-pools${fingerprint ? `?fingerprint=${encodeURIComponent(fingerprint)}` : ""}`, { cache: "no-store" });
+    const result = await readApiJson<{ groups?: CommentPoolGroupView[]; summary?: typeof poolSummary; sentences?: Array<{ id: number; sentence: string }> }>(response, "AI 평어 상태를 불러오지 못했습니다.");
+    if (!response.ok) throw new Error(result.error || "AI 평어 상태를 불러오지 못했습니다.");
+    if (result.groups) {
+      setPoolGroups(result.groups);
+      setPoolSummary(result.summary ?? { total: 0, ready: 0, usable: 0, needsGeneration: 0 });
+      if (result.groups[0]) setSelectedPoolFingerprint((current) => current || result.groups![0].fingerprint);
+    }
+    if (result.sentences) setPoolSentences(result.sentences);
+  }, []);
+  const startPoolProduction = async () => {
+    if (!plan.length || poolBusy) return;
+    if (!window.confirm(`평가영역·수준별 승인 문장 20개를 목표로 AI 평어를 제작합니다.\n현재 제작 또는 보완이 필요한 묶음은 ${poolSummary.needsGeneration || plan.length * 3}개입니다.\n\nAI API를 사용해 제작을 시작할까요?`)) return;
+    setPoolBusy(true);
+    setErrors([]);
+    try {
+      const response = await fetch("/api/comment-pools", { method: "POST" });
+      const result = await readApiJson<{ ready?: boolean; jobId?: string; total?: number }>(response, "AI 평어 제작을 시작하지 못했습니다.");
+      if (!response.ok) throw new Error(result.error || "AI 평어 제작을 시작하지 못했습니다.");
+      if (result.ready) {
+        setMessage("현재 평가계획의 AI 평어가 모두 준비되어 있습니다.");
+        await loadPoolStatus();
+      } else if (result.jobId) {
+        setPoolJob({ id: result.jobId, status: "queued", completed: 0, total: Number(result.total), failed: 0, error: "" });
+        setMessage("AI 평어 제작을 시작했습니다. 다른 화면으로 이동해도 백그라운드에서 계속 진행합니다.");
+      }
+    } catch (error) {
+      setErrors([error instanceof Error ? error.message : "AI 평어 제작을 시작하지 못했습니다."]);
+    } finally { setPoolBusy(false); }
+  };
+  useEffect(() => {
+    if (planSection !== "ai") return;
+    const timer = window.setTimeout(() => {
+      void loadPoolStatus().catch((error) => setErrors([error instanceof Error ? error.message : "AI 평어 상태를 불러오지 못했습니다."]));
+    }, 0);
+    return () => window.clearTimeout(timer);
+  }, [planSection, plan.length, loadPoolStatus]);
+  useEffect(() => {
+    if (!selectedPoolFingerprint || planSection !== "ai") return;
+    const timer = window.setTimeout(() => {
+      void loadPoolStatus(selectedPoolFingerprint).catch(() => setPoolSentences([]));
+    }, 0);
+    return () => window.clearTimeout(timer);
+  }, [selectedPoolFingerprint, planSection, loadPoolStatus]);
+  useEffect(() => {
+    if (!poolJob || !["queued", "running"].includes(poolJob.status)) return;
+    const timer = window.setInterval(() => {
+      void fetch(`/api/comment-pools?jobId=${encodeURIComponent(poolJob.id)}`, { cache: "no-store" })
+        .then((response) => readApiJson<{ job?: typeof poolJob }>(response, "AI 평어 제작 상태를 불러오지 못했습니다."))
+        .then((result) => {
+          if (!result.job) return;
+          setPoolJob(result.job);
+          if (!["queued", "running"].includes(result.job.status)) {
+            window.clearInterval(timer);
+            void loadPoolStatus();
+          }
+        }).catch(() => undefined);
+    }, 2500);
+    return () => window.clearInterval(timer);
+  }, [poolJob, loadPoolStatus]);
   const changePlan = (id: number | undefined, key: keyof AssessmentPlan, value: string) => {
     onChanged(plan.map((item) => item.id === id ? { ...item, [key]: value } : item));
   };
@@ -782,6 +861,26 @@ function PlanManager({ plan, onChanged, current }: { plan: AssessmentPlan[]; onC
     <div className="page-heading">
       <div><p className="eyebrow">학급별 평가 기준</p><h1>평가계획 관리</h1><p>10개 열로 정리한 평가계획을 붙여넣으면 자동으로 인식하고 검증합니다.</p></div>
     </div>
+    <div className="plan-manager-tabs" role="tablist" aria-label="평가계획 관리 메뉴">
+      <button role="tab" aria-selected={planSection === "plan"} className={planSection === "plan" ? "active" : ""} onClick={() => setPlanSection("plan")}>평가계획</button>
+      <button role="tab" aria-selected={planSection === "ai"} className={planSection === "ai" ? "active" : ""} onClick={() => setPlanSection("ai")}>AI 평어{poolSummary.needsGeneration > 0 ? " · 제작 필요" : ""}</button>
+    </div>
+    {planSection === "ai" && <section className="ai-comment-pool-panel">
+      <div className="section-heading"><div><p className="eyebrow">평가계획용 문장 풀</p><h2>AI 평어</h2><p>학생에게 배정하기 전, 평가영역·수준별 평어를 최대 20개씩 제작하고 검수합니다.</p></div><button disabled={poolBusy || !plan.length || poolSummary.needsGeneration === 0 || Boolean(poolJob && ["queued", "running"].includes(poolJob.status))} onClick={() => void startPoolProduction()}>{poolJob && ["queued", "running"].includes(poolJob.status) ? "AI 평어 제작 중…" : poolSummary.needsGeneration ? "AI 평어 제작" : "AI 평어 준비 완료"}</button></div>
+      {!plan.length ? <p className="empty-cell">평가계획을 먼저 저장해 주세요.</p> : <>
+        <div className="ai-pool-summary">
+          <span><b>{poolSummary.total}</b>개 영역·수준</span>
+          <span><b>{poolSummary.ready}</b>개 준비 완료</span>
+          {poolSummary.needsGeneration > 0 && <span className="needs-work"><b>{poolSummary.needsGeneration}</b>개 제작·보완 필요</span>}
+          {poolJob && ["queued", "running"].includes(poolJob.status) && <span><b>{poolJob.completed}/{poolJob.total}</b> 제작 중</span>}
+        </div>
+        {!!poolGroups.length && <div className="ai-pool-browser">
+          <label><span>과목·영역·수준</span><select value={selectedPoolFingerprint} onChange={(event) => setSelectedPoolFingerprint(event.target.value)}>{poolGroups.map((group) => <option value={group.fingerprint} key={group.fingerprint}>{group.subject} · {group.domain} · {group.level} ({group.approvedCount}/{group.targetCount})</option>)}</select></label>
+          <div className="ai-pool-sentence-list">{poolSentences.length ? poolSentences.map((row, index) => <p key={row.id}><b>{index + 1}</b><span>{row.sentence}</span></p>) : <p className="empty-cell">아직 제작된 승인 문장이 없습니다.</p>}</div>
+        </div>}
+      </>}
+    </section>}
+    {planSection === "plan" && <>
     {versionsOpen && <section className="plan-version-panel">
       <div className="section-heading"><div><p className="eyebrow">변경 기록</p><h2>평가계획 버전 기록</h2></div><button className="secondary" onClick={() => setVersionsOpen(false)}>닫기</button></div>
       <p>평가수준이 입력된 학급은 평가 항목 구조 보호를 위해 이전 버전을 조회만 할 수 있습니다.</p>
@@ -810,7 +909,7 @@ function PlanManager({ plan, onChanged, current }: { plan: AssessmentPlan[]; onC
       <div className="plan-paste-columns">과목 → 단원 → 평가목표 → 영역 → 평가유형 → 평가관점 → 상 → 중 → 하 → 유의점</div>
       <label className="plan-paste-label" htmlFor="assessment-plan-paste">평가계획 표</label>
       <textarea id="assessment-plan-paste" value={planText} onChange={(event) => setPlanText(event.target.value)} placeholder={"Excel, 한글 또는 ChatGPT에서 변환한 평가계획 표를 붙여넣으세요.\n\n국어\t1. 생생하게 표현해요\t상황에 알맞게 표현할 수 있다.\t듣기·말하기\t구술 평가\t상황에 맞게 표현하는가?\t정확하고 실감 나게 표현할 수 있다.\t알맞게 표현할 수 있다.\t도움을 받아 표현하기 위해 노력한다.\t다양한 표현을 고려한다."} />
-      <div className="plan-paste-actions"><button disabled={busy || !planText.trim()} onClick={interpretPlanText}>표 분석·미리보기</button></div>
+      <div className="plan-paste-actions"><button disabled={busy || !planText.trim()} onClick={interpretPlanText}>표 분석·미리보기</button><button className="secondary" onClick={() => void loadSharedPlans()}>공동 평가계획</button></div>
     </section>
     {message && <p className="student-message">{message}</p>}
     {!!errors.length && <div className="plan-errors"><strong>확인이 필요합니다.</strong>{errors.slice(0, 8).map((error) => <p key={error}>• {error}</p>)}</div>}
@@ -820,7 +919,7 @@ function PlanManager({ plan, onChanged, current }: { plan: AssessmentPlan[]; onC
       <div className="plan-preview-list">{preview.slice(0, 8).map((item, index) => <article key={`${item.subject}-${item.unit}-${index}`}><b>{item.subject} · {item.unit}</b><span>{item.goal}</span><small>{item.domain} / {item.type || "유형 미입력"}</small></article>)}</div>
     </section>}
     <section className="plan-list">
-      <div className="section-heading"><div><p className="eyebrow">저장 완료</p><h2>저장된 평가계획 · {plan.length}개</h2></div><div className="plan-saved-actions"><button className="secondary" onClick={() => void loadSharedPlans()}>공동 평가계획</button><button className="secondary" onClick={() => void loadVersions()}>버전 기록</button><button className="danger-text" disabled={busy || !plan.length} onClick={() => void clearCurrentPlan()}>현재 평가계획 초기화</button></div></div>
+      <div className="section-heading"><div><p className="eyebrow">저장 완료</p><h2>저장된 평가계획 · {plan.length}개</h2></div><div className="plan-saved-actions"><button className="secondary" onClick={() => void loadVersions()}>버전 기록</button><button className="danger-text" disabled={busy || !plan.length} onClick={() => void clearCurrentPlan()}>현재 평가계획 초기화</button></div></div>
       {plan.map((item, index) => <article className="plan-card" key={item.id ?? `${item.subject}-${index}`}>
         <div className="plan-card-summary">
           <div className="plan-card-title"><strong>{index + 1}. {item.subject} · {item.unit}</strong><span>{item.domain}</span><span>{item.type || "유형 미입력"}</span></div>
@@ -834,6 +933,7 @@ function PlanManager({ plan, onChanged, current }: { plan: AssessmentPlan[]; onC
       </article>)}
       {!plan.length && <p className="empty-cell">저장된 평가계획이 없습니다.</p>}
     </section>
+    </>}
   </section>;
 }
 

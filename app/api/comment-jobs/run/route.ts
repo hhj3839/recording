@@ -1,17 +1,11 @@
 import { waitUntil } from "@vercel/functions";
 import { eq, selectRows, updateRows } from "../../../../db/supabase";
-import { getAiUsage, MONTHLY_AI_LIMIT, recordAiUsage } from "../../../ai-usage";
 import { selectMostDiverseComments } from "../../../comment-diversity";
 import { CommentEvidence, GeneratedComment, GeneratedCommentPart, saveGeneratedCommentParts, saveGeneratedComments, signCommentJob, verifyCommentJob } from "../../../comment-generation";
-import { assignApprovedCommentPools, generateCommentPoolBatch } from "../../../comment-pool-generation";
-import { generationModel } from "../../../ai-model-policy";
-import { MAX_COMMENT_AI_CALLS_PER_BATCH, MAX_COMMENT_DIVERSITY_CALLS_PER_BATCH } from "../../../comment-batching";
-import { CommentAreaPart, findCommentAreaOverlaps } from "../../../comment-area-diversity";
-import { criterionSemanticIssues, criterionToSafeNominalCandidates, evidenceBlockingIssues, levelAppropriatenessIssues, positiveGrowthCriterion, validateGeneratedCommentPart } from "../../../comment-generation-policy";
+import { assignApprovedCommentPools } from "../../../comment-pool-generation";
 import { assembleRotatedComment } from "../../../comment-assembly";
 
 export const maxDuration = 300;
-const MAX_GENERATION_ATTEMPTS = 5;
 
 type JobRow = {
   id: string;
@@ -79,11 +73,8 @@ export async function POST(request: Request) {
 
   let comments: GeneratedComment[] = [];
   const generatedParts = new Map<string, GeneratedCommentPart>();
-  const generatedThisRun = new Set<string>();
-  const rejectionIssues = new Map<string, Set<string>>();
   let errorMessage = "";
   let pending = batch;
-  let nonRetryableFailure = false;
   const subject = batch[0]?.subject ?? "";
   const batchStudentIds = new Set(batch.map((item) => item.studentId));
   const savedParts = subject ? await selectRows<{
@@ -119,90 +110,57 @@ export async function POST(request: Request) {
     .filter((item) => !batchStudentIds.has(Number(item.student_id)))
     .map((item) => item.comment)
     .filter(Boolean);
-  let aiCallCount = 0;
-  let callLimitReached = false;
-  for (let attempt = 0; attempt < MAX_GENERATION_ATTEMPTS && pending.length; attempt += 1) {
-    const usage = await getAiUsage(job.owner_id);
-    if (MONTHLY_AI_LIMIT !== null && usage.monthly >= MONTHLY_AI_LIMIT) {
-      errorMessage = `월 AI 요청 한도 ${MONTHLY_AI_LIMIT}회를 사용하여 남은 항목의 자동 재시도를 중단했습니다.`;
-      break;
-    }
-    // 1회차는 문장 풀, 2~3회차는 부족 후보 묶음, 4~5회차는
-    // 학생·영역별 독립 후보로 요청한다. 한 시도는 한 API 호출만 사용한다.
-    const groups = [pending];
-    for (const group of groups) {
-      if (aiCallCount >= MAX_COMMENT_AI_CALLS_PER_BATCH) {
-        callLimitReached = true;
-        errorMessage = `이 생성 묶음의 AI 요청 상한 ${MAX_COMMENT_AI_CALLS_PER_BATCH}회에 도달하여 남은 영역은 평가기준 문장으로 완성합니다.`;
-        break;
-      }
-      const groupUsage = await getAiUsage(job.owner_id);
-      if (MONTHLY_AI_LIMIT !== null && groupUsage.monthly >= MONTHLY_AI_LIMIT) {
-        errorMessage = `월 AI 요청 한도 ${MONTHLY_AI_LIMIT}회를 사용하여 남은 항목의 자동 재시도를 중단했습니다.`;
-        break;
-      }
-      aiCallCount += 1;
-      try {
-        const requestGroup = group.map((entry) => ({
-          ...entry,
-          repairIssues: Object.fromEntries(entry.items.map((item) => [
-            item.assessmentIndex,
-            [...(rejectionIssues.get(`${entry.studentId}|${entry.subject}|${item.assessmentIndex}`) ?? [])],
-          ])),
-        }));
-        const generated = await generateCommentPoolBatch(
-          requestGroup,
-          // 제한된 금지 문장 목록에는 방금 생성·저장한 문장을 먼저 넣어
-          // 현재 학급 작업 안의 중복 방지가 과거 기록 때문에 잘리지 않게 한다.
-          [...[...generatedParts.values()].map((item) => item.text), ...avoidComments],
-          attempt > 0,
-          generationModel(attempt, MAX_GENERATION_ATTEMPTS),
-          false,
-          attempt >= 3,
-        );
-        for (const part of generated.parts) {
-          const key = `${part.studentId}|${part.subject}|${part.assessmentIndex}`;
-          generatedParts.set(key, part);
-          generatedThisRun.add(key);
-          rejectionIssues.delete(key);
-        }
-        for (const rejection of generated.rejections) {
-          const key = `${rejection.studentId}|${rejection.subject}|${rejection.assessmentIndex}`;
-          const issues = rejectionIssues.get(key) ?? new Set<string>();
-          rejection.issues.forEach((issue) => issues.add(issue));
-          rejectionIssues.set(key, issues);
-        }
-        await saveGeneratedCommentParts({
-          ownerId: job.owner_id,
-          ownerEmail: job.owner_email,
-          classId: Number(job.class_id),
-          parts: generated.parts.map((part) => ({ ...part, attempts: attempt + 1 })),
-        });
-        await recordAiUsage({
-          ownerId: job.owner_id, ownerEmail: job.owner_email, classId: Number(job.class_id),
-          feature: `all-comments-attempt-${attempt + 1}`,
-          ...generated.usage,
-        });
-      } catch (error) {
-        errorMessage = error instanceof Error ? error.message : "AI 생성 오류";
-        nonRetryableFailure = errorMessage.includes("(insufficient_quota)")
-          || errorMessage.includes("(invalid_api_key)")
-          || errorMessage.includes("(model_not_found)");
-        await recordAiUsage({
-          ownerId: job.owner_id, ownerEmail: job.owner_email, classId: Number(job.class_id),
-          feature: `all-comments-attempt-${attempt + 1}`,
-          model: generationModel(attempt, MAX_GENERATION_ATTEMPTS),
-        });
-      }
-      if (nonRetryableFailure) break;
-    }
-    pending = batch.flatMap((item) => {
-      const missingItems = item.items.filter((evidenceItem) =>
-        !generatedParts.has(`${item.studentId}|${item.subject}|${evidenceItem.assessmentIndex}`));
-      return missingItems.length ? [{ ...item, items: missingItems }] : [];
-    });
-    if (nonRetryableFailure || callLimitReached) break;
+  // 학생 평어 생성 단계에서는 OpenAI를 호출하지 않는다. 평가계획 관리에서
+  // 미리 제작·검수해 둔 영역·수준별 승인 문장만 읽어 순환 배정한다.
+  const fingerprints = [...new Set(pending.flatMap((entry) => entry.items
+    .map((item) => item.poolFingerprint)
+    .filter((value): value is string => Boolean(value))))];
+  const poolVersions = fingerprints.length ? await selectRows<{ id: number; fingerprint: string }>("comment_pool_versions", {
+    fingerprint: `in.(${fingerprints.join(",")})`,
+  }) : [];
+  const versionIds = poolVersions.map((pool) => Number(pool.id));
+  const poolSentences = versionIds.length ? await selectRows<{ pool_version_id: number; sentence: string }>("comment_pool_sentences", {
+    pool_version_id: `in.(${versionIds.join(",")})`, status: eq("approved"), order: "id.asc",
+  }) : [];
+  const versionByFingerprint = new Map(poolVersions.map((pool) => [pool.fingerprint, Number(pool.id)]));
+  const sentencesByVersion = new Map<number, string[]>();
+  for (const row of poolSentences) {
+    const sentences = sentencesByVersion.get(Number(row.pool_version_id)) ?? [];
+    if (row.sentence) sentences.push(row.sentence);
+    sentencesByVersion.set(Number(row.pool_version_id), sentences);
   }
+  const jobOffset = [...jobId].reduce((sum, character) => sum + character.charCodeAt(0), 0);
+  const groupIndexes = new Map<string, number>();
+  const assignedParts: Array<GeneratedCommentPart & { attempts: number; status: "complete"; issues: string[] }> = [];
+  for (const entry of [...pending].sort((left, right) => left.studentId - right.studentId)) {
+    for (const item of entry.items) {
+      const versionId = item.poolFingerprint ? versionByFingerprint.get(item.poolFingerprint) : undefined;
+      const candidates = versionId ? (sentencesByVersion.get(versionId) ?? []) : [];
+      if (!candidates.length) continue;
+      const group = item.poolFingerprint ?? `${entry.subject}|${item.assessmentIndex}|${item.level}`;
+      const index = groupIndexes.get(group) ?? 0;
+      groupIndexes.set(group, index + 1);
+      const text = candidates[(jobOffset + index + item.assessmentIndex) % candidates.length];
+      const part: GeneratedCommentPart = {
+        studentId: entry.studentId,
+        subject: entry.subject,
+        assessmentIndex: item.assessmentIndex,
+        evidence: item.text,
+        text,
+        warnings: [],
+      };
+      generatedParts.set(`${entry.studentId}|${entry.subject}|${item.assessmentIndex}`, part);
+      assignedParts.push({ ...part, attempts: 1, status: "complete", issues: [] });
+    }
+  }
+  if (assignedParts.length) {
+    await saveGeneratedCommentParts({ ownerId: job.owner_id, ownerEmail: job.owner_email, classId: Number(job.class_id), parts: assignedParts });
+  }
+  pending = batch.flatMap((item) => {
+    const missingItems = item.items.filter((evidenceItem) =>
+      !generatedParts.has(`${item.studentId}|${item.subject}|${evidenceItem.assessmentIndex}`));
+    return missingItems.length ? [{ ...item, items: missingItems }] : [];
+  });
 
   // 모든 문장 풀 생성·검수 뒤에도 후보가 0개인 그룹만 평가기준에서 만든
   // 기준문장으로 채운다. 다양성보다 완전성을 우선하여 빈칸은 남기지 않는다.
@@ -213,8 +171,7 @@ export async function POST(request: Request) {
     const warning = "검증된 문장 풀 후보가 없어 평가기준 문장을 재사용함";
     const reused = { ...fallback, warnings: [warning] };
     generatedParts.set(key, reused);
-    rejectionIssues.delete(key);
-    fallbackParts.push({ ...reused, attempts: MAX_GENERATION_ATTEMPTS, status: "warning", issues: [warning] });
+    fallbackParts.push({ ...reused, attempts: 1, status: "warning", issues: [warning] });
   }
   if (fallbackParts.length) {
     await saveGeneratedCommentParts({
@@ -225,178 +182,6 @@ export async function POST(request: Request) {
     });
   }
 
-  const diversityReferences = savedParts.flatMap((saved) => {
-    const key = `${saved.student_id}|${saved.subject}|${saved.assessment_index}`;
-    return generatedThisRun.has(key) || !saved.sentence ? [] : [{
-      studentId: Number(saved.student_id), subject: saved.subject,
-      assessmentIndex: Number(saved.assessment_index), evidence: saved.evidence, text: saved.sentence,
-    } satisfies CommentAreaPart];
-  });
-  // 완전히 같은 문장은 AI를 다시 부르기 전에 평가기준에서 파생한 검증된
-  // 직접 문형으로 무료 분산한다. 사실을 추가하지 않는 후보만 사용한다.
-  const normalizedSentence = (value: string) => value.normalize("NFKC").replace(/\s+/g, "").replace(/[.!?。！？]/g, "");
-  const usedByGroup = new Map<string, Set<string>>();
-  const groupKey = (subjectName: string, assessmentIndex: number, level: string) => `${subjectName}|${assessmentIndex}|${level}`;
-  for (const reference of diversityReferences) {
-    const sourceEntry = batch.find((entry) => entry.studentId === reference.studentId);
-    const sourceItem = (sourceEntry?.subjectItems ?? sourceEntry?.items ?? [])
-      .find((item) => item.assessmentIndex === reference.assessmentIndex);
-    if (!sourceItem?.level) continue;
-    const key = groupKey(reference.subject, reference.assessmentIndex, sourceItem.level);
-    const used = usedByGroup.get(key) ?? new Set<string>();
-    used.add(normalizedSentence(reference.text));
-    usedByGroup.set(key, used);
-  }
-  const freeDiversified: Array<GeneratedCommentPart & { attempts: number; status: "complete" | "warning"; issues: string[] }> = [];
-  for (const entry of [...batch].sort((left, right) => left.studentId - right.studentId)) {
-    for (const item of entry.items) {
-      const key = `${entry.studentId}|${entry.subject}|${item.assessmentIndex}`;
-      const current = generatedParts.get(key);
-      if (!current || !item.level) continue;
-      const poolKey = groupKey(entry.subject, item.assessmentIndex, item.level);
-      const used = usedByGroup.get(poolKey) ?? new Set<string>();
-      const currentKey = normalizedSentence(current.text);
-      if (used.has(currentKey)) {
-        const generationCriterion = positiveGrowthCriterion(item.level, item.criterion ?? item.text);
-        const replacement = criterionToSafeNominalCandidates(generationCriterion).find((candidate) => {
-          const candidateKey = normalizedSentence(candidate);
-          return candidateKey && !used.has(candidateKey)
-            && validateGeneratedCommentPart(candidate, generationCriterion).valid
-            && levelAppropriatenessIssues(candidate, item.level, generationCriterion).length === 0
-            && evidenceBlockingIssues(candidate, `${item.text} | 생성용 기준: ${generationCriterion}`, generationCriterion).length === 0
-            && criterionSemanticIssues(candidate, generationCriterion, item.levelCriteria).length === 0;
-        });
-        if (replacement) {
-          const updated = {
-            ...current,
-            text: replacement,
-            warnings: current.warnings.filter((warning) => !/(?:완전히 같은 문장|유사한 표현|표현 중복)/.test(warning)),
-          };
-          generatedParts.set(key, updated);
-          used.add(normalizedSentence(replacement));
-          freeDiversified.push({
-            ...updated,
-            attempts: Math.max(1, aiCallCount),
-            status: updated.warnings.length ? "warning" : "complete",
-            issues: updated.warnings,
-          });
-          continue;
-        }
-      }
-      used.add(currentKey);
-      usedByGroup.set(poolKey, used);
-    }
-  }
-  if (freeDiversified.length) {
-    await saveGeneratedCommentParts({
-      ownerId: job.owner_id, ownerEmail: job.owner_email, classId: Number(job.class_id), parts: freeDiversified,
-    });
-  }
-  const refreshedDiversityCandidates = [...generatedParts.entries()]
-    .filter(([key]) => generatedThisRun.has(key))
-    .map(([, part]) => part satisfies CommentAreaPart);
-  const overlaps = findCommentAreaOverlaps({ candidates: refreshedDiversityCandidates, references: diversityReferences });
-  const overlapKeys = new Set(overlaps.map((item) => item.key));
-  const exactOverlapKeys = new Set(overlaps
-    .filter((item) => item.reasons.includes("동일 문장 중복"))
-    .map((item) => item.key));
-  const diversityTargets = batch.flatMap((item) => {
-    const items = item.items.filter((entry) => exactOverlapKeys.has(`${item.studentId}|${item.subject}|${entry.assessmentIndex}`));
-    return items.length ? [{ ...item, items }] : [];
-  });
-  const similarityOnlyKeys = new Set([...overlapKeys].filter((key) => !exactOverlapKeys.has(key)));
-  if (similarityOnlyKeys.size) {
-    const reviewParts = [...similarityOnlyKeys].flatMap((key) => {
-      const current = generatedParts.get(key);
-      if (!current) return [];
-      const updated = { ...current, warnings: [...new Set([...current.warnings, "같은 평가영역·수준에서 유사한 표현이 있어 교사 확인이 필요함"])] };
-      generatedParts.set(key, updated);
-      return [{ ...updated, attempts: Math.max(1, aiCallCount), status: "warning" as const, issues: updated.warnings }];
-    });
-    if (reviewParts.length) {
-      await saveGeneratedCommentParts({
-        ownerId: job.owner_id, ownerEmail: job.owner_email, classId: Number(job.class_id), parts: reviewParts,
-      });
-    }
-  }
-  if (diversityTargets.length && MAX_COMMENT_DIVERSITY_CALLS_PER_BATCH > 0) {
-    const markDiversityReview = async (message: string) => {
-      const reviewParts = [...overlapKeys].flatMap((key) => {
-        const current = generatedParts.get(key);
-        if (!current) return [];
-        const updated = { ...current, warnings: [...new Set([...current.warnings, message])] };
-        generatedParts.set(key, updated);
-        return [{ ...updated, attempts: Math.max(1, aiCallCount), status: "warning" as const, issues: updated.warnings }];
-      });
-      if (reviewParts.length) {
-        await saveGeneratedCommentParts({
-          ownerId: job.owner_id, ownerEmail: job.owner_email, classId: Number(job.class_id), parts: reviewParts,
-        });
-      }
-    };
-    const usage = await getAiUsage(job.owner_id);
-    if (aiCallCount >= MAX_COMMENT_AI_CALLS_PER_BATCH || (MONTHLY_AI_LIMIT !== null && usage.monthly >= MONTHLY_AI_LIMIT)) {
-      await markDiversityReview("같은 평가영역·수준에서 유사한 표현이 있어 교사 확인이 필요함");
-    } else {
-      aiCallCount += 1;
-      const fixedReferences = [
-        ...diversityReferences,
-        ...refreshedDiversityCandidates.filter((part) => !exactOverlapKeys.has(`${part.studentId}|${part.subject}|${part.assessmentIndex}`)),
-      ];
-      try {
-        const regenerated = await generateCommentPoolBatch(
-          diversityTargets,
-          [
-            ...fixedReferences.map((part) => part.text),
-            ...refreshedDiversityCandidates.map((part) => part.text),
-            ...avoidComments,
-          ],
-          true,
-          generationModel(1, MAX_GENERATION_ATTEMPTS),
-        );
-        const returnedKeys = new Set(regenerated.parts.map((part) => `${part.studentId}|${part.subject}|${part.assessmentIndex}`));
-        const remainingOverlaps = findCommentAreaOverlaps({ candidates: regenerated.parts, references: fixedReferences });
-        const remainingKeys = new Set(remainingOverlaps.map((item) => item.key));
-        const repairedParts = regenerated.parts.map((part) => {
-          const key = `${part.studentId}|${part.subject}|${part.assessmentIndex}`;
-          return remainingKeys.has(key)
-            ? { ...part, warnings: [...new Set([...part.warnings, "재생성 후에도 유사한 표현이 있어 교사 확인이 필요함"])] }
-            : part;
-        });
-        for (const part of repairedParts) {
-          generatedParts.set(`${part.studentId}|${part.subject}|${part.assessmentIndex}`, part);
-        }
-        for (const key of overlapKeys) {
-          if (returnedKeys.has(key)) continue;
-          const current = generatedParts.get(key);
-          if (current) generatedParts.set(key, {
-            ...current, warnings: [...new Set([...current.warnings, "유사 표현 재생성이 완료되지 않아 교사 확인이 필요함"])],
-          });
-        }
-        const savedRepairs = [...overlapKeys].flatMap((key) => {
-          const part = generatedParts.get(key);
-          return part ? [{
-            ...part, attempts: aiCallCount,
-            status: part.warnings.length ? "warning" as const : "complete" as const,
-            issues: part.warnings,
-          }] : [];
-        });
-        await saveGeneratedCommentParts({
-          ownerId: job.owner_id, ownerEmail: job.owner_email, classId: Number(job.class_id), parts: savedRepairs,
-        });
-        await recordAiUsage({
-          ownerId: job.owner_id, ownerEmail: job.owner_email, classId: Number(job.class_id),
-          feature: "all-comments-diversity-retry", ...regenerated.usage,
-        });
-      } catch {
-        await markDiversityReview("유사 표현 재생성이 완료되지 않아 교사 확인이 필요함");
-        await recordAiUsage({
-          ownerId: job.owner_id, ownerEmail: job.owner_email, classId: Number(job.class_id),
-          feature: "all-comments-diversity-retry", model: generationModel(1, MAX_GENERATION_ATTEMPTS),
-        });
-      }
-    }
-  }
   comments = batch.flatMap((item) => {
     const available = (item.subjectItems ?? item.items).flatMap((evidenceItem) => {
       const text = generatedParts.get(`${item.studentId}|${item.subject}|${evidenceItem.assessmentIndex}`)?.text ?? "";
