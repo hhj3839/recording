@@ -9,7 +9,7 @@ import { batchCommentRepairs, batchCommentsByAssessmentArea, COMMENT_BATCH_SIZE,
 import { batchBehaviors, BEHAVIOR_BATCH_SIZE } from "../app/behavior-batching.ts";
 import { estimateAiCostUsd } from "../app/ai-pricing.ts";
 import { commentAreaOverlapReasons } from "../app/comment-area-diversity.ts";
-import { assignUniquePoolCandidates, buildCommentPoolGroups, buildPublicCommentPoolRequests, commentPoolCandidateCount } from "../app/comment-pool-generation.ts";
+import { assignUniquePoolCandidates, buildCanonicalBaselinePart, buildCommentPoolGroups, buildPublicCommentPoolRequests, commentPoolCandidateCount } from "../app/comment-pool-generation.ts";
 import { readApiJson } from "../app/api-response.ts";
 
 test("uses the same low-cost model for the initial request and retry", () => {
@@ -109,6 +109,26 @@ test("uses the canonical sentence when AI pool candidates fail validation", () =
   }]);
   const result = assignUniquePoolCandidates(group, ["관찰함."]);
   assert.deepEqual(result.candidates, ["관찰한 결과를 기록함."]);
+});
+
+test("prepares a complete 105-area canonical baseline before optional AI replacement", () => {
+  const criteria = [
+    "작품 속 인물들의 상황에 알맞은 표정과 몸짓으로 대화를 표현할 수 있다.",
+    "문장을 문장의 짜임에 따라 나누고 자료의 내용을 그 짜임에 맞게 표현할 수 있다.",
+    "작품을 읽고 재미나 감동을 느낀 부분과 그 까닭을 쓸 수 있다.",
+    "중심 문장과 뒷받침 문장을 파악하여 내용을 간추릴 수 있다.",
+    "마음을 전하는 글을 쓰는 방법을 알고 글을 쓰기 위해 노력한다.",
+  ];
+  const baselines = Array.from({ length: 21 }, (_, studentIndex) => criteria.map((criterion, assessmentIndex) =>
+    buildCanonicalBaselinePart(studentIndex + 1, "국어", {
+      assessmentIndex,
+      level: "중",
+      criterion,
+      text: `영역 ${assessmentIndex + 1} | 수준: 중 | 기준: ${criterion}`,
+    }))).flat();
+  assert.equal(baselines.length, 105);
+  assert.equal(baselines.every(Boolean), true);
+  assert.equal(new Set(baselines.filter(Boolean).map((part) => `${part.studentId}|${part.assessmentIndex}`)).size, 105);
 });
 
 test("derives the same common generation guide from any subject criterion", () => {

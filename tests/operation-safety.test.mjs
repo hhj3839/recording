@@ -53,6 +53,17 @@ test("job status polling wakes queued background generation without creating a n
   }
 });
 
+test("comment jobs persist canonical baselines before optional AI replacement", () => {
+  const source = readFileSync("app/api/comment-jobs/run/route.ts", "utf8");
+  const baselineIndex = source.indexOf("const baselineParts =");
+  const aiLoopIndex = source.indexOf("for (let attempt = 0;");
+  assert.equal(baselineIndex > 0, true);
+  assert.equal(aiLoopIndex > baselineIndex, true);
+  assert.match(source.slice(baselineIndex, aiLoopIndex), /await saveGeneratedCommentParts/);
+  assert.match(source, /generatedParts\.set\(key, part\)/);
+  assert.match(source, /기준 문장을 유지했습니다/);
+});
+
 test("comment prompt uses adaptive lengths and natural nominal endings", () => {
   const source = readFileSync("app/comment-generation.ts", "utf8");
   const page = readFileSync("app/page.tsx", "utf8");

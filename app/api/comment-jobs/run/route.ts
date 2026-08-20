@@ -3,7 +3,7 @@ import { eq, selectRows, updateRows } from "../../../../db/supabase";
 import { getAiUsage, MONTHLY_AI_LIMIT, recordAiUsage } from "../../../ai-usage";
 import { selectMostDiverseComments } from "../../../comment-diversity";
 import { CommentEvidence, GeneratedComment, GeneratedCommentPart, saveGeneratedCommentParts, saveGeneratedComments, signCommentJob, verifyCommentJob } from "../../../comment-generation";
-import { generateCommentPoolBatch } from "../../../comment-pool-generation";
+import { buildCanonicalBaselinePart, generateCommentPoolBatch } from "../../../comment-pool-generation";
 import { generationModel } from "../../../ai-model-policy";
 import { MAX_COMMENT_AI_CALLS_PER_BATCH, MAX_COMMENT_DIVERSITY_CALLS_PER_BATCH } from "../../../comment-batching";
 import { CommentAreaPart, findCommentAreaOverlaps } from "../../../comment-area-diversity";
@@ -79,6 +79,8 @@ export async function POST(request: Request) {
   let comments: GeneratedComment[] = [];
   const generatedParts = new Map<string, GeneratedCommentPart>();
   const generatedThisRun = new Set<string>();
+  const aiCompletedKeys = new Set<string>();
+  const baselineSeededKeys = new Set<string>();
   const rejectionIssues = new Map<string, Set<string>>();
   let errorMessage = "";
   let pending = batch;
@@ -104,9 +106,35 @@ export async function POST(request: Request) {
       text: saved.sentence, warnings: Array.isArray(saved.issues) ? saved.issues : [],
     });
   }
+  // AI보다 먼저 모든 미작성 영역에 평가기준 기준 문장을 배정한다.
+  // 이후 AI 문장은 검수를 통과했을 때만 이 기준 문장을 교체한다.
+  const baselineParts = batch.flatMap((entry) => entry.items.flatMap((item) => {
+    const key = `${entry.studentId}|${entry.subject}|${item.assessmentIndex}`;
+    if (generatedParts.has(key)) return [];
+    const baseline = buildCanonicalBaselinePart(entry.studentId, entry.subject, item);
+    if (!baseline) return [];
+    generatedParts.set(key, baseline);
+    baselineSeededKeys.add(key);
+    return [{
+      ...baseline,
+      attempts: 0,
+      status: "warning" as const,
+      issues: baseline.warnings,
+    }];
+  }));
+  if (baselineParts.length) {
+    await saveGeneratedCommentParts({
+      ownerId: job.owner_id,
+      ownerEmail: job.owner_email,
+      classId: Number(job.class_id),
+      parts: baselineParts,
+    });
+  }
   pending = batch.flatMap((item) => {
-    const missingItems = item.items.filter((evidenceItem) =>
-      !generatedParts.has(`${item.studentId}|${item.subject}|${evidenceItem.assessmentIndex}`));
+    const missingItems = item.items.filter((evidenceItem) => {
+      const key = `${item.studentId}|${item.subject}|${evidenceItem.assessmentIndex}`;
+      return baselineSeededKeys.has(key) || !generatedParts.has(key);
+    });
     return missingItems.length ? [{ ...item, items: missingItems }] : [];
   });
   const existingComments = subject ? await selectRows<{ student_id: number; comment: string }>("generated_comments", {
@@ -130,7 +158,7 @@ export async function POST(request: Request) {
     for (const group of groups) {
       if (aiCallCount >= MAX_COMMENT_AI_CALLS_PER_BATCH) {
         callLimitReached = true;
-        errorMessage = `이 생성 묶음의 AI 요청 상한 ${MAX_COMMENT_AI_CALLS_PER_BATCH}회에 도달하여 남은 영역은 빈칸으로 두었습니다.`;
+        errorMessage = `이 생성 묶음의 AI 요청 상한 ${MAX_COMMENT_AI_CALLS_PER_BATCH}회에 도달하여 남은 영역은 검증된 기준 문장을 유지했습니다.`;
         break;
       }
       const groupUsage = await getAiUsage(job.owner_id);
@@ -161,6 +189,7 @@ export async function POST(request: Request) {
           const key = `${part.studentId}|${part.subject}|${part.assessmentIndex}`;
           generatedParts.set(key, part);
           generatedThisRun.add(key);
+          aiCompletedKeys.add(key);
           rejectionIssues.delete(key);
         }
         for (const rejection of generated.rejections) {
@@ -194,8 +223,10 @@ export async function POST(request: Request) {
       if (nonRetryableFailure) break;
     }
     pending = batch.flatMap((item) => {
-      const missingItems = item.items.filter((evidenceItem) =>
-        !generatedParts.has(`${item.studentId}|${item.subject}|${evidenceItem.assessmentIndex}`));
+      const missingItems = item.items.filter((evidenceItem) => {
+        const key = `${item.studentId}|${item.subject}|${evidenceItem.assessmentIndex}`;
+        return !aiCompletedKeys.has(key) && (baselineSeededKeys.has(key) || !generatedParts.has(key));
+      });
       return missingItems.length ? [{ ...item, items: missingItems }] : [];
     });
     if (nonRetryableFailure || callLimitReached) break;

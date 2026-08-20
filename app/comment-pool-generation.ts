@@ -108,6 +108,30 @@ export function buildPublicCommentPoolRequests(groups: CommentPoolGroup[]) {
   }));
 }
 
+export function buildCanonicalBaselinePart(
+  studentId: number,
+  subject: string,
+  item: CommentEvidenceItem,
+): GeneratedCommentPart | null {
+  const criterion = positiveGrowthCriterion(item.level, item.criterion ?? item.text);
+  const text = buildCanonicalCommentSentence(criterion);
+  if (!text) return null;
+  const groundingEvidence = `${item.text} | 생성용 기준: ${criterion}`;
+  const valid = validateGeneratedCommentPart(text, criterion).valid
+    && levelAppropriatenessIssues(text, item.level, criterion).length === 0
+    && evidenceBlockingIssues(text, groundingEvidence, criterion).length === 0
+    && criterionSemanticIssues(text, criterion, item.levelCriteria).length === 0;
+  if (!valid) return null;
+  return {
+    studentId,
+    subject,
+    assessmentIndex: item.assessmentIndex,
+    evidence: item.text,
+    text,
+    warnings: ["평가기준 기준 문장을 먼저 배정하고 AI 통과 문장이 있을 때만 교체함"],
+  };
+}
+
 export function assignUniquePoolCandidates(
   group: CommentPoolGroup,
   rawCandidates: string[],
