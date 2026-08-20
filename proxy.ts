@@ -11,6 +11,7 @@ export function proxy(request: NextRequest) {
     pathname.startsWith("/api/auth/") ||
     pathname === "/api/comment-jobs/pump" ||
     pathname === "/api/comment-jobs/run" ||
+    pathname === "/api/comment-pools/run" ||
     pathname === "/api/behavior-jobs/run" ||
     pathname.startsWith("/_next/") ||
     pathname.includes(".");
