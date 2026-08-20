@@ -139,7 +139,7 @@ export function criterionToSafeNominalCandidates(criterion: string) {
 }
 
 export function levelAppropriatenessIssues(comment: string, level: string | undefined, criterion = "") {
-  if (!level || level === "상") return [];
+  if (!level) return [];
   const strongPraise = /(?:능력이\s*)?뛰어남|돋보임|인상적임/;
   const criterionAllowsPraise = /뛰어|돋보|인상적|탁월|우수/.test(criterion);
   return strongPraise.test(comment) && !criterionAllowsPraise
@@ -299,6 +299,8 @@ const unsupportedGroundingConcepts: Array<{
   { label: "관찰되지 않은 태도 수식어", pattern: /(?:차분|안정적|알차|고르게|꾸준)/, evidencePattern: /(?:차분|안정적|알차|고르게|꾸준|지속|노력)/, blocking: true },
   { label: "입력에 없는 학습·성장 과정", pattern: /(?:익히|익혀|배우|배워)/, evidencePattern: /(?:익히|익혀|배우|배워)/, blocking: true },
   { label: "학습 태도", pattern: /태도/, evidencePattern: /태도|자세|적극적|성실|꾸준|자기주도|주도적|능동적|노력/, blocking: true },
+  { label: "입력보다 강한 수행 정도", pattern: /(?:깊이|충분히|완전히|매우)/, evidencePattern: /(?:깊이|충분히|완전히|매우)/, blocking: true },
+  { label: "수행을 능력 보유로 변경", pattern: /할줄알/, evidencePattern: /할줄알/, blocking: true },
 ];
 
 function normalizeGroundingText(text: string) {
@@ -370,6 +372,12 @@ const semanticAtoms: SemanticAtom[] = [
   { label: "글로 표현하기", criterion: /글.{0,8}표현|표현.{0,8}글/, comment: /글.{0,10}(?:표현함|나타냄|작성함|씀)|(?:표현함|나타냄|작성함|씀).{0,10}글/ },
   { label: "자료 만들기", criterion: /자료.{0,10}(?:만들|만든|만드는|만듦|제작|구성)/, comment: /자료.{0,12}(?:만들|만든|만드는|만듦|제작|구성|마련)/ },
   { label: "소개하기", criterion: /소개/, comment: /소개/ },
+  { label: "사례 탐색하기", criterion: /사례.{0,12}(?:탐색|살펴|찾아|조사|알아보)/, comment: /사례.{0,14}(?:탐색|살펴|찾아|조사|알아보)/ },
+  { label: "실천 자세 다짐하기", criterion: /(?:자세|태도).{0,14}다짐|다짐.{0,14}(?:자세|태도)/, comment: /(?:자세|태도).{0,16}다짐|다짐.{0,16}(?:자세|태도)/ },
+  { label: "의미 이해하기", criterion: /의미.{0,10}(?:이해|알)/, comment: /의미.{0,12}(?:이해|파악|앎|알고|알며)/ },
+  { label: "마음 전하기", criterion: /마음.{0,10}(?:전하|전할|표현)/, comment: /마음.{0,12}(?:전하|전함|전하며|표현)/ },
+  { label: "실천할 일 알기", criterion: /실천.{0,12}(?:일|것).{0,12}(?:알고|안다|알수)/, comment: /실천.{0,14}(?:일|것).{0,14}(?:알고|알며|앎|이해)/ },
+  { label: "비교적인 수행 정도", criterion: /(?:비교적|대체로)/, comment: /(?:비교적|대체로)/ },
 ];
 
 export function criterionSemanticIssues(

@@ -8,6 +8,7 @@ import { generationModel } from "../app/ai-model-policy.ts";
 import { batchCommentRepairs, batchCommentsByAssessmentArea, COMMENT_BATCH_SIZE, COMMENT_REPAIR_EVIDENCE_BATCH_SIZE, MAX_COMMENT_AI_CALLS_PER_BATCH, MAX_COMMENT_DIVERSITY_CALLS_PER_BATCH } from "../app/comment-batching.ts";
 import { batchBehaviors, BEHAVIOR_BATCH_SIZE } from "../app/behavior-batching.ts";
 import { estimateAiCostUsd } from "../app/ai-pricing.ts";
+import { commentAreaOverlapReasons } from "../app/comment-area-diversity.ts";
 import { assignUniquePoolCandidates, buildCommentPoolGroups, buildPublicCommentPoolRequests, commentPoolCandidateCount } from "../app/comment-pool-generation.ts";
 import { readApiJson } from "../app/api-response.ts";
 
@@ -77,11 +78,14 @@ test("builds level pools without putting student identifiers in the AI pool requ
   assert.equal(new Set(publicPools[0].variantPlans.map((plan) => JSON.stringify(plan))).size, 5);
 });
 
-test("requests a forty percent reserve candidate pool to avoid paid retries", () => {
-  assert.equal(commentPoolCandidateCount(1), 2);
+test("scales the reserve candidate pool to the number of required sentences", () => {
+  assert.equal(commentPoolCandidateCount(1), 3);
   assert.equal(commentPoolCandidateCount(5), 7);
-  assert.equal(commentPoolCandidateCount(10), 14);
-  assert.equal(commentPoolCandidateCount(25), 35);
+  assert.equal(commentPoolCandidateCount(6), 8);
+  assert.equal(commentPoolCandidateCount(10), 13);
+  assert.equal(commentPoolCandidateCount(11), 14);
+  assert.equal(commentPoolCandidateCount(20), 24);
+  assert.equal(commentPoolCandidateCount(25), 30);
   assert.equal(commentPoolCandidateCount(0), 0);
 });
 
@@ -165,10 +169,59 @@ test("creates fact-preserving free variants for repeated social-study criteria",
   });
 });
 
-test("blocks unsupported strong praise for middle and low levels", () => {
+test("blocks unsupported strong praise at every level unless the criterion supports it", () => {
   assert.deepEqual(levelAppropriatenessIssues("생활용품을 설계하는 수행이 돋보임.", "중"), ["평가수준보다 과도한 우수 표현"]);
   assert.deepEqual(levelAppropriatenessIssues("생활용품 설계 활동에 참여하는 모습이 인상적임.", "하"), ["평가수준보다 과도한 우수 표현"]);
-  assert.deepEqual(levelAppropriatenessIssues("생활용품을 창의적으로 설계하는 능력이 뛰어남.", "상"), []);
+  assert.deepEqual(levelAppropriatenessIssues("생활용품을 창의적으로 설계하는 능력이 뛰어남.", "상"), ["평가수준보다 과도한 우수 표현"]);
+  assert.deepEqual(levelAppropriatenessIssues("생활용품을 창의적으로 설계하는 능력이 뛰어남.", "상", "창의적인 설계 능력이 뛰어나다."), []);
+});
+
+test("preserves generic criterion actions and performance degree across subjects and grades", () => {
+  const fixtures = [
+    {
+      label: "도덕 다짐",
+      criterion: "성실한 생활의 사례를 탐색하고 성실하게 살아가기 위한 자세와 태도를 다짐할 수 있다.",
+      valid: "성실한 생활의 사례를 탐색하고 성실하게 살아가기 위한 자세와 태도를 다짐함.",
+      invalid: "성실한 생활의 사례를 탐색하고 성실하게 살아가기 위한 자세와 태도가 돋보임.",
+    },
+    {
+      label: "도덕 비교적 앎",
+      criterion: "효와 우애의 의미를 이해하고 가족을 소중히 여기는 마음을 전하며 실천할 수 있는 일을 비교적 알고 있다.",
+      valid: "효와 우애의 의미를 이해하고 가족을 소중히 여기는 마음을 전하며 실천할 수 있는 일을 비교적 알고 있음.",
+      invalid: "효와 우애의 의미를 이해하고 가족을 소중히 여기는 마음을 전하며 실천할 수 있는 일을 깨달음.",
+    },
+    {
+      label: "사회 조사",
+      criterion: "지역의 생활 모습을 보여 주는 사례를 조사하고 그 특징을 비교적 알고 있다.",
+      valid: "지역의 생활 모습을 보여 주는 사례를 조사하고 그 특징을 비교적 알고 있음.",
+      invalid: "지역의 생활 모습을 보여 주는 사례를 조사하고 그 특징을 완전히 이해함.",
+    },
+    {
+      label: "과학 탐색",
+      criterion: "주변 생물의 특징을 사례를 통해 살펴보고 공통점을 대체로 이해할 수 있다.",
+      valid: "주변 생물의 특징을 사례를 통해 살펴보고 공통점을 대체로 이해함.",
+      invalid: "주변 생물의 특징을 사례를 통해 살펴보는 태도가 돋보임.",
+    },
+  ];
+  for (const fixture of fixtures) {
+    assert.deepEqual(criterionSemanticIssues(fixture.valid, fixture.criterion), [], fixture.label);
+    assert.equal(
+      criterionSemanticIssues(fixture.invalid, fixture.criterion).length
+        + evidenceBlockingIssues(fixture.invalid, fixture.criterion, fixture.criterion).length
+        + levelAppropriatenessIssues(fixture.invalid, "상", fixture.criterion).length > 0,
+      true,
+      fixture.label,
+    );
+  }
+});
+
+test("does not count a pure core-word reorder as genuine sentence diversity", () => {
+  const evidence = "도덕 | 수준: 중 | 기준: 효와 우애의 의미를 이해하고 가족을 소중히 여기는 마음을 전한다.";
+  const reasons = commentAreaOverlapReasons(
+    { studentId: 1, subject: "도덕", assessmentIndex: 0, evidence, text: "효와 우애의 의미를 이해하고 가족을 소중히 여기는 마음을 전함." },
+    { studentId: 2, subject: "도덕", assessmentIndex: 0, evidence, text: "가족을 소중히 여기는 마음을 전하고 효와 우애의 의미를 이해함." },
+  );
+  assert.equal(reasons.includes("핵심어 어순 변경 중복"), true);
 });
 
 test("rejects direct negative science-record expressions", () => {
