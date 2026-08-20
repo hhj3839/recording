@@ -28,9 +28,9 @@ const normalizedSentence = (value: string) => value.normalize("NFKC").replace(/\
 
 export function commentPoolCandidateCount(requiredCount: number) {
   if (!Number.isInteger(requiredCount) || requiredCount < 1) return 0;
-  if (requiredCount <= 5) return requiredCount + 2;
-  const reserveRate = requiredCount <= 10 ? 0.3 : 0.2;
-  return requiredCount + Math.ceil(requiredCount * reserveRate);
+  // 학생별 문장을 생성하지 않고 평가영역·수준별 공용 후보 풀을 만든다.
+  // 한 풀은 최대 20개로 제한하고, 학생이 더 많으면 검증 후보를 순환한다.
+  return Math.min(20, Math.max(5, requiredCount));
 }
 
 function extractOutputText(payload: unknown): string {
@@ -379,7 +379,9 @@ export async function generateCommentPoolBatch(
       : [];
     const assigned = assignUniquePoolCandidates(group, rawCandidates, avoidSentences, allowDuplicateFallback);
     group.members.forEach((member, index) => {
-      const text = assigned.candidates[index];
+      const text = assigned.candidates.length
+        ? assigned.candidates[index % assigned.candidates.length]
+        : "";
       if (!text) {
         rejections.push({
           studentId: member.studentId,

@@ -104,29 +104,9 @@ export async function POST(request: Request) {
       text: saved.sentence, warnings: Array.isArray(saved.issues) ? saved.issues : [],
     });
   }
-  // AI보다 먼저 모든 미작성 영역에 평가기준 기준 문장을 배정한다.
-  // 검증된 기준 문장은 최종 결과로 확정하며 자동 AI 변형으로 교체하지 않는다.
-  const baselineParts = assignApprovedCommentPools(batch).flatMap((baseline) => {
-    const key = `${baseline.studentId}|${baseline.subject}|${baseline.assessmentIndex}`;
-    if (generatedParts.has(key)) return [];
-    generatedParts.set(key, baseline);
-    return [{
-      ...baseline,
-      attempts: 0,
-      status: "complete" as const,
-      issues: [],
-    }];
-  });
-  if (baselineParts.length) {
-    await saveGeneratedCommentParts({
-      ownerId: job.owner_id,
-      ownerEmail: job.owner_email,
-      classId: Number(job.class_id),
-      parts: baselineParts,
-    });
-  }
   pending = batch.flatMap((item) => {
-    // 기준 문장을 만들 수 없었던 예외 영역만 AI 복구 대상으로 보낸다.
+    // 기존 저장 결과가 없는 영역은 학생별 생성이 아니라
+    // 평가영역·수준별 공용 문장 풀 생성 대상으로 보낸다.
     const missingItems = item.items.filter((evidenceItem) =>
       !generatedParts.has(`${item.studentId}|${item.subject}|${evidenceItem.assessmentIndex}`));
     return missingItems.length ? [{ ...item, items: missingItems }] : [];
@@ -152,7 +132,7 @@ export async function POST(request: Request) {
     for (const group of groups) {
       if (aiCallCount >= MAX_COMMENT_AI_CALLS_PER_BATCH) {
         callLimitReached = true;
-        errorMessage = `이 생성 묶음의 AI 요청 상한 ${MAX_COMMENT_AI_CALLS_PER_BATCH}회에 도달하여 남은 영역은 검증된 기준 문장을 유지했습니다.`;
+        errorMessage = `이 생성 묶음의 AI 요청 상한 ${MAX_COMMENT_AI_CALLS_PER_BATCH}회에 도달하여 남은 영역은 평가기준 문장으로 완성합니다.`;
         break;
       }
       const groupUsage = await getAiUsage(job.owner_id);
@@ -223,58 +203,17 @@ export async function POST(request: Request) {
     if (nonRetryableFailure || callLimitReached) break;
   }
 
-  // 모든 AI 재시도 뒤에도 후보가 없으면 같은 평가영역·같은 수준에서 이미
-  // 통과한 문장을 마지막 안전망으로 재사용한다. 근거·수준 검수는 다시 하며,
-  // 재사용 사실은 경고로 남겨 빈칸보다 교사가 확인 가능한 결과를 우선한다.
+  // 모든 문장 풀 생성·검수 뒤에도 후보가 0개인 그룹만 평가기준에서 만든
+  // 기준문장으로 채운다. 다양성보다 완전성을 우선하여 빈칸은 남기지 않는다.
   const fallbackParts: Array<GeneratedCommentPart & { attempts: number; status: "warning"; issues: string[] }> = [];
-  for (const entry of pending) {
-    for (const item of entry.items) {
-      const key = `${entry.studentId}|${entry.subject}|${item.assessmentIndex}`;
-      if (generatedParts.has(key)) continue;
-      const fallback = [...generatedParts.values()].find((candidate) => {
-        if (candidate.subject !== entry.subject || candidate.assessmentIndex !== item.assessmentIndex || !candidate.text) return false;
-        const sourceEntry = batch.find((batchEntry) => batchEntry.studentId === candidate.studentId);
-        const sourceItem = sourceEntry?.items.find((source) => source.assessmentIndex === candidate.assessmentIndex);
-        if (!sourceItem || sourceItem.level !== item.level) return false;
-        return validateGeneratedCommentPart(candidate.text, item.criterion ?? item.text).valid
-          && levelAppropriatenessIssues(candidate.text, item.level, item.criterion ?? item.text).length === 0
-          && evidenceBlockingIssues(candidate.text, item.text, item.criterion ?? item.text).length === 0
-          && criterionSemanticIssues(candidate.text, item.criterion ?? item.text, item.levelCriteria).length === 0;
-      });
-      const generationCriterion = positiveGrowthCriterion(item.level, item.criterion ?? item.text);
-      const usedSameLevel = new Set([...generatedParts.values()].flatMap((part) => {
-        if (part.subject !== entry.subject || part.assessmentIndex !== item.assessmentIndex) return [];
-        const sourceEntry = batch.find((batchEntry) => batchEntry.studentId === part.studentId);
-        const sourceItem = sourceEntry?.items.find((source) => source.assessmentIndex === part.assessmentIndex);
-        return sourceItem?.level === item.level
-          ? [part.text.normalize("NFKC").replace(/\s+/g, "").replace(/[.!?]/g, "")]
-          : [];
-      }));
-      const deterministicText = criterionToSafeNominalCandidates(generationCriterion).find((candidate) => {
-        return validateGeneratedCommentPart(candidate, generationCriterion).valid
-          && levelAppropriatenessIssues(candidate, item.level, generationCriterion).length === 0
-          && evidenceBlockingIssues(candidate, `${item.text} | 생성용 기준: ${generationCriterion}`, generationCriterion).length === 0
-          && criterionSemanticIssues(candidate, generationCriterion, item.levelCriteria).length === 0;
-      });
-      if (!deterministicText && !fallback) continue;
-      const deterministicKey = deterministicText?.normalize("NFKC").replace(/\s+/g, "").replace(/[.!?]/g, "") ?? "";
-      const warning = deterministicText
-        ? usedSameLevel.has(deterministicKey)
-          ? "검증된 기준 문장을 재사용하여 표현 중복 확인이 필요함"
-          : "평가기준을 안전한 기준 문장으로 변환하여 교사 확인이 필요함"
-        : "같은 평가영역·수준의 검증된 문장을 재사용하여 표현 중복 확인이 필요함";
-      const reused = {
-        studentId: entry.studentId,
-        subject: entry.subject,
-        assessmentIndex: item.assessmentIndex,
-        evidence: item.text,
-        text: deterministicText ?? fallback!.text,
-        warnings: [warning],
-      };
-      generatedParts.set(key, reused);
-      rejectionIssues.delete(key);
-      fallbackParts.push({ ...reused, attempts: MAX_GENERATION_ATTEMPTS, status: "warning", issues: [warning] });
-    }
+  for (const fallback of assignApprovedCommentPools(pending)) {
+    const key = `${fallback.studentId}|${fallback.subject}|${fallback.assessmentIndex}`;
+    if (generatedParts.has(key)) continue;
+    const warning = "검증된 문장 풀 후보가 없어 평가기준 문장을 재사용함";
+    const reused = { ...fallback, warnings: [warning] };
+    generatedParts.set(key, reused);
+    rejectionIssues.delete(key);
+    fallbackParts.push({ ...reused, attempts: MAX_GENERATION_ATTEMPTS, status: "warning", issues: [warning] });
   }
   if (fallbackParts.length) {
     await saveGeneratedCommentParts({
