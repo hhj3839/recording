@@ -181,7 +181,12 @@ export function buildApprovedCommentPool(group: CommentPoolGroup): ApprovedComme
 export function assignApprovedCommentPools(evidence: CommentEvidence[]) {
   return buildCommentPoolGroups(evidence).flatMap((group) => {
     const pool = buildApprovedCommentPool(group);
-    const candidates = pool.approvedCandidates;
+    // 변형 후보가 모두 탈락해도 평가기준에서 직접 만든 기준 문장은 배정한다.
+    // 다양성 검수 때문에 학생·영역이 빈칸으로 남는 것보다 같은 문장을
+    // 반복해서라도 전체 결과를 완성하는 것을 우선한다.
+    const candidates = pool.approvedCandidates.length
+      ? pool.approvedCandidates
+      : [pool.canonicalSentence].filter(Boolean);
     return group.members.flatMap((member, index) => {
       const text = candidates[index % candidates.length];
       if (!text) return [];

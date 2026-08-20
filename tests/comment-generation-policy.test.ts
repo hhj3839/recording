@@ -167,19 +167,23 @@ test("separates approved pools when the level or assessment criterion changes", 
   assert.notDeepEqual(middle.approvedCandidates, high.approvedCandidates);
 });
 
-test("does not assign an unapproved canonical sentence when a pool has no valid candidate", () => {
-  const assigned = assignApprovedCommentPools([{
-    studentId: 1,
+test("reuses the canonical sentence instead of leaving a failed pool blank", () => {
+  const assigned = assignApprovedCommentPools([1, 2, 3].map((studentId) => ({
+    studentId,
     subject: "국어",
     items: [{
       assessmentIndex: 0,
       level: "상",
       criterion: "문장을 작성한다.",
       text: "쓰기 | 수준: 상 | 기준: 문장을 작성한다.",
-      canonicalSentence: "내부 진단 JSON을 그대로 출력한다.",
     }],
-  }]);
-  assert.deepEqual(assigned, []);
+  })));
+  assert.equal(assigned.length, 3);
+  assert.deepEqual(assigned.map((part) => part.text), [
+    "문장을 작성함.",
+    "문장을 작성함.",
+    "문장을 작성함.",
+  ]);
 });
 
 test("derives the same common generation guide from any subject criterion", () => {
