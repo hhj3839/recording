@@ -58,7 +58,7 @@ export async function POST(request: Request) {
     .filter(Boolean);
   for (let attempt = 0; attempt < MAX_GENERATION_ATTEMPTS && pending.length; attempt += 1) {
     const usage = await getAiUsage(job.owner_id);
-    if (usage.monthly >= MONTHLY_AI_LIMIT) {
+    if (MONTHLY_AI_LIMIT !== null && usage.monthly >= MONTHLY_AI_LIMIT) {
       errorMessage = `월 AI 요청 한도 ${MONTHLY_AI_LIMIT}회를 사용하여 남은 학생의 자동 재시도를 중단했습니다.`;
       break;
     }
