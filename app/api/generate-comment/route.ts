@@ -1,5 +1,5 @@
 import { dataError, getDataScope } from "../../data-scope";
-import { checkAiUsage, MONTHLY_AI_LIMIT, recordAiUsage } from "../../ai-usage";
+import { checkAiUsage, recordAiUsage } from "../../ai-usage";
 import { createCommentVariations } from "../../comment-variation";
 import { eq, selectRows } from "../../../db/supabase";
 import { primaryAiModel } from "../../ai-model-policy";
@@ -80,7 +80,7 @@ export async function POST(request: Request) {
   try {
     const { user, classId } = await getDataScope();
     const usage = await checkAiUsage(user.id);
-    if (!usage.allowed) return Response.json({ error: usage.reason === "monthly" ? `이번 달 AI 생성 한도 ${MONTHLY_AI_LIMIT}회를 모두 사용했습니다.` : "요청이 너무 빠릅니다. 1분 후 다시 시도해 주세요.", usage }, { status: 429 });
+    if (!usage.allowed) return Response.json({ error: "요청이 너무 빠릅니다. 1분 후 다시 시도해 주세요.", usage }, { status: 429 });
     const body = await request.json() as {
       studentId?: unknown;
       levels?: unknown;

@@ -1892,7 +1892,7 @@ export default function Home() {
   const [activeSubject, setActiveSubject] = useState("");
   const [generatedComments, setGeneratedComments] = useState<Array<{ studentId: number; subject: string; comment: string }>>([]);
   const [generatedBehaviors, setGeneratedBehaviors] = useState<Array<{ studentId: number; behavior: string }>>([]);
-  const [aiUsage, setAiUsage] = useState({ monthly: 0, limit: 150 });
+  const [aiUsage, setAiUsage] = useState({ monthly: 0, limit: null as number | null });
   useEffect(() => {
     const idleLimitMs = 30 * 60 * 1000;
     let lastActivity = Date.now();
@@ -1980,8 +1980,8 @@ export default function Home() {
     const loadUsage = async () => {
       try {
         const response = await fetch("/api/usage");
-        const result = await response.json() as { monthly?: number; limit?: number };
-        if (response.ok) setAiUsage({ monthly: Number(result.monthly ?? 0), limit: Number(result.limit ?? 150) });
+        const result = await response.json() as { monthly?: number; limit?: number | null };
+        if (response.ok) setAiUsage({ monthly: Number(result.monthly ?? 0), limit: typeof result.limit === "number" ? result.limit : null });
       } catch {
         // 사용량 표시 실패는 AI 작성 기능을 막지 않음.
       }
@@ -2065,7 +2065,7 @@ export default function Home() {
         <nav aria-label="주요 메뉴">{navItems.map((item) => <button className={view === item.id ? "active" : ""} aria-current={view === item.id ? "page" : undefined} key={item.id} onClick={() => setView(item.id)}><span aria-hidden="true">{item.icon}</span>{item.label}</button>)}</nav>
         <div className="nav-divider" />
         <nav aria-label="설정 메뉴"><button className={view === "settings" ? "active" : ""} aria-current={view === "settings" ? "page" : undefined} onClick={() => setView("settings")}><span aria-hidden="true">⚙</span>개인정보·설정</button></nav>
-        <div className="sidebar-bottom"><div className="storage"><span>이번 달 AI 생성</span><strong>{aiUsage.monthly} / {aiUsage.limit}</strong><div role="progressbar" aria-label="이번 달 AI 생성 사용량" aria-valuemin={0} aria-valuemax={aiUsage.limit} aria-valuenow={aiUsage.monthly}><i style={{ width: `${Math.min(100, aiUsage.limit ? (aiUsage.monthly / aiUsage.limit) * 100 : 0)}%` }} /></div></div><div className="profile"><span className="avatar" aria-hidden="true">{currentUser.slice(0, 1)}</span><span><b>{currentUser}</b><small>{classroom?.schoolName ?? "학교 정보 확인 중"}</small></span><form action="/api/auth/logout" method="post"><button type="submit">로그아웃</button></form></div></div>
+        <div className="sidebar-bottom"><div className="storage"><span>AI 생성 사용량</span><strong>{aiUsage.monthly}회 · 제한 없음</strong></div><div className="profile"><span className="avatar" aria-hidden="true">{currentUser.slice(0, 1)}</span><span><b>{currentUser}</b><small>{classroom?.schoolName ?? "학교 정보 확인 중"}</small></span><form action="/api/auth/logout" method="post"><button type="submit">로그아웃</button></form></div></div>
       </aside>
       <main id="main-content" tabIndex={-1}>
         <header className="mobile-header"><button className="brand" onClick={() => setView("dashboard")}><span>기록</span>샘</button><select aria-label="화면 이동" value={view} onChange={(e) => setView(e.target.value as View)}>{navItems.map((item) => <option value={item.id} key={item.id}>{item.label}</option>)}<option value="settings">개인정보·설정</option></select></header>

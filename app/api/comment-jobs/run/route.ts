@@ -120,7 +120,7 @@ export async function POST(request: Request) {
   let callLimitReached = false;
   for (let attempt = 0; attempt < MAX_GENERATION_ATTEMPTS && pending.length; attempt += 1) {
     const usage = await getAiUsage(job.owner_id);
-    if (usage.monthly >= MONTHLY_AI_LIMIT) {
+    if (MONTHLY_AI_LIMIT !== null && usage.monthly >= MONTHLY_AI_LIMIT) {
       errorMessage = `월 AI 요청 한도 ${MONTHLY_AI_LIMIT}회를 사용하여 남은 항목의 자동 재시도를 중단했습니다.`;
       break;
     }
@@ -134,7 +134,7 @@ export async function POST(request: Request) {
         break;
       }
       const groupUsage = await getAiUsage(job.owner_id);
-      if (groupUsage.monthly >= MONTHLY_AI_LIMIT) {
+      if (MONTHLY_AI_LIMIT !== null && groupUsage.monthly >= MONTHLY_AI_LIMIT) {
         errorMessage = `월 AI 요청 한도 ${MONTHLY_AI_LIMIT}회를 사용하여 남은 항목의 자동 재시도를 중단했습니다.`;
         break;
       }
@@ -372,7 +372,7 @@ export async function POST(request: Request) {
       }
     };
     const usage = await getAiUsage(job.owner_id);
-    if (aiCallCount >= MAX_COMMENT_AI_CALLS_PER_BATCH || usage.monthly >= MONTHLY_AI_LIMIT) {
+    if (aiCallCount >= MAX_COMMENT_AI_CALLS_PER_BATCH || (MONTHLY_AI_LIMIT !== null && usage.monthly >= MONTHLY_AI_LIMIT)) {
       await markDiversityReview("같은 평가영역·수준에서 유사한 표현이 있어 교사 확인이 필요함");
     } else {
       aiCallCount += 1;

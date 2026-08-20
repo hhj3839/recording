@@ -2,7 +2,9 @@ import { eq, gte, insertRows, selectRows } from "../db/supabase";
 import { AiTokenUsage, estimateAiCostUsd } from "./ai-pricing";
 export type { AiTokenUsage } from "./ai-pricing";
 
-export const MONTHLY_AI_LIMIT = 150;
+// 교사별 월 누적 사용량과 비용은 계속 기록하지만 앱 차원의 월 차단은 두지 않는다.
+// 작업별 호출 상한과 분당 속도 제한은 별도로 유지해 무한 재시도를 방지한다.
+export const MONTHLY_AI_LIMIT: number | null = null;
 export const MINUTE_AI_LIMIT = 10;
 
 type UsageRow = {
@@ -23,13 +25,13 @@ export async function getAiUsage(ownerId: string) {
     owner_id: eq(ownerId),
     created_at: gte(monthStart()),
     order: "created_at.desc",
-    limit: MONTHLY_AI_LIMIT + 1,
+    limit: 1000,
   });
   const minuteAgo = Date.now() - 60_000;
   return {
     monthly: rows.length,
     recent: rows.filter((row) => new Date(row.created_at).getTime() >= minuteAgo).length,
-    limit: MONTHLY_AI_LIMIT,
+    limit: null,
     tokens: {
       input: rows.reduce((sum, row) => sum + (Number(row.input_tokens) || 0), 0),
       cachedInput: rows.reduce((sum, row) => sum + (Number(row.cached_input_tokens) || 0), 0),
@@ -42,7 +44,6 @@ export async function getAiUsage(ownerId: string) {
 
 export async function checkAiUsage(ownerId: string) {
   const usage = await getAiUsage(ownerId);
-  if (usage.monthly >= MONTHLY_AI_LIMIT) return { ...usage, allowed: false, reason: "monthly" as const };
   if (usage.recent >= MINUTE_AI_LIMIT) return { ...usage, allowed: false, reason: "minute" as const };
   return { ...usage, allowed: true, reason: null };
 }

@@ -165,7 +165,7 @@ if (mode === "missing") {
     missing,
     monthlyUsage: usage.monthly,
     monthlyLimit: usage.limit,
-    remainingCalls: Math.max(0, usage.limit - usage.monthly),
+    remainingCalls: usage.limit == null ? null : Math.max(0, usage.limit - usage.monthly),
   })}\n`);
   process.exit(0);
 }
@@ -192,7 +192,7 @@ if (mode === "missing-start") {
   const missingItems = Object.values(scores).flat().length;
   if (!missingItems) throw new Error("No missing comments found");
   const estimatedBatches = estimateAreaBatches(scores);
-  if (usage.monthly + estimatedBatches > usage.limit) throw new Error("Monthly AI limit is insufficient for missing comments");
+  if (usage.limit != null && usage.monthly + estimatedBatches > usage.limit) throw new Error("Monthly AI limit is insufficient for missing comments");
   const result = await request("/api/comment-jobs", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
@@ -237,7 +237,7 @@ if (mode === "repair-parts") {
     })),
   };
   const estimatedBatches = new Set(failedParts.map((part) => Number(part.assessmentIndex))).size;
-  if (usage.monthly + estimatedBatches > usage.limit) throw new Error("Monthly AI limit is insufficient for failed parts");
+  if (usage.limit != null && usage.monthly + estimatedBatches > usage.limit) throw new Error("Monthly AI limit is insufficient for failed parts");
   const result = await request("/api/comment-jobs", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
@@ -325,7 +325,7 @@ if (mode === "duplicate-parts") {
     })),
   };
   const estimatedBatches = new Set(duplicateParts.map((part) => Number(part.assessmentIndex))).size;
-  if (usage.monthly + estimatedBatches > usage.limit) throw new Error("Monthly AI limit is insufficient for duplicate parts");
+  if (usage.limit != null && usage.monthly + estimatedBatches > usage.limit) throw new Error("Monthly AI limit is insufficient for duplicate parts");
   const result = await request("/api/comment-jobs", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
@@ -382,8 +382,8 @@ if (mode === "start" || mode === "subject" || mode === "sample" || mode === "pre
       estimatedBatches,
       monthlyUsage: usage.monthly,
       monthlyLimit: usage.limit,
-      remainingCalls: Math.max(0, usage.limit - usage.monthly),
-      canStartWithinLimit: usage.monthly + estimatedBatches <= usage.limit,
+      remainingCalls: usage.limit == null ? null : Math.max(0, usage.limit - usage.monthly),
+      canStartWithinLimit: usage.limit == null || usage.monthly + estimatedBatches <= usage.limit,
     })}\n`);
     process.exit(0);
   }

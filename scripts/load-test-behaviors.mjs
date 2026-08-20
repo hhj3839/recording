@@ -126,7 +126,7 @@ if (["preflight", "seed", "sample", "full"].includes(mode)) {
       selectedStudentIds: selected.map((item) => item.studentId),
       selectedStrictBeforeRun: selected.filter((item) => item.strict).length,
       monthlyUsage: usage.monthly, monthlyLimit: usage.limit,
-      remainingCalls: Math.max(0, usage.limit - usage.monthly),
+      remainingCalls: usage.limit == null ? null : Math.max(0, usage.limit - usage.monthly),
     })}\n`);
     process.exit(0);
   }
