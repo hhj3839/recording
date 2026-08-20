@@ -219,9 +219,7 @@ export async function POST(request: Request) {
       // 학생 생성 단계는 승인 문장 풀을 한 번 조회·배정할 뿐 AI 재시도를 하지 않는다.
       attempts: 1,
       status: "needs_review" as const,
-      issues: rejectionIssues.has(key)
-        ? [...rejectionIssues.get(key)!]
-        : ["AI가 해당 평가 영역의 문장을 반환하지 않아 교사 확인이 필요함"],
+      issues: ["해당 평가 영역·수준의 승인 문장 풀을 먼저 준비해야 함"],
     }];
   }));
   if (unresolvedParts.length) {
