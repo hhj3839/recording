@@ -132,6 +132,72 @@ export function buildCanonicalBaselinePart(
   };
 }
 
+export type ApprovedCommentPool = {
+  poolKey: string;
+  subject: string;
+  assessmentIndex: number;
+  level: string;
+  canonicalSentence: string;
+  approvedCandidates: string[];
+};
+
+function deterministicCanonicalVariants(canonical: string) {
+  const variants = [canonical];
+  const addSingleReplacement = (pattern: RegExp, replacement: string) => {
+    if (pattern.test(canonical)) variants.push(canonical.replace(pattern, replacement));
+  };
+  // 절의 순서·대상·핵심 동사는 고정하고, 검증 가능한 연결 활용만 한 번씩
+  // 바꾼다. 여러 변환을 합성하지 않아 문장 구조 붕괴를 막는다.
+  addSingleReplacement(/하여/, "해");
+  addSingleReplacement(/한\s+뒤/, "한 후");
+  addSingleReplacement(/한\s+후/, "한 뒤");
+  addSingleReplacement(/알고,?\s+있으며/, "알며");
+  return [...new Set(variants.map((item) => item.replace(/\s+/g, " ").trim()).filter(Boolean))];
+}
+
+export function buildApprovedCommentPool(group: CommentPoolGroup): ApprovedCommentPool {
+  const groundingEvidence = `${group.evidence} | 생성용 기준: ${group.criterion}`;
+  const approvedCandidates = deterministicCanonicalVariants(group.canonicalSentence).filter((text) =>
+    validateGeneratedCommentPart(text, group.criterion).valid
+    && levelAppropriatenessIssues(text, group.level, group.criterion).length === 0
+    && evidenceBlockingIssues(text, groundingEvidence, group.criterion).length === 0
+    && criterionSemanticIssues(text, group.criterion, group.levelCriteria).length === 0);
+  return {
+    poolKey: JSON.stringify([
+      group.subject,
+      group.assessmentIndex,
+      group.level,
+      group.evidence,
+      group.criterion,
+    ]),
+    subject: group.subject,
+    assessmentIndex: group.assessmentIndex,
+    level: group.level,
+    canonicalSentence: group.canonicalSentence,
+    approvedCandidates: [...new Set(approvedCandidates)],
+  };
+}
+
+export function assignApprovedCommentPools(evidence: CommentEvidence[]) {
+  return buildCommentPoolGroups(evidence).flatMap((group) => {
+    const pool = buildApprovedCommentPool(group);
+    const candidates = pool.approvedCandidates;
+    return group.members.flatMap((member, index) => {
+      const text = candidates[index % candidates.length];
+      if (!text) return [];
+      return [{
+        studentId: member.studentId,
+        subject: member.subject,
+        assessmentIndex: member.item.assessmentIndex,
+        evidence: member.item.text,
+        text,
+        warnings: [],
+        poolKey: pool.poolKey,
+      }];
+    });
+  });
+}
+
 export function assignUniquePoolCandidates(
   group: CommentPoolGroup,
   rawCandidates: string[],

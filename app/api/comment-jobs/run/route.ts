@@ -3,7 +3,7 @@ import { eq, selectRows, updateRows } from "../../../../db/supabase";
 import { getAiUsage, MONTHLY_AI_LIMIT, recordAiUsage } from "../../../ai-usage";
 import { selectMostDiverseComments } from "../../../comment-diversity";
 import { CommentEvidence, GeneratedComment, GeneratedCommentPart, saveGeneratedCommentParts, saveGeneratedComments, signCommentJob, verifyCommentJob } from "../../../comment-generation";
-import { buildCanonicalBaselinePart, generateCommentPoolBatch } from "../../../comment-pool-generation";
+import { assignApprovedCommentPools, generateCommentPoolBatch } from "../../../comment-pool-generation";
 import { generationModel } from "../../../ai-model-policy";
 import { MAX_COMMENT_AI_CALLS_PER_BATCH, MAX_COMMENT_DIVERSITY_CALLS_PER_BATCH } from "../../../comment-batching";
 import { CommentAreaPart, findCommentAreaOverlaps } from "../../../comment-area-diversity";
@@ -106,11 +106,9 @@ export async function POST(request: Request) {
   }
   // AI보다 먼저 모든 미작성 영역에 평가기준 기준 문장을 배정한다.
   // 검증된 기준 문장은 최종 결과로 확정하며 자동 AI 변형으로 교체하지 않는다.
-  const baselineParts = batch.flatMap((entry) => entry.items.flatMap((item) => {
-    const key = `${entry.studentId}|${entry.subject}|${item.assessmentIndex}`;
+  const baselineParts = assignApprovedCommentPools(batch).flatMap((baseline) => {
+    const key = `${baseline.studentId}|${baseline.subject}|${baseline.assessmentIndex}`;
     if (generatedParts.has(key)) return [];
-    const baseline = buildCanonicalBaselinePart(entry.studentId, entry.subject, item);
-    if (!baseline) return [];
     generatedParts.set(key, baseline);
     return [{
       ...baseline,
@@ -118,7 +116,7 @@ export async function POST(request: Request) {
       status: "complete" as const,
       issues: [],
     }];
-  }));
+  });
   if (baselineParts.length) {
     await saveGeneratedCommentParts({
       ownerId: job.owner_id,
