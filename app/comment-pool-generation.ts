@@ -128,7 +128,7 @@ export function buildCanonicalBaselinePart(
     assessmentIndex: item.assessmentIndex,
     evidence: item.text,
     text,
-    warnings: ["평가기준 기준 문장을 먼저 배정하고 AI 통과 문장이 있을 때만 교체함"],
+    warnings: [],
   };
 }
 

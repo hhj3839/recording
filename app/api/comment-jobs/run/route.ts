@@ -79,8 +79,6 @@ export async function POST(request: Request) {
   let comments: GeneratedComment[] = [];
   const generatedParts = new Map<string, GeneratedCommentPart>();
   const generatedThisRun = new Set<string>();
-  const aiCompletedKeys = new Set<string>();
-  const baselineSeededKeys = new Set<string>();
   const rejectionIssues = new Map<string, Set<string>>();
   let errorMessage = "";
   let pending = batch;
@@ -107,19 +105,18 @@ export async function POST(request: Request) {
     });
   }
   // AI보다 먼저 모든 미작성 영역에 평가기준 기준 문장을 배정한다.
-  // 이후 AI 문장은 검수를 통과했을 때만 이 기준 문장을 교체한다.
+  // 검증된 기준 문장은 최종 결과로 확정하며 자동 AI 변형으로 교체하지 않는다.
   const baselineParts = batch.flatMap((entry) => entry.items.flatMap((item) => {
     const key = `${entry.studentId}|${entry.subject}|${item.assessmentIndex}`;
     if (generatedParts.has(key)) return [];
     const baseline = buildCanonicalBaselinePart(entry.studentId, entry.subject, item);
     if (!baseline) return [];
     generatedParts.set(key, baseline);
-    baselineSeededKeys.add(key);
     return [{
       ...baseline,
       attempts: 0,
-      status: "warning" as const,
-      issues: baseline.warnings,
+      status: "complete" as const,
+      issues: [],
     }];
   }));
   if (baselineParts.length) {
@@ -131,10 +128,9 @@ export async function POST(request: Request) {
     });
   }
   pending = batch.flatMap((item) => {
-    const missingItems = item.items.filter((evidenceItem) => {
-      const key = `${item.studentId}|${item.subject}|${evidenceItem.assessmentIndex}`;
-      return baselineSeededKeys.has(key) || !generatedParts.has(key);
-    });
+    // 기준 문장을 만들 수 없었던 예외 영역만 AI 복구 대상으로 보낸다.
+    const missingItems = item.items.filter((evidenceItem) =>
+      !generatedParts.has(`${item.studentId}|${item.subject}|${evidenceItem.assessmentIndex}`));
     return missingItems.length ? [{ ...item, items: missingItems }] : [];
   });
   const existingComments = subject ? await selectRows<{ student_id: number; comment: string }>("generated_comments", {
@@ -189,7 +185,6 @@ export async function POST(request: Request) {
           const key = `${part.studentId}|${part.subject}|${part.assessmentIndex}`;
           generatedParts.set(key, part);
           generatedThisRun.add(key);
-          aiCompletedKeys.add(key);
           rejectionIssues.delete(key);
         }
         for (const rejection of generated.rejections) {
@@ -223,10 +218,8 @@ export async function POST(request: Request) {
       if (nonRetryableFailure) break;
     }
     pending = batch.flatMap((item) => {
-      const missingItems = item.items.filter((evidenceItem) => {
-        const key = `${item.studentId}|${item.subject}|${evidenceItem.assessmentIndex}`;
-        return !aiCompletedKeys.has(key) && (baselineSeededKeys.has(key) || !generatedParts.has(key));
-      });
+      const missingItems = item.items.filter((evidenceItem) =>
+        !generatedParts.has(`${item.studentId}|${item.subject}|${evidenceItem.assessmentIndex}`));
       return missingItems.length ? [{ ...item, items: missingItems }] : [];
     });
     if (nonRetryableFailure || callLimitReached) break;

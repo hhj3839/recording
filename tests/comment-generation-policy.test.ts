@@ -129,6 +129,7 @@ test("prepares a complete 105-area canonical baseline before optional AI replace
   assert.equal(baselines.length, 105);
   assert.equal(baselines.every(Boolean), true);
   assert.equal(new Set(baselines.filter(Boolean).map((part) => `${part.studentId}|${part.assessmentIndex}`)).size, 105);
+  assert.equal(baselines.filter(Boolean).every((part) => part.warnings.length === 0), true);
 });
 
 test("derives the same common generation guide from any subject criterion", () => {

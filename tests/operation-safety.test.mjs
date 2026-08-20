@@ -53,13 +53,17 @@ test("job status polling wakes queued background generation without creating a n
   }
 });
 
-test("comment jobs persist canonical baselines before optional AI replacement", () => {
+test("comment jobs finalize canonical baselines and reserve AI for unsupported exceptions", () => {
   const source = readFileSync("app/api/comment-jobs/run/route.ts", "utf8");
   const baselineIndex = source.indexOf("const baselineParts =");
   const aiLoopIndex = source.indexOf("for (let attempt = 0;");
   assert.equal(baselineIndex > 0, true);
   assert.equal(aiLoopIndex > baselineIndex, true);
-  assert.match(source.slice(baselineIndex, aiLoopIndex), /await saveGeneratedCommentParts/);
+  const preparation = source.slice(baselineIndex, aiLoopIndex);
+  assert.match(preparation, /await saveGeneratedCommentParts/);
+  assert.match(preparation, /status: "complete"/);
+  assert.match(preparation, /기준 문장을 만들 수 없었던 예외 영역만 AI 복구 대상으로 보낸다/);
+  assert.doesNotMatch(preparation, /baselineSeededKeys/);
   assert.match(source, /generatedParts\.set\(key, part\)/);
   assert.match(source, /기준 문장을 유지했습니다/);
 });
