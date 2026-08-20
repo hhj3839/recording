@@ -433,6 +433,7 @@ if (mode === "start" || mode === "subject" || mode === "sample" || mode === "pre
     monthlyUsage: usageData.monthly, monthlyLimit: usageData.limit,
     tokens: usageData.tokens,
     estimatedCostUsd: usageData.estimatedCostUsd,
+    featureUsage: usageData.byFeature,
     invalidSamples: validations.filter((item) => !item.valid).slice(0, 10),
     error: job.error || "",
     ...(mode === "quality" ? {

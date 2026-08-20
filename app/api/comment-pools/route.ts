@@ -59,7 +59,7 @@ export async function GET(request: Request) {
     const detailFingerprint = params.get("fingerprint");
     const detailVersion = detailFingerprint ? versionByFingerprint.get(detailFingerprint) : undefined;
     const sentences = detailVersion ? await selectRows<{ id: number; sentence: string }>("comment_pool_sentences", {
-      pool_version_id: eq(detailVersion.id), status: eq("approved"), order: "id.asc",
+      pool_version_id: eq(detailVersion.id), status: eq("approved"), order: "id.asc", limit: COMMENT_POOL_TARGET,
     }) : [];
     return Response.json({
       groups,
