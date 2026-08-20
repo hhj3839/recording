@@ -255,3 +255,11 @@ test("limits comment-pool validation to one subject and a lab account", () => {
   assert.match(route, /maxAiCalls: pending\.length \* 2/);
   assert.match(page, /body: JSON\.stringify\(\{ subject \}\)/);
 });
+
+test("allows the signed comment-pool runner through the auth proxy", () => {
+  const proxy = readFileSync("proxy.ts", "utf8");
+  const runner = readFileSync("app/api/comment-pools/run/route.ts", "utf8");
+  assert.match(proxy, /pathname === "\/api\/comment-pools\/run"/);
+  assert.match(runner, /verifyCommentJob\(jobId, signature\)/);
+  assert.match(runner, /status: 403/);
+});
