@@ -23,6 +23,13 @@
 - GitHub `main` 푸시와 Pull Request에서 CI의 `Lint`, `Test and build`가 모두 통과했는지 확인함.
 - CI는 운영 계정, Supabase 서비스 키, OpenAI API 키를 사용하지 않으며 운영 스모크·E2E·부하 검사를 자동 실행하지 않음.
 
+### 2026-08-20 배포·운영 재확인
+
+- 로컬과 GitHub `main`은 커밋 `ad8e631`로 일치하며 열린 Pull Request가 없음.
+- 같은 커밋의 GitHub CI, Vercel Production과 Production health가 성공함.
+- 운영 API·권한 스모크 7개가 통과했으며 AI 호출, 유효 데이터 변경, 삭제 또는 마이그레이션은 수행하지 않음.
+- Supabase 플랫폼 집계 도구는 이 컴퓨터에 직접 감사용 PostgreSQL 연결 설정이 없어 재실행하지 못함. 2026-08-17의 Auth·Database·Storage 읽기 전용 실측을 최신 기준선으로 유지하고, 전체 플랫폼 복원 리허설은 여전히 실행 대기 상태임.
+
 ## 2026-08-11 수동 논리 백업 준비 상태(과거 기록)
 
 아래 내용은 2026-08-12 백업·복원 리허설을 수행하기 전의 과거 상태이며 현재 판정이 아님. 2026-08-11 비파괴 사전 점검 당시 결과는 다음과 같았음.
