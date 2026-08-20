@@ -139,7 +139,7 @@ export function criterionToSafeNominalCandidates(criterion: string) {
 }
 
 export function levelAppropriatenessIssues(comment: string, level: string | undefined, criterion = "") {
-  if (!level || level === "상") return [];
+  if (!level) return [];
   const strongPraise = /(?:능력이\s*)?뛰어남|돋보임|인상적임/;
   const criterionAllowsPraise = /뛰어|돋보|인상적|탁월|우수/.test(criterion);
   return strongPraise.test(comment) && !criterionAllowsPraise
@@ -166,6 +166,52 @@ export function ensureGeneratedCommentPeriod(sentence: string) {
   return code >= 0xac00 && code <= 0xd7a3 && (code - 0xac00) % 28 === 16
     ? `${normalized}.`
     : normalized;
+}
+
+const commentPerformanceActions = [
+  { label: "표현하기", pattern: /표현|나타내/ },
+  { label: "글 쓰기", pattern: /(?:글|까닭|이유).{0,18}(?:쓰|쓸|씀|적|작성)/ },
+  { label: "이해하기", pattern: /이해/ },
+  { label: "알기", pattern: /(?:알고|안다|알수|앎)/ },
+  { label: "파악하기", pattern: /파악/ },
+  { label: "간추리기", pattern: /간추|요약/ },
+  { label: "나누기", pattern: /나누|나눌|나눔|구분/ },
+  { label: "만들기", pattern: /만들|만든|만듦|제작/ },
+  { label: "조사하기", pattern: /조사/ },
+  { label: "정리하기", pattern: /정리/ },
+  { label: "활용하기", pattern: /활용/ },
+  { label: "실천하기", pattern: /실천/ },
+  { label: "다짐하기", pattern: /다짐/ },
+  { label: "참여하기", pattern: /참여/ },
+] as const;
+
+export function commentPredicatePolicy(criterion: string) {
+  const normalized = normalizeGeneratedCommentWhitespace(criterion);
+  const completionMode = /노력|애쓰|힘쓰|익혀\s*가|배워\s*가|성장|과정/.test(normalized)
+    ? "process"
+    : "completed";
+  const requiredActions = commentPerformanceActions
+    .filter((action) => action.pattern.test(normalized))
+    .map((action) => action.label);
+  return {
+    completionMode,
+    requiredActions,
+    instruction: completionMode === "completed"
+      ? `완료한 수행을 직접 명사형으로 종결함: ${requiredActions.join(", ") || "평가기준의 핵심 수행"}. 과정·모습·태도로 바꾸지 않음.`
+      : `평가기준에 명시된 노력·성장 과정을 그대로 유지함: ${requiredActions.join(", ") || "평가기준의 핵심 수행"}. 완료한 수행으로 높이지 않음.`,
+  } as const;
+}
+
+export function commentPredicateIssues(comment: string, criterion: string) {
+  const policy = commentPredicatePolicy(criterion);
+  if (policy.completionMode !== "completed" || policy.requiredActions.length === 0) return [];
+  const ambiguousProcessEnding = /(?:해|하여|어|아)\s*감\.$/.test(comment)
+    || /(?:하는|하려는)\s+(?:모습|과정|태도)(?:임|이\s*드러남)\.$/.test(comment)
+    || /(?:수행|활동).{0,8}(?:모습|과정)임\.$/.test(comment)
+    || /(?:하는|쓰는)\s+데서\s*드러남\.$/.test(comment);
+  return ambiguousProcessEnding
+    ? ["완료 수행을 과정·모습·태도로 바꾼 모호한 종결"]
+    : [];
 }
 
 // AI가 뜻은 맞게 작성했지만 명사형 종결을 겹쳐 쓴 경우에만 안전하게
@@ -207,7 +253,10 @@ export function validateGeneratedComment(comment: string, expectedSentenceCount:
     || /(?:까닭|이유)(?:을|를)\s+작품을\s+읽고/.test(sentence)
     || /방법을\s+알고,?\s*활용하여/.test(sentence)
     || /대화\s*표현에\s*(?:힘씀|애씀)/.test(sentence)
-    || /마음을\s*전하는\s*글로\s*표현함\.$/.test(sentence));
+    || /마음을\s*전하는\s*글로\s*표현함\.$/.test(sentence)
+    || /(?:글을\s*함|글로\s*활용함)\.$/.test(sentence)
+    || /(?:부분|까닭).{0,16}읽고\s*써서/.test(sentence)
+    || /쓰는\s*데서\s*드러남\.$/.test(sentence));
   return {
     sentences,
     lengths,
@@ -240,16 +289,19 @@ export function validateGeneratedCommentPart(comment: string, evidence = "") {
   const evidenceLength = Array.from(normalizeGeneratedCommentWhitespace(evidence)).length;
   const acceptedMinimum = evidence && evidenceLength < 38 ? 20 : 35;
   const acceptedLength = length >= acceptedMinimum && length <= 90;
+  const predicateIssues = evidence ? commentPredicateIssues(comment, evidence) : [];
   const warnings: string[] = [];
   return {
     ...strict,
     acceptedLength,
     acceptedMinimum,
+    predicateIssues,
     warnings,
     valid: strict.sentenceCountOk
       && acceptedLength
       && strict.endingsOk
       && strict.naturalEndingsOk
+      && predicateIssues.length === 0
       && strict.forbidden.length === 0,
   };
 }
@@ -299,6 +351,8 @@ const unsupportedGroundingConcepts: Array<{
   { label: "관찰되지 않은 태도 수식어", pattern: /(?:차분|안정적|알차|고르게|꾸준)/, evidencePattern: /(?:차분|안정적|알차|고르게|꾸준|지속|노력)/, blocking: true },
   { label: "입력에 없는 학습·성장 과정", pattern: /(?:익히|익혀|배우|배워)/, evidencePattern: /(?:익히|익혀|배우|배워)/, blocking: true },
   { label: "학습 태도", pattern: /태도/, evidencePattern: /태도|자세|적극적|성실|꾸준|자기주도|주도적|능동적|노력/, blocking: true },
+  { label: "입력보다 강한 수행 정도", pattern: /(?:깊이|충분히|완전히|매우)/, evidencePattern: /(?:깊이|충분히|완전히|매우)/, blocking: true },
+  { label: "수행을 능력 보유로 변경", pattern: /할줄알/, evidencePattern: /할줄알/, blocking: true },
 ];
 
 function normalizeGroundingText(text: string) {
@@ -370,6 +424,15 @@ const semanticAtoms: SemanticAtom[] = [
   { label: "글로 표현하기", criterion: /글.{0,8}표현|표현.{0,8}글/, comment: /글.{0,10}(?:표현함|나타냄|작성함|씀)|(?:표현함|나타냄|작성함|씀).{0,10}글/ },
   { label: "자료 만들기", criterion: /자료.{0,10}(?:만들|만든|만드는|만듦|제작|구성)/, comment: /자료.{0,12}(?:만들|만든|만드는|만듦|제작|구성|마련)/ },
   { label: "소개하기", criterion: /소개/, comment: /소개/ },
+  { label: "사례 탐색하기", criterion: /사례.{0,12}(?:탐색|살펴|찾아|조사|알아보)/, comment: /사례.{0,14}(?:탐색|살펴|찾아|조사|알아보)/ },
+  { label: "실천 자세 다짐하기", criterion: /(?:자세|태도).{0,14}다짐|다짐.{0,14}(?:자세|태도)/, comment: /(?:자세|태도).{0,16}다짐|다짐.{0,16}(?:자세|태도)/ },
+  { label: "의미 이해하기", criterion: /의미.{0,10}(?:이해|알)/, comment: /의미.{0,12}(?:이해|파악|앎|알고|알며)/ },
+  { label: "마음 전하기", criterion: /마음.{0,10}(?:전하|전할|표현)/, comment: /마음.{0,12}(?:전하|전함|전하며|표현)/ },
+  { label: "실천할 일 알기", criterion: /실천.{0,12}(?:일|것).{0,12}(?:알고|안다|알수)/, comment: /실천.{0,14}(?:일|것).{0,14}(?:알고|알며|앎|이해)/ },
+  { label: "비교적인 수행 정도", criterion: /(?:비교적|대체로)/, comment: /(?:비교적|대체로)/ },
+  { label: "상황에 알맞은 대화 표현하기", criterion: /(?:대화.{0,18}(?:표현|나타내)|(?:표현|나타내).{0,18}대화)/, comment: /(?:대화.{0,20}(?:표현|나타내)|(?:표현|나타내).{0,20}대화)/ },
+  { label: "재미·감동을 느낀 부분과 까닭 쓰기", criterion: /(?:재미|감동).{0,28}(?:부분).{0,20}(?:까닭|이유).{0,12}(?:쓰|쓸|씀|써|적)|(?:부분).{0,20}(?:까닭|이유).{0,12}(?:쓰|쓸|씀|써|적)/, comment: /(?:재미|감동).{0,32}(?:부분).{0,24}(?:까닭|이유).{0,14}(?:씀|썼|써냄|적음|작성함)|(?:부분).{0,24}(?:까닭|이유).{0,14}(?:씀|썼|써냄|적음|작성함)/ },
+  { label: "마음을 전하는 글 실제로 쓰기", criterion: /마음.{0,16}전하.{0,16}글.{0,48}(?:쓸수|쓰고|씀|써서|작성)/, comment: /마음.{0,18}전하.{0,18}글.{0,48}(?:씀|썼|써냄|작성함)/ },
 ];
 
 export function criterionSemanticIssues(

@@ -21,6 +21,11 @@ const stem = (word: string) => word
   .replace(/(?:으로|에서|에게|까지|부터|처럼|보다|하고|하며|하여|해서|하는|하며|할|함|됨|임|을|를|이|가|은|는|의|에|와|과)$/u, "")
   .slice(0, 8);
 
+function reorderedCoreTokenSignature(text: string) {
+  const tokens = words(text).map(stem).filter((item) => item.length > 1).sort();
+  return tokens.length >= 6 ? tokens.join("|") : "";
+}
+
 function styleWords(text: string, evidence: string) {
   const evidenceStems = new Set(words(evidence).map(stem).filter((item) => item.length > 1));
   return words(text).map(stem).filter((item) => item.length > 1 && !evidenceStems.has(item));
@@ -52,6 +57,11 @@ export function commentAreaOverlapReasons(left: CommentAreaPart, right: CommentA
   const normalizedLeft = left.text.normalize("NFKC").replace(/\s+/g, "").replace(/[.!?。！？]/g, "");
   const normalizedRight = right.text.normalize("NFKC").replace(/\s+/g, "").replace(/[.!?。！？]/g, "");
   if (normalizedLeft && normalizedLeft === normalizedRight) reasons.push("동일 문장 중복");
+  const leftReordered = reorderedCoreTokenSignature(left.text);
+  const rightReordered = reorderedCoreTokenSignature(right.text);
+  if (normalizedLeft !== normalizedRight && leftReordered && leftReordered === rightReordered) {
+    reasons.push("핵심어 어순 변경 중복");
+  }
   const leftPhrases = fourWordPhrases(styleWords(left.text, left.evidence));
   const rightPhrases = fourWordPhrases(styleWords(right.text, right.evidence));
   if ([...leftPhrases].some((phrase) => rightPhrases.has(phrase))) reasons.push("4단어 연속 중복");
