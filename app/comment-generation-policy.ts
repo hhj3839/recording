@@ -213,7 +213,11 @@ export function commentPredicateIssues(comment: string, criterion: string) {
     || /할\s*수\s*있음\.$/.test(comment)
     || /(?:하는|하려는)\s+(?:모습|과정|태도)(?:임|이\s*드러남)\.$/.test(comment)
     || /(?:수행|활동).{0,8}(?:모습|과정)임\.$/.test(comment)
-    || /(?:하는|쓰는)\s+데서\s*드러남\.$/.test(comment);
+    || /(?:하는|쓰는)\s+데서\s*드러남\.$/.test(comment)
+    // 완료 수행을 결과물의 상태나 가벼운 시도로 바꾸면 실제 행동이
+    // 사라지므로 과목명과 무관하게 직접 동사 종결을 요구한다.
+    || /(?:한|된|만든|작성한|조사한|정리한|표현한)\s*(?:내용|결과|자료|작품)임\.$/.test(comment)
+    || /(?:해|하여|만들어|정리해|조사해|표현해)\s*봄\.$/.test(comment);
   return ambiguousProcessEnding
     ? ["완료 수행을 과정·모습·태도로 바꾼 모호한 종결"]
     : [];
@@ -453,6 +457,31 @@ const semanticAtoms: SemanticAtom[] = [
   { label: "당시 생활 모습 조사하기", criterion: /당시.{0,16}생활모습.{0,24}조사|조사.{0,24}당시.{0,16}생활모습/, comment: /당시.{0,18}(?:사람들의)?생활모습.{0,28}조사(?:함|한|하여|하고|해|했)|조사(?:함|한|하여|하고|해|했).{0,28}당시.{0,18}(?:사람들의)?생활모습/ },
 ];
 
+// 교과별 명사에 의존하지 않고 평가기준의 독립 수행 동사를 보존한다.
+// 같은 수행의 일반적인 활용·유의어만 허용하여 새 평가계획에도 적용한다.
+const genericPerformanceAtoms = [
+  { label: "관찰하기", criterion: /관찰/, comment: /관찰|살펴보|살핌/ },
+  { label: "분류하기", criterion: /분류/, comment: /분류|갈래로나누|기준에따라나누/ },
+  { label: "비교하기", criterion: /비교/, comment: /비교|공통점|차이점/ },
+  { label: "계산하기", criterion: /계산|연산/, comment: /계산|연산|구함/ },
+  { label: "해결하기", criterion: /해결/, comment: /해결|풀이/ },
+  { label: "설명하기", criterion: /설명/, comment: /설명|풀어말|밝힘/ },
+  { label: "기록하기", criterion: /기록/, comment: /기록|적음|작성|씀/ },
+  { label: "조사하기", criterion: /조사/, comment: /조사|찾아보|살펴보/ },
+  { label: "정리하기", criterion: /정리/, comment: /정리|갈무리/ },
+  { label: "표현하기", criterion: /표현|나타내/, comment: /표현|나타냄|드러냄/ },
+  { label: "글 쓰기", criterion: /(?:글|까닭|이유).{0,24}(?:쓰|작성)/, comment: /(?:글|까닭|이유).{0,28}(?:씀|작성|적음|쓰기(?:위해|에)\s*(?:노력함|힘씀))/ },
+  { label: "만들기", criterion: /만들|제작/, comment: /만들|제작/ },
+  { label: "소개하기", criterion: /소개/, comment: /소개/ },
+  { label: "발표하기", criterion: /발표/, comment: /발표/ },
+  { label: "토의하기", criterion: /토의/, comment: /토의/ },
+  { label: "파악하기", criterion: /파악/, comment: /파악|찾아냄|알아냄/ },
+  { label: "간추리기", criterion: /간추|요약/, comment: /간추|요약/ },
+  { label: "적용하기", criterion: /적용/, comment: /적용/ },
+  { label: "활용하기", criterion: /활용/, comment: /활용|이용/ },
+  { label: "실천하기", criterion: /실천/, comment: /실천/ },
+] as const;
+
 export function criterionSemanticIssues(
   comment: string,
   selectedCriterion: string,
@@ -463,7 +492,10 @@ export function criterionSemanticIssues(
   const required = semanticAtoms
     .filter((atom) => atom.criterion.test(selected) && !atom.comment.test(normalizedComment))
     .map((atom) => `평가 기준의 필수 수행 ‘${atom.label}’ 누락`);
-  if (!levelCriteria) return required;
+  const genericRequired = genericPerformanceAtoms
+    .filter((atom) => atom.criterion.test(selected) && !atom.comment.test(normalizedComment))
+    .map((atom) => `평가 기준의 독립 수행 ‘${atom.label}’ 누락`);
+  if (!levelCriteria) return [...new Set([...required, ...genericRequired])];
   const siblings = [levelCriteria.high, levelCriteria.middle, levelCriteria.low]
     .map(normalizeGroundingText)
     .filter((criterion) => criterion !== selected);
@@ -472,7 +504,7 @@ export function criterionSemanticIssues(
       && atom.comment.test(normalizedComment)
       && siblings.some((criterion) => atom.criterion.test(criterion)))
     .map((atom) => `선택하지 않은 평가수준의 수행 ‘${atom.label}’ 포함`);
-  return [...new Set([...required, ...leaked])];
+  return [...new Set([...required, ...genericRequired, ...leaked])];
 }
 
 export function isCommentLengthReviewIssue(issue: string) {
