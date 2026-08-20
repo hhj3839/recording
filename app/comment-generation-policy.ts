@@ -260,6 +260,15 @@ export function validateGeneratedComment(comment: string, expectedSentenceCount:
     || /대화\s*표현에\s*(?:힘씀|애씀)/.test(sentence)
     || /마음을\s*전하는\s*글로\s*표현함\.$/.test(sentence)
     || /(?:글을\s*함|글로\s*활용함)\.$/.test(sentence)
+    // 명사형 종결을 만들기 위해 활동명 뒤에 '함'을 기계적으로 붙이거나
+    // 목적어 없이 '글 씀'으로 줄인 문장은 종결 글자가 맞아도 비문이다.
+    || /(?:글\s*)?쓰기함\.$/.test(sentence)
+    || /(?:^|\s)글\s+씀\.$/.test(sentence)
+    || /(?:쓰며|써서|생각하며)\s+글\s*씀\.$/.test(sentence)
+    || /(?:글|마음)을?\s*쓰는\s*데서\s*(?:마음|글|쓰기)/.test(sentence)
+    || /전하고자\s*하는\s*마음의\s*글/.test(sentence)
+    || /(?:까닭|부분).{0,16}(?:써|쓰며)\s*(?:감상을\s*)?글로\s*씀\.$/.test(sentence)
+    || /마음을\s*전하는\s*글을\s*활용하여\s*씀\.$/.test(sentence)
     || /(?:부분|까닭).{0,16}읽고\s*써서/.test(sentence)
     || /쓰는\s*데서\s*드러남\.$/.test(sentence));
   return {

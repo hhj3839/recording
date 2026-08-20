@@ -3,7 +3,7 @@ import { checkAiUsage, recordAiUsage } from "../../ai-usage";
 import { createCommentVariations } from "../../comment-variation";
 import { eq, selectRows } from "../../../db/supabase";
 import { primaryAiModel } from "../../ai-model-policy";
-import { commentLengthTarget, normalizeGeneratedCommentWhitespace, replaceSelectedCommentText, validateGeneratedCommentPart } from "../../comment-generation-policy";
+import { commentLengthTarget, criterionSemanticIssues, evidenceBlockingIssues, normalizeGeneratedCommentWhitespace, replaceSelectedCommentText, validateGeneratedCommentPart } from "../../comment-generation-policy";
 
 type Level = "상" | "중" | "하" | "미응시" | "평가 예정" | "-";
 
@@ -174,7 +174,7 @@ export async function POST(request: Request) {
             role: "system",
             content: [{
               type: "input_text",
-              text: `당신은 초등학교 담임교사의 학생평가 작성 전문가이며 학교생활기록부 교과학습발달상황에 사용할 교과 평어를 작성한다. 입력된 평가계획과 평가 수준만 활용하며 학생 이름·성별·추측한 사실·비교 표현을 포함하지 않는다. 각 평가 영역의 문장은 평가기준을 그대로 복사하지 말고 성취기준·평가요소·수업 및 평가 활동의 수행 내용과 결과가 드러나는 관찰 가능한 행동으로 자연스럽게 바꾸어 쓴다. 학습 태도, 적극성, 자기주도성, 꾸준함, 협력, 교사의 도움은 평가 근거에서 확인되는 경우에만 쓴다. 상은 잘함, 중은 보통, 하는 노력 요함에 대응하되 입력된 해당 수준 기준만 사용한다. 상은 입력된 상 기준의 정확성·완성도·적용 능력, 중은 입력된 중 기준의 수행 범위·적용 정도, 하는 입력된 하 기준의 수행 과정·성장 가능성을 중심으로 쓰며 수준 이름만으로 태도나 도움 여부를 추측하지 않는다. 부족함·미흡함·못함·어려워함·이해하지 못함·소극적임·불성실함은 쓰지 않는다. variation의 문장 구조·시작 방식·근거 순서를 따르되 입력에 없는 영역·수준·사실을 만들지 않고 피해야 할 기존 평어와 첫 구절·핵심 동사·문장 구조가 겹치지 않게 작성한다. ${mode === "regenerate" ? `평가 영역마다 정확히 1문장씩 총 ${activeEvidenceCount}문장을 작성하고 각 문장은 서로 다른 내용과 문형의 60~80자 문장으로 쓴다. 모든 문장은 반드시 관찰 기반 명사형 종결 표현과 마침표로 끝낸다. 정확하게 설명함., 적극적으로 참여함., 자신의 생각을 구체적으로 표현함., 능력이 뛰어남., 태도가 돋보임., 모습이 인상적임. 같은 함·음·임 계열의 자연스러운 종결을 허용한다. 여기서 명사형은 문자 그대로 함.만 뜻하지 않는다. 하였다., 합니다., 입니다., 할 수 있다., 모습이다. 같은 서술형 종결은 절대 쓰지 않는다. 영역 순서대로 한 문단으로 이어 쓰고 마침표 뒤에는 한 칸만 띄운다.` : "현재 수정 요청의 범위만 평가 근거에 맞게 고치고 반드시 자연스러운 명사형 종결과 마침표를 사용한다."} 제목·번호·설명·따옴표·상중하 표시는 쓰지 않고 교과 평어 본문만 출력한다.`,
+              text: `당신은 초등학교 담임교사의 학생평가 작성 전문가이며 학교생활기록부 교과학습발달상황에 사용할 교과 평어를 작성한다. 입력된 평가계획과 평가 수준만 활용하며 학생 이름·성별·추측한 사실·비교 표현을 포함하지 않는다. 각 평가 영역의 문장은 평가기준을 그대로 복사하지 말고 성취기준·평가요소·수업 및 평가 활동의 수행 내용과 결과가 드러나는 관찰 가능한 행동으로 자연스럽게 바꾸어 쓴다. 학습 태도, 적극성, 자기주도성, 꾸준함, 협력, 교사의 도움은 평가 근거에서 확인되는 경우에만 쓴다. 상은 잘함, 중은 보통, 하는 노력 요함에 대응하되 입력된 해당 수준 기준만 사용한다. 상은 입력된 상 기준의 정확성·완성도·적용 능력, 중은 입력된 중 기준의 수행 범위·적용 정도, 하는 입력된 하 기준의 수행 과정·성장 가능성을 중심으로 쓰며 수준 이름만으로 태도나 도움 여부를 추측하지 않는다. 부족함·미흡함·못함·어려워함·이해하지 못함·소극적임·불성실함은 쓰지 않는다. variation의 문장 구조·시작 방식·근거 순서를 따르되 입력에 없는 영역·수준·사실을 만들지 않고 피해야 할 기존 평어와 첫 구절·핵심 동사·문장 구조가 겹치지 않게 작성한다. 각 절을 완성하기 전에 목적어와 서술어가 자연스럽게 연결되는지 확인한다. 활동명에 함을 기계적으로 붙인 ‘글 쓰기함·마음 쓰기함’과 목적어 없는 ‘글 씀’, ‘쓰는 데서 마음을 전함’, ‘전하고자 하는 마음의 글’, ‘감상을 글로 씀’ 같은 축약·중복 구조는 쓰지 않는다. 실제 쓰기 수행은 ‘느낀 부분과 그 까닭을 글로 씀.’, ‘마음을 전하는 글을 씀.’처럼 완전한 목적어와 동사로 표현한다. ${mode === "regenerate" ? `평가 영역마다 정확히 1문장씩 총 ${activeEvidenceCount}문장을 작성하고 각 문장은 서로 다른 내용과 문형의 60~80자 문장으로 쓴다. 모든 문장은 반드시 관찰 기반 명사형 종결 표현과 마침표로 끝낸다. 정확하게 설명함., 적극적으로 참여함., 자신의 생각을 구체적으로 표현함., 능력이 뛰어남., 태도가 돋보임., 모습이 인상적임. 같은 함·음·임 계열의 자연스러운 종결을 허용한다. 여기서 명사형은 문자 그대로 함.만 뜻하지 않는다. 하였다., 합니다., 입니다., 할 수 있다., 모습이다. 같은 서술형 종결은 절대 쓰지 않는다. 영역 순서대로 한 문단으로 이어 쓰고 마침표 뒤에는 한 칸만 띄운다.` : "현재 수정 요청의 범위만 평가 근거에 맞게 고치고 반드시 자연스러운 명사형 종결과 마침표를 사용한다."} 제목·번호·설명·따옴표·상중하 표시는 쓰지 않고 교과 평어 본문만 출력한다.`,
             }],
           },
           {
@@ -203,8 +203,12 @@ export async function POST(request: Request) {
     if (!generatedText) return Response.json({ error: "AI가 문장을 반환하지 않았습니다. 다시 시도해 주세요." }, { status: 502 });
     if (mode === "regenerate") {
       const sentences = generatedText.split(/(?<=\.)\s+/).map((sentence) => sentence.trim()).filter(Boolean);
-      const formatsOk = sentences.length === activeEvidenceCount && sentences.every((sentence, index) =>
-        validateGeneratedCommentPart(sentence, activeLengthTargets[index]?.criterion ?? "").valid);
+      const formatsOk = sentences.length === activeEvidenceCount && sentences.every((sentence, index) => {
+        const criterion = activeLengthTargets[index]?.criterion ?? "";
+        return validateGeneratedCommentPart(sentence, criterion).valid
+          && evidenceBlockingIssues(sentence, criterion, criterion).length === 0
+          && criterionSemanticIssues(sentence, criterion).length === 0;
+      });
       if (!formatsOk) return Response.json({ error: "새 평어가 영역별 필수 형식 검수를 통과하지 못했습니다. 다시 시도해 주세요." }, { status: 502 });
     }
     const comment = mode === "selection"

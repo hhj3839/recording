@@ -583,6 +583,30 @@ test("blocks malformed predicates found in the full Korean comment sample", () =
   }
 });
 
+test("blocks structurally malformed Korean writing predicates", () => {
+  for (const sentence of [
+    "작품을 읽고 재미나 감동을 느낀 부분과 그 까닭을 쓰며 글 씀.",
+    "교사의 도움을 받아 마음을 전하는 글 쓰기함.",
+    "마음을 전하는 글을 쓰는 데서 마음 쓰기함.",
+    "교사의 도움을 받아 마음을 전하는 글을 쓰는 데서 마음을 전함.",
+    "마음을 전하는 글을 쓰는 방법을 알고 전하고자 하는 마음의 글을 씀.",
+    "작품의 재미나 감동을 느낀 부분과 그 까닭을 써 감상을 글로 씀.",
+    "마음을 전하는 글을 쓰는 방법을 알고 마음을 전하는 글을 활용하여 씀.",
+  ]) {
+    const result = validateGeneratedCommentPart(sentence, sentence);
+    assert.equal(result.valid, false, sentence);
+    assert.equal(result.naturalEndingsOk, false, sentence);
+  }
+
+  for (const sentence of [
+    "작품을 읽고 재미나 감동을 느낀 부분과 그 까닭을 글로 씀.",
+    "교사의 도움을 받아 마음을 전하는 글을 씀.",
+    "마음을 전하는 글을 쓰는 방법을 알고 전하고자 하는 마음이 드러나도록 글을 씀.",
+  ]) {
+    assert.equal(validateGeneratedCommentPart(sentence, sentence).naturalEndingsOk, true, sentence);
+  }
+});
+
 test("derives completion policy from the criterion instead of patching individual phrases", () => {
   const completed = commentPredicatePolicy("상황에 알맞은 표정과 몸짓으로 작품 속 인물의 대화를 표현할 수 있다.");
   assert.equal(completed.completionMode, "completed");
