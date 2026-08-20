@@ -1,9 +1,9 @@
 import { waitUntil } from "@vercel/functions";
 import { eq, insertRows, selectRows, supabaseRequest } from "../../../db/supabase";
-import { getAiUsage, MONTHLY_AI_LIMIT } from "../../ai-usage";
 import { batchCommentsByAssessmentArea } from "../../comment-batching";
 import { CommentEvidence, signCommentJob } from "../../comment-generation";
 import { createCommentVariations } from "../../comment-variation";
+import { buildCommentPoolSpecs, type PoolPlanItem } from "../../comment-pool-library";
 import { dataError, getDataScope, requireOwnedStudentIds } from "../../data-scope";
 
 type Level = "상" | "중" | "하" | "미응시" | "평가 예정" | "-";
@@ -94,13 +94,16 @@ export async function POST(request: Request) {
       startRunner(request, active[0].id);
       return Response.json({ job: present(active[0]), alreadyRunning: true }, { status: 202 });
     }
-    const planRows = await selectRows<Record<string, string | number>>("assessment_plans", {
+    const planRows = await selectRows<PoolPlanItem & Record<string, string | number>>("assessment_plans", {
       owner_id: eq(user.id), class_id: eq(classId), order: "sort_order.asc",
     });
     const plan = planRows.map((row) => ({
+      id: Number(row.id),
       subject: String(row.subject), unit: String(row.unit), goal: String(row.goal), domain: String(row.domain),
       perspective: String(row.perspective), high: String(row.high), middle: String(row.middle), low: String(row.low),
     }));
+    const poolSpecs = buildCommentPoolSpecs(planRows);
+    const poolFingerprintByPlanLevel = new Map(poolSpecs.map((spec) => [`${spec.assessmentPlanId}|${spec.level}`, spec.fingerprint]));
     const scores = body.scores as Record<string, ScoreStudent[]>;
     const targetAssessmentIndexes = body.targetAssessmentIndexes && typeof body.targetAssessmentIndexes === "object"
       && !Array.isArray(body.targetAssessmentIndexes)
@@ -118,6 +121,8 @@ export async function POST(request: Request) {
           const criterion = level === "상" ? item.high : level === "중" ? item.middle : item.low;
           return [{
             assessmentIndex: index,
+            assessmentPlanId: item.id,
+            poolFingerprint: poolFingerprintByPlanLevel.get(`${item.id}|${level}`),
             level,
             criterion,
             levelCriteria: { high: item.high, middle: item.middle, low: item.low },
@@ -139,6 +144,15 @@ export async function POST(request: Request) {
       }
     }
     if (!evidence.length) return Response.json({ error: "전 과목 중 평가 수준을 한 개 이상 입력해 주세요." }, { status: 400 });
+    const requiredFingerprints = [...new Set(evidence.flatMap((entry) => entry.items.map((item) => item.poolFingerprint).filter((value): value is string => Boolean(value))))];
+    const preparedPools = requiredFingerprints.length ? await selectRows<{ fingerprint: string; approved_count: number }>("comment_pool_versions", {
+      fingerprint: `in.(${requiredFingerprints.join(",")})`,
+    }) : [];
+    const usableFingerprints = new Set(preparedPools.filter((pool) => Number(pool.approved_count) > 0).map((pool) => pool.fingerprint));
+    const missingPoolCount = requiredFingerprints.filter((fingerprint) => !usableFingerprints.has(fingerprint)).length;
+    if (missingPoolCount) {
+      return Response.json({ error: `평가계획 관리의 AI 평어 탭에서 ${missingPoolCount}개 영역·수준의 AI 평어를 먼저 제작해 주세요.`, code: "COMMENT_POOLS_REQUIRED" }, { status: 409 });
+    }
     const variations = createCommentVariations(evidence.reduce((count, item) => count + item.items.length, 0));
     let variationIndex = 0;
     evidence.forEach((item) => {
@@ -148,10 +162,6 @@ export async function POST(request: Request) {
     await requireOwnedStudentIds(evidence.map((item) => item.studentId), user.id, classId);
 
     const batches = batchCommentsByAssessmentArea(evidence);
-    const usage = await getAiUsage(user.id);
-    if (MONTHLY_AI_LIMIT !== null && usage.monthly + batches.length > MONTHLY_AI_LIMIT) {
-      return Response.json({ error: `이번 작업에는 AI 요청 ${batches.length}회가 필요하지만 이번 달 잔여 한도는 ${Math.max(0, MONTHLY_AI_LIMIT - usage.monthly)}회입니다.` }, { status: 429 });
-    }
     if (body.overwriteExisting === true) {
       const selected = `in.(${selectedStudentIds.join(",")})`;
       const selectedSubjects = Object.keys(body.scores as Record<string, unknown>);

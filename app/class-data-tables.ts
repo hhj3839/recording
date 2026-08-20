@@ -14,6 +14,7 @@ export const CLASS_DATA_TABLES = [
   "generation_jobs",
   "assessment_plan_versions",
   "pilot_feedback",
+  "assessment_plan_pool_links",
   "assessment_plans",
   "students",
   "ai_usage_events",
