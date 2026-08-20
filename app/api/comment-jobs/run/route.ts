@@ -8,6 +8,7 @@ import { generationModel } from "../../../ai-model-policy";
 import { MAX_COMMENT_AI_CALLS_PER_BATCH, MAX_COMMENT_DIVERSITY_CALLS_PER_BATCH } from "../../../comment-batching";
 import { CommentAreaPart, findCommentAreaOverlaps } from "../../../comment-area-diversity";
 import { criterionSemanticIssues, criterionToSafeNominalCandidates, evidenceBlockingIssues, levelAppropriatenessIssues, positiveGrowthCriterion, validateGeneratedCommentPart } from "../../../comment-generation-policy";
+import { assembleRotatedComment } from "../../../comment-assembly";
 
 export const maxDuration = 300;
 const MAX_GENERATION_ATTEMPTS = 5;
@@ -397,15 +398,17 @@ export async function POST(request: Request) {
     }
   }
   comments = batch.flatMap((item) => {
-    const sentences = (item.subjectItems ?? item.items).map((evidenceItem) =>
-      generatedParts.get(`${item.studentId}|${item.subject}|${evidenceItem.assessmentIndex}`)?.text ?? "");
-    const available = sentences.filter(Boolean);
-    return available.length
+    const available = (item.subjectItems ?? item.items).flatMap((evidenceItem) => {
+      const text = generatedParts.get(`${item.studentId}|${item.subject}|${evidenceItem.assessmentIndex}`)?.text ?? "";
+      return text ? [{ assessmentIndex: evidenceItem.assessmentIndex, text }] : [];
+    });
+    const assembled = assembleRotatedComment(available, item.studentId);
+    return assembled
       ? [{
           studentId: item.studentId,
           subject: item.subject,
-          comment: available.join(" "),
-          candidates: [available.join(" ")],
+          comment: assembled,
+          candidates: [assembled],
           generationLevels: (item.subjectItems ?? item.items).map((entry) => ({
             assessmentIndex: entry.assessmentIndex,
             level: entry.level ?? "-",
