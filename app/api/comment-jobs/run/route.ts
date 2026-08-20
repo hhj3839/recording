@@ -216,7 +216,8 @@ export async function POST(request: Request) {
       evidence: evidenceItem.text,
       text: "",
       warnings: [],
-      attempts: MAX_GENERATION_ATTEMPTS,
+      // 학생 생성 단계는 승인 문장 풀을 한 번 조회·배정할 뿐 AI 재시도를 하지 않는다.
+      attempts: 1,
       status: "needs_review" as const,
       issues: rejectionIssues.has(key)
         ? [...rejectionIssues.get(key)!]
