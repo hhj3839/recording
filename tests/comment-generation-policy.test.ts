@@ -601,6 +601,35 @@ test("derives completion policy from the criterion instead of patching individua
   assert.deepEqual(commentPredicateIssues("교사의 도움을 받아 대화를 표현하려고 노력함.", "교사의 도움을 받아 대화를 표현하기 위해 노력한다."), []);
 });
 
+test("requires each independent social-studies investigation action", () => {
+  const criterion = "오래된 물건을 조사하는 다양한 방법을 알고 오래된 물건의 쓰임과 당시 생활 모습을 조사한 뒤 정리할 수 있다.";
+  const valid = "오래된 물건을 조사하는 다양한 방법을 알고 물건의 쓰임과 당시 생활 모습을 조사한 뒤 정리함.";
+  assert.deepEqual(criterionSemanticIssues(valid, criterion), []);
+
+  const missingLife = criterionSemanticIssues("오래된 물건을 조사하는 다양한 방법을 알고 물건의 쓰임을 조사한 뒤 정리함.", criterion);
+  assert.equal(missingLife.some((issue) => issue.includes("당시 생활 모습 조사하기")), true);
+
+  const noInvestigation = criterionSemanticIssues("오래된 물건을 조사하는 다양한 방법을 알고 물건의 쓰임과 당시 생활 모습을 정리함.", criterion);
+  assert.equal(noInvestigation.some((issue) => issue.includes("조사하기")), true);
+});
+
+test("blocks completed social-studies work weakened into state or ability endings", () => {
+  const criterion = "모둠원의 도움을 받아 우리가 사는 곳의 장소 소개 자료를 만들고 소개할 수 있다.";
+  for (const sentence of [
+    "모둠원의 도움을 받아 우리가 사는 곳의 장소 소개 자료를 만들고 있음.",
+    "모둠원의 도움을 받아 우리가 사는 곳의 장소 소개 자료를 만든 모습임.",
+    "모둠원의 도움을 받아 우리가 사는 곳의 장소 소개 자료를 정리할 수 있음.",
+  ]) {
+    assert.equal(commentPredicateIssues(sentence, criterion).length > 0, true, sentence);
+  }
+});
+
+test("blocks unsupported vague praise in social-studies writing", () => {
+  const evidence = "지역 이름의 유래와 옛이야기를 조사하여 정리하고 글로 표현한다.";
+  assert.equal(evidenceBlockingIssues("지역 이름의 유래와 옛이야기를 조사하여 정리하고 자세히 글로 표현함.", evidence).length > 0, true);
+  assert.equal(evidenceBlockingIssues("지역 이름의 유래와 옛이야기를 조사하여 정리하고 글로 잘 표현함.", evidence).length > 0, true);
+});
+
 test("requires the original Korean performance instead of knowledge or effort substitutes", () => {
   const dialogue = "작품 속 인물들의 상황에 알맞은 표정, 몸짓, 목소리, 말투를 알고 대화를 실감 나게 표현할 수 있다.";
   const reaction = "작품을 읽고 재미와 감동을 느낀 부분과 그 까닭을 쓸 수 있다.";
@@ -834,7 +863,10 @@ test("requires diverse investigation methods and completed written expression", 
       "오래된 물건의 조사 방법을 알고 조사 결과를 정리함.",
       "오래된 물건을 조사하는 다양한 방법을 알고 조사한 후 정리할 수 있다.",
     ),
-    ["평가 기준의 필수 수행 ‘다양한 조사 방법 알기’ 누락"],
+    [
+      "평가 기준의 필수 수행 ‘다양한 조사 방법 알기’ 누락",
+      "평가 기준의 필수 수행 ‘조사하기’ 누락",
+    ],
   );
   assert.deepEqual(
     criterionSemanticIssues(

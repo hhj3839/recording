@@ -169,6 +169,8 @@ export function ensureGeneratedCommentPeriod(sentence: string) {
 }
 
 const commentPerformanceActions = [
+  { label: "오래된 물건의 쓰임 조사하기", pattern: /오래된\s*물건.{0,20}쓰임.{0,20}조사|조사.{0,20}오래된\s*물건.{0,20}쓰임/ },
+  { label: "당시 생활 모습 조사하기", pattern: /당시.{0,12}생활\s*모습.{0,20}조사|조사.{0,20}당시.{0,12}생활\s*모습/ },
   { label: "표현하기", pattern: /표현|나타내/ },
   { label: "글 쓰기", pattern: /(?:글|까닭|이유).{0,18}(?:쓰|쓸|씀|적|작성)/ },
   { label: "이해하기", pattern: /이해/ },
@@ -206,6 +208,9 @@ export function commentPredicateIssues(comment: string, criterion: string) {
   const policy = commentPredicatePolicy(criterion);
   if (policy.completionMode !== "completed" || policy.requiredActions.length === 0) return [];
   const ambiguousProcessEnding = /(?:해|하여|어|아)\s*감\.$/.test(comment)
+    || /고\s*있음\.$/.test(comment)
+    || /(?:한|된|만든|보인)\s+(?:모습|상태)임\.$/.test(comment)
+    || /할\s*수\s*있음\.$/.test(comment)
     || /(?:하는|하려는)\s+(?:모습|과정|태도)(?:임|이\s*드러남)\.$/.test(comment)
     || /(?:수행|활동).{0,8}(?:모습|과정)임\.$/.test(comment)
     || /(?:하는|쓰는)\s+데서\s*드러남\.$/.test(comment);
@@ -352,6 +357,8 @@ const unsupportedGroundingConcepts: Array<{
   { label: "입력에 없는 학습·성장 과정", pattern: /(?:익히|익혀|배우|배워)/, evidencePattern: /(?:익히|익혀|배우|배워)/, blocking: true },
   { label: "학습 태도", pattern: /태도/, evidencePattern: /태도|자세|적극적|성실|꾸준|자기주도|주도적|능동적|노력/, blocking: true },
   { label: "입력보다 강한 수행 정도", pattern: /(?:깊이|충분히|완전히|매우)/, evidencePattern: /(?:깊이|충분히|완전히|매우)/, blocking: true },
+  { label: "입력보다 강한 자세한 수행", pattern: /자세히/, evidencePattern: /자세히|구체적/, blocking: true },
+  { label: "입력보다 강한 잘 수행", pattern: /잘(?:표현|정리|설명|파악|활용|수행)/, evidencePattern: /잘(?:표현|정리|설명|파악|활용|수행)|능숙|우수/, blocking: true },
   { label: "수행을 능력 보유로 변경", pattern: /할줄알/, evidencePattern: /할줄알/, blocking: true },
 ];
 
@@ -419,7 +426,7 @@ const semanticAtoms: SemanticAtom[] = [
   { label: "친구의 생각 듣기", criterion: /친구.{0,10}생각.{0,8}(?:듣|경청)/, comment: /친구.{0,10}생각.{0,8}(?:듣|경청)/ },
   { label: "토의에 참여하기", criterion: /토의/, comment: /토의/ },
   { label: "다양한 조사 방법 알기", criterion: /(?:다양한|여러).{0,8}조사방법|조사.{0,8}(?:다양한|여러).{0,8}방법/, comment: /(?:다양한|여러).{0,8}조사방법|조사.{0,8}(?:다양한|여러).{0,8}방법/ },
-  { label: "조사하기", criterion: /조사/, comment: /조사/ },
+  { label: "조사하기", criterion: /조사/, comment: /조사(?:함|한|하여|하고|해|했|한뒤|한후|해서)/ },
   { label: "조사 결과 정리하기", criterion: /조사.{0,18}정리/, comment: /조사.{0,24}정리|정리.{0,24}조사/ },
   { label: "글로 표현하기", criterion: /글.{0,8}표현|표현.{0,8}글/, comment: /글.{0,10}(?:표현함|나타냄|작성함|씀)|(?:표현함|나타냄|작성함|씀).{0,10}글/ },
   { label: "자료 만들기", criterion: /자료.{0,10}(?:만들|만든|만드는|만듦|제작|구성)/, comment: /자료.{0,12}(?:만들|만든|만드는|만듦|제작|구성|마련)/ },
@@ -433,6 +440,8 @@ const semanticAtoms: SemanticAtom[] = [
   { label: "상황에 알맞은 대화 표현하기", criterion: /(?:대화.{0,18}(?:표현|나타내)|(?:표현|나타내).{0,18}대화)/, comment: /(?:대화.{0,20}(?:표현|나타내)|(?:표현|나타내).{0,20}대화)/ },
   { label: "재미·감동을 느낀 부분과 까닭 쓰기", criterion: /(?:재미|감동).{0,28}(?:부분).{0,20}(?:까닭|이유).{0,12}(?:쓰|쓸|씀|써|적)|(?:부분).{0,20}(?:까닭|이유).{0,12}(?:쓰|쓸|씀|써|적)/, comment: /(?:재미|감동).{0,32}(?:부분).{0,24}(?:까닭|이유).{0,14}(?:씀|썼|써냄|적음|작성함)|(?:부분).{0,24}(?:까닭|이유).{0,14}(?:씀|썼|써냄|적음|작성함)/ },
   { label: "마음을 전하는 글 실제로 쓰기", criterion: /마음.{0,16}전하.{0,16}글.{0,48}(?:쓸수|쓰고|씀|써서|작성)/, comment: /마음.{0,18}전하.{0,18}글.{0,48}(?:씀|썼|써냄|작성함)/ },
+  { label: "오래된 물건의 쓰임 조사하기", criterion: /오래된물건.{0,24}쓰임.{0,24}조사|조사.{0,24}오래된물건.{0,24}쓰임/, comment: /오래된물건.{0,28}쓰임.{0,28}조사(?:함|한|하여|하고|해|했)|조사(?:함|한|하여|하고|해|했).{0,28}오래된물건.{0,28}쓰임/ },
+  { label: "당시 생활 모습 조사하기", criterion: /당시.{0,16}생활모습.{0,24}조사|조사.{0,24}당시.{0,16}생활모습/, comment: /당시.{0,18}(?:사람들의)?생활모습.{0,28}조사(?:함|한|하여|하고|해|했)|조사(?:함|한|하여|하고|해|했).{0,28}당시.{0,18}(?:사람들의)?생활모습/ },
 ];
 
 export function criterionSemanticIssues(
