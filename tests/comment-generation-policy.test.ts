@@ -9,7 +9,8 @@ import { batchCommentRepairs, batchCommentsByAssessmentArea, COMMENT_BATCH_SIZE,
 import { batchBehaviors, BEHAVIOR_BATCH_SIZE } from "../app/behavior-batching.ts";
 import { estimateAiCostUsd } from "../app/ai-pricing.ts";
 import { commentAreaOverlapReasons } from "../app/comment-area-diversity.ts";
-import { assignApprovedCommentPools, assignUniquePoolCandidates, buildApprovedCommentPool, buildCanonicalBaselinePart, buildCommentPoolGroups, buildPublicCommentPoolRequests, commentPoolCandidateCount } from "../app/comment-pool-generation.ts";
+import { assignApprovedCommentPools, assignUniquePoolCandidates, buildApprovedCommentPool, buildCanonicalBaselinePart, buildCommentPoolGroups, buildPublicCommentPoolRequests, commentPoolCandidateCount, spreadCandidatesByOpening } from "../app/comment-pool-generation.ts";
+import { assembleRotatedComment } from "../app/comment-assembly.ts";
 import { readApiJson } from "../app/api-response.ts";
 
 test("uses the same low-cost model for the initial request and retry", () => {
@@ -218,6 +219,30 @@ test("builds a bounded shared pool and cycles it for larger classes", () => {
   assert.equal(commentPoolCandidateCount(20), 20);
   assert.equal(commentPoolCandidateCount(25), 20);
   assert.equal(commentPoolCandidateCount(0), 0);
+});
+
+test("spreads approved candidates with different openings before assignment", () => {
+  assert.deepEqual(spreadCandidatesByOpening([
+    "작품 속 인물의 대화를 표현함.",
+    "작품 속 인물의 말투를 살려 표현함.",
+    "문장의 짜임을 파악함.",
+    "설명하는 글을 간추림.",
+  ]), [
+    "작품 속 인물의 대화를 표현함.",
+    "문장의 짜임을 파악함.",
+    "설명하는 글을 간추림.",
+    "작품 속 인물의 말투를 살려 표현함.",
+  ]);
+});
+
+test("rotates the first assessment area evenly across a class", () => {
+  const parts = Array.from({ length: 5 }, (_, assessmentIndex) => ({ assessmentIndex, text: `영역 ${assessmentIndex + 1}.` }));
+  const comments = Array.from({ length: 21 }, (_, index) => assembleRotatedComment(parts, index + 1));
+  const starts = comments.map((comment) => comment.split(".")[0]);
+  const counts = new Map(starts.map((start) => [start, starts.filter((item) => item === start).length]));
+  assert.equal(counts.size, 5);
+  assert.equal(Math.max(...counts.values()), 5);
+  assert.equal(comments[1], "영역 2. 영역 3. 영역 4. 영역 5. 영역 1.");
 });
 
 test("isolates each student and area during the final individual retries", () => {

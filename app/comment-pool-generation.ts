@@ -26,6 +26,27 @@ export type CommentPoolGroup = {
 
 const normalizedSentence = (value: string) => value.normalize("NFKC").replace(/\s+/g, "").replace(/[.!?。！？]/g, "");
 
+const openingKey = (value: string) => normalizedSentence(value).slice(0, 6);
+
+export function spreadCandidatesByOpening(candidates: string[]) {
+  const buckets = new Map<string, string[]>();
+  for (const candidate of candidates) {
+    const key = openingKey(candidate);
+    const bucket = buckets.get(key) ?? [];
+    bucket.push(candidate);
+    buckets.set(key, bucket);
+  }
+  const spread: string[] = [];
+  const queues = [...buckets.values()];
+  while (spread.length < candidates.length) {
+    for (const queue of queues) {
+      const next = queue.shift();
+      if (next) spread.push(next);
+    }
+  }
+  return spread;
+}
+
 export function commentPoolCandidateCount(requiredCount: number) {
   if (!Number.isInteger(requiredCount) || requiredCount < 1) return 0;
   // 학생별 문장을 생성하지 않고 평가영역·수준별 공용 후보 풀을 만든다.
@@ -284,7 +305,7 @@ export function assignUniquePoolCandidates(
     ? referenceFallbacks.slice(0, Math.max(0, group.members.length - deduplicated.length))
     : [];
   return {
-    candidates: [...deduplicated, ...fallbackCandidates].map((candidate) => candidate.text),
+    candidates: spreadCandidatesByOpening([...deduplicated, ...fallbackCandidates].map((candidate) => candidate.text)),
     fallbackKeys: new Set(fallbackCandidates.map((candidate) => normalizedSentence(candidate.text))),
     issues: [...issues],
   };
