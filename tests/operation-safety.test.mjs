@@ -137,9 +137,8 @@ test("keeps the app shell keyboard and screen-reader friendly", () => {
   assert.match(page, /<main id="main-content" tabIndex=\{-1\}>/);
   assert.match(page, /aria-label="주요 메뉴"/);
   assert.match(page, /aria-current=\{view === item\.id \? "page" : undefined\}/);
-  assert.match(page, /AI 생성 사용량/);
-  assert.match(page, /제한 없음/);
-  assert.doesNotMatch(page, /이번 달 AI 생성 사용량/);
+  assert.doesNotMatch(page, /AI 생성 사용량/);
+  assert.doesNotMatch(page, /fetch\("\/api\/usage"\)/);
   assert.match(page, /aria-label="화면 이동"/);
   assert.match(css, /prefers-reduced-motion:reduce/);
 });
