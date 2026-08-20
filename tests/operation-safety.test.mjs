@@ -243,3 +243,15 @@ test("clears a comment before regeneration without a confirmation dialog", () =>
   assert.doesNotMatch(page, /mode === "regenerate" && !window\.confirm/);
   assert.match(page, /disabled=\{!hasLevel \|\| !!rewriteBusyKey\}/);
 });
+
+test("limits comment-pool validation to one subject and a lab account", () => {
+  const route = readFileSync("app/api/comment-pools/route.ts", "utf8");
+  const page = readFileSync("app/page.tsx", "utf8");
+  assert.match(route, /if \(!subject\) return Response\.json\(\{ error: "AI 평어를 제작할 과목을 선택해 주세요\." \}, \{ status: 400 \}\)/);
+  assert.match(route, /user\.email\.toLowerCase\(\)\.endsWith\("@giroksam\.test"\)/);
+  assert.match(route, /Math\.min\(requestedMaxGroups, 15\)/);
+  assert.match(route, /spec\.subject === subject/);
+  assert.match(route, /\.slice\(0, maxGroups\)/);
+  assert.match(route, /maxAiCalls: pending\.length \* 2/);
+  assert.match(page, /body: JSON\.stringify\(\{ subject \}\)/);
+});

@@ -79,7 +79,17 @@ export async function GET(request: Request) {
 export async function POST(request: Request) {
   try {
     const { user, classId } = await getDataScope();
-    const specs = await currentSpecs(user.id, classId);
+    const body = await request.json().catch(() => ({})) as { subject?: unknown; maxGroups?: unknown; labOnly?: unknown };
+    const subject = typeof body.subject === "string" ? body.subject.trim() : "";
+    if (!subject) return Response.json({ error: "AI 평어를 제작할 과목을 선택해 주세요." }, { status: 400 });
+    if (body.labOnly === true && !user.email.toLowerCase().endsWith("@giroksam.test")) {
+      return Response.json({ error: "제한 검증은 실험실 계정에서만 실행할 수 있습니다." }, { status: 403 });
+    }
+    const requestedMaxGroups = Number(body.maxGroups);
+    const maxGroups = Number.isInteger(requestedMaxGroups) && requestedMaxGroups > 0
+      ? Math.min(requestedMaxGroups, 15)
+      : Number.POSITIVE_INFINITY;
+    const specs = (await currentSpecs(user.id, classId)).filter((spec) => spec.subject === subject);
     if (!specs.length) return Response.json({ error: "저장된 평가계획이 없습니다." }, { status: 400 });
     const versions = await upsertRows<PoolVersionRow>("comment_pool_versions", specs.map((spec) => ({
       fingerprint: spec.fingerprint, subject: spec.subject, unit: spec.unit, domain: spec.domain,
@@ -100,7 +110,7 @@ export async function POST(request: Request) {
       return version && Number(version.approved_count ?? 0) < COMMENT_POOL_TARGET
         ? [{ spec, poolVersionId: Number(version.id) }]
         : [];
-    });
+    }).slice(0, maxGroups);
     if (!pending.length) return Response.json({ ready: true, reused: specs.length });
     const jobs = await insertRows<{ id: string }>("generation_jobs", [{
       owner_id: user.id, owner_email: user.email, class_id: classId, job_type: "comment-pools",
@@ -109,7 +119,7 @@ export async function POST(request: Request) {
       created_at: new Date().toISOString(), updated_at: new Date().toISOString(),
     }]);
     queueRunner(request, jobs[0].id);
-    return Response.json({ jobId: jobs[0].id, total: pending.length, reused: specs.length - pending.length }, { status: 202 });
+    return Response.json({ jobId: jobs[0].id, subject, total: pending.length, maxAiCalls: pending.length * 2, reused: specs.length - pending.length }, { status: 202 });
   } catch (error) {
     return dataError(error, "AI 평어 제작을 시작하지 못했습니다.");
   }
