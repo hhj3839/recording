@@ -3,6 +3,7 @@ import { eq, selectRows, updateRows } from "../../../../db/supabase";
 import { selectMostDiverseComments } from "../../../comment-diversity";
 import { CommentEvidence, GeneratedComment, GeneratedCommentPart, saveGeneratedCommentParts, saveGeneratedComments, signCommentJob, verifyCommentJob } from "../../../comment-generation";
 import { assignApprovedCommentPools } from "../../../comment-pool-generation";
+import { COMMENT_POOL_TARGET } from "../../../comment-pool-library";
 import { assembleRotatedComment } from "../../../comment-assembly";
 
 export const maxDuration = 300;
@@ -126,7 +127,7 @@ export async function POST(request: Request) {
   const sentencesByVersion = new Map<number, string[]>();
   for (const row of poolSentences) {
     const sentences = sentencesByVersion.get(Number(row.pool_version_id)) ?? [];
-    if (row.sentence) sentences.push(row.sentence);
+    if (row.sentence && sentences.length < COMMENT_POOL_TARGET) sentences.push(row.sentence);
     sentencesByVersion.set(Number(row.pool_version_id), sentences);
   }
   const jobOffset = [...jobId].reduce((sum, character) => sum + character.charCodeAt(0), 0);

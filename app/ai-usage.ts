@@ -9,6 +9,7 @@ export const MINUTE_AI_LIMIT = 10;
 
 type UsageRow = {
   created_at: string;
+  feature?: string;
   input_tokens?: number | string;
   cached_input_tokens?: number | string;
   output_tokens?: number | string;
@@ -28,6 +29,19 @@ export async function getAiUsage(ownerId: string) {
     limit: 1000,
   });
   const minuteAgo = Date.now() - 60_000;
+  const byFeature = rows.reduce<Record<string, { calls: number; input: number; cachedInput: number; output: number; total: number; estimatedCostUsd: number }>>((summary, row) => {
+    const feature = row.feature || "unknown";
+    const current = summary[feature] ?? { calls: 0, input: 0, cachedInput: 0, output: 0, total: 0, estimatedCostUsd: 0 };
+    current.calls += 1;
+    current.input += Number(row.input_tokens) || 0;
+    current.cachedInput += Number(row.cached_input_tokens) || 0;
+    current.output += Number(row.output_tokens) || 0;
+    current.total += Number(row.total_tokens) || 0;
+    current.estimatedCostUsd += Number(row.estimated_cost_usd) || 0;
+    summary[feature] = current;
+    return summary;
+  }, {});
+  Object.values(byFeature).forEach((entry) => { entry.estimatedCostUsd = Math.round(entry.estimatedCostUsd * 1_000_000) / 1_000_000; });
   return {
     monthly: rows.length,
     recent: rows.filter((row) => new Date(row.created_at).getTime() >= minuteAgo).length,
@@ -39,6 +53,7 @@ export async function getAiUsage(ownerId: string) {
       total: rows.reduce((sum, row) => sum + (Number(row.total_tokens) || 0), 0),
     },
     estimatedCostUsd: Math.round(rows.reduce((sum, row) => sum + (Number(row.estimated_cost_usd) || 0), 0) * 1_000_000) / 1_000_000,
+    byFeature,
   };
 }
 

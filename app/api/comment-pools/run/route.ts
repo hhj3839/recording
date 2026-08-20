@@ -64,11 +64,12 @@ export async function POST(request: Request) {
   const signature = typeof body.signature === "string" ? body.signature : "";
   if (!jobId || !verifyCommentJob(jobId, signature)) return Response.json({ error: "허용되지 않은 작업 요청입니다." }, { status: 403 });
   const job = (await selectRows<JobRow>("generation_jobs", { id: eq(jobId), limit: 1 }))[0];
-  if (!job || !["queued", "running"].includes(job.status)) return Response.json({ ok: true, terminal: true });
+  if (!job) return Response.json({ ok: true, terminal: true });
+  if (job.status !== "queued") return Response.json({ ok: true, terminal: false, busy: job.status === "running" });
   const batchIndex = Number(job.current_batch);
   const batch = job.batches[batchIndex];
   if (!batch) return Response.json({ ok: true, terminal: true });
-  const claimed = await updateRows<JobRow>("generation_jobs", { id: eq(jobId), status: eq(job.status), updated_at: eq(job.updated_at) }, {
+  const claimed = await updateRows<JobRow>("generation_jobs", { id: eq(jobId), status: eq("queued"), updated_at: eq(job.updated_at) }, {
     status: "running", started_at: job.started_at ?? new Date().toISOString(), updated_at: new Date().toISOString(),
   });
   if (!claimed[0]) return Response.json({ ok: true, terminal: false, busy: true });
@@ -93,7 +94,8 @@ export async function POST(request: Request) {
     for (let attempt = 0; attempt < 2 && approved.length < COMMENT_POOL_TARGET; attempt += 1) {
       const requestCount = Math.min(40, Math.max(20, (COMMENT_POOL_TARGET - approved.length) * 2));
       const generated = await generateCandidates(batch.spec, approved, requestCount);
-      const selected = approvePoolCandidates(generated.candidates, batch.spec, approved).approved;
+      const selected = approvePoolCandidates(generated.candidates, batch.spec, approved).approved
+        .slice(0, COMMENT_POOL_TARGET - approved.length);
       if (selected.length) {
         await upsertRows("comment_pool_sentences", selected.map((sentence) => ({
           pool_version_id: batch.poolVersionId, sentence, normalized_sentence: normalizedPoolSentence(sentence),

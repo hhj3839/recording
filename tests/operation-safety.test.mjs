@@ -263,3 +263,22 @@ test("allows the signed comment-pool runner through the auth proxy", () => {
   assert.match(runner, /verifyCommentJob\(jobId, signature\)/);
   assert.match(runner, /status: 403/);
 });
+
+test("serializes comment-pool batches and caps every reusable pool at twenty", () => {
+  const producer = readFileSync("app/api/comment-pools/run/route.ts", "utf8");
+  const poolApi = readFileSync("app/api/comment-pools/route.ts", "utf8");
+  const assignment = readFileSync("app/api/comment-jobs/run/route.ts", "utf8");
+  assert.match(producer, /job\.status !== "queued"/);
+  assert.match(producer, /status: eq\("queued"\)/);
+  assert.match(producer, /slice\(0, COMMENT_POOL_TARGET - approved\.length\)/);
+  assert.match(poolApi, /limit: COMMENT_POOL_TARGET/);
+  assert.match(assignment, /sentences\.length < COMMENT_POOL_TARGET/);
+});
+
+test("reports AI usage by feature for cost verification", () => {
+  const usage = readFileSync("app/ai-usage.ts", "utf8");
+  const audit = readFileSync("scripts/load-test-comments.mjs", "utf8");
+  assert.match(usage, /const byFeature = rows\.reduce/);
+  assert.match(usage, /estimatedCostUsd: Math\.round/);
+  assert.match(audit, /featureUsage: usageData\.byFeature/);
+});
