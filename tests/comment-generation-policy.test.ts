@@ -9,7 +9,7 @@ import { batchCommentRepairs, batchCommentsByAssessmentArea, COMMENT_BATCH_SIZE,
 import { batchBehaviors, BEHAVIOR_BATCH_SIZE } from "../app/behavior-batching.ts";
 import { estimateAiCostUsd } from "../app/ai-pricing.ts";
 import { commentAreaOverlapReasons } from "../app/comment-area-diversity.ts";
-import { assignUniquePoolCandidates, buildCanonicalBaselinePart, buildCommentPoolGroups, buildPublicCommentPoolRequests, commentPoolCandidateCount } from "../app/comment-pool-generation.ts";
+import { assignApprovedCommentPools, assignUniquePoolCandidates, buildApprovedCommentPool, buildCanonicalBaselinePart, buildCommentPoolGroups, buildPublicCommentPoolRequests, commentPoolCandidateCount } from "../app/comment-pool-generation.ts";
 import { readApiJson } from "../app/api-response.ts";
 
 test("uses the same low-cost model for the initial request and retry", () => {
@@ -130,6 +130,56 @@ test("prepares a complete 105-area canonical baseline before optional AI replace
   assert.equal(baselines.every(Boolean), true);
   assert.equal(new Set(baselines.filter(Boolean).map((part) => `${part.studentId}|${part.assessmentIndex}`)).size, 105);
   assert.equal(baselines.filter(Boolean).every((part) => part.warnings.length === 0), true);
+});
+
+test("assigns only revalidated deterministic candidates from an approved level pool", () => {
+  const criterion = "효와 우애의 의미를 이해하고 실천할 수 있는 일을 비교적 알고 있으며 가족을 소중히 여기는 마음을 전한다.";
+  const evidence = Array.from({ length: 21 }, (_, index) => ({
+    studentId: index + 1,
+    subject: "도덕",
+    items: [{
+      assessmentIndex: 1,
+      level: "중" as const,
+      criterion,
+      text: `가족 | 수준: 중 | 기준: ${criterion}`,
+    }],
+  }));
+  const [group] = buildCommentPoolGroups(evidence);
+  const pool = buildApprovedCommentPool(group);
+  assert.equal(pool.approvedCandidates.length >= 2, true);
+  assert.equal(pool.approvedCandidates.includes(pool.canonicalSentence), true);
+  const assigned = assignApprovedCommentPools(evidence);
+  assert.equal(assigned.length, 21);
+  assert.equal(new Set(assigned.map((part) => part.text)).size >= 2, true);
+  assert.equal(assigned.every((part) => pool.approvedCandidates.includes(part.text)), true);
+  assert.equal(assigned.every((part) => part.warnings.length === 0), true);
+});
+
+test("separates approved pools when the level or assessment criterion changes", () => {
+  const makeGroup = (level: "상" | "중", criterion: string) => buildCommentPoolGroups([{
+    studentId: 1,
+    subject: "수학",
+    items: [{ assessmentIndex: 0, level, criterion, text: `수와 연산 | 수준: ${level} | 기준: ${criterion}` }],
+  }])[0];
+  const middle = buildApprovedCommentPool(makeGroup("중", "계산 원리를 알고 문제를 해결할 수 있다."));
+  const high = buildApprovedCommentPool(makeGroup("상", "계산 원리를 정확히 설명하고 문제를 해결할 수 있다."));
+  assert.notEqual(middle.poolKey, high.poolKey);
+  assert.notDeepEqual(middle.approvedCandidates, high.approvedCandidates);
+});
+
+test("does not assign an unapproved canonical sentence when a pool has no valid candidate", () => {
+  const assigned = assignApprovedCommentPools([{
+    studentId: 1,
+    subject: "국어",
+    items: [{
+      assessmentIndex: 0,
+      level: "상",
+      criterion: "문장을 작성한다.",
+      text: "쓰기 | 수준: 상 | 기준: 문장을 작성한다.",
+      canonicalSentence: "내부 진단 JSON을 그대로 출력한다.",
+    }],
+  }]);
+  assert.deepEqual(assigned, []);
 });
 
 test("derives the same common generation guide from any subject criterion", () => {
