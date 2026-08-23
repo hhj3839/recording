@@ -79,18 +79,32 @@ export async function GET(request: Request) {
 export async function POST(request: Request) {
   try {
     const { user, classId } = await getDataScope();
-    const body = await request.json().catch(() => ({})) as { subject?: unknown; maxGroups?: unknown; labOnly?: unknown };
+    const body = await request.json().catch(() => ({})) as {
+      subject?: unknown; maxGroups?: unknown; labOnly?: unknown; targetFingerprints?: unknown;
+    };
     const subject = typeof body.subject === "string" ? body.subject.trim() : "";
     if (!subject) return Response.json({ error: "AI 평어를 제작할 과목을 선택해 주세요." }, { status: 400 });
     if (body.labOnly === true && !user.email.toLowerCase().endsWith("@giroksam.test")) {
       return Response.json({ error: "제한 검증은 실험실 계정에서만 실행할 수 있습니다." }, { status: 403 });
     }
+    const targetFingerprints = Array.isArray(body.targetFingerprints)
+      ? [...new Set(body.targetFingerprints.filter((value): value is string => typeof value === "string" && /^[a-f0-9]{64}$/.test(value)))]
+      : [];
+    if (targetFingerprints.length && body.labOnly !== true) {
+      return Response.json({ error: "개별 문장 풀 지정은 실험실 제한 검증에서만 사용할 수 있습니다." }, { status: 403 });
+    }
     const requestedMaxGroups = Number(body.maxGroups);
     const maxGroups = Number.isInteger(requestedMaxGroups) && requestedMaxGroups > 0
       ? Math.min(requestedMaxGroups, 15)
       : Number.POSITIVE_INFINITY;
-    const specs = (await currentSpecs(user.id, classId)).filter((spec) => spec.subject === subject);
+    const subjectSpecs = (await currentSpecs(user.id, classId)).filter((spec) => spec.subject === subject);
+    const specs = targetFingerprints.length
+      ? subjectSpecs.filter((spec) => targetFingerprints.includes(spec.fingerprint))
+      : subjectSpecs;
     if (!specs.length) return Response.json({ error: "저장된 평가계획이 없습니다." }, { status: 400 });
+    if (targetFingerprints.length !== 0 && specs.length !== targetFingerprints.length) {
+      return Response.json({ error: "지정한 문장 풀 중 현재 평가계획과 일치하지 않는 항목이 있습니다." }, { status: 400 });
+    }
     const versions = await upsertRows<PoolVersionRow>("comment_pool_versions", specs.map((spec) => ({
       fingerprint: spec.fingerprint, subject: spec.subject, unit: spec.unit, domain: spec.domain,
       level: spec.level, criterion: spec.criterion, level_criteria: spec.levelCriteria,
