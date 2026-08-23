@@ -253,6 +253,9 @@ test("limits comment-pool validation to one subject and a lab account", () => {
   assert.match(route, /spec\.subject === subject/);
   assert.match(route, /\.slice\(0, maxGroups\)/);
   assert.match(route, /maxAiCalls: pending\.length \* 2/);
+  assert.match(route, /targetFingerprints\.length && body\.labOnly !== true/);
+  assert.match(route, /targetFingerprints\.includes\(spec\.fingerprint\)/);
+  assert.match(route, /specs\.length !== targetFingerprints\.length/);
   assert.match(page, /body: JSON\.stringify\(\{ subject \}\)/);
 });
 
