@@ -44,11 +44,12 @@ export function validateStoredComment(comment, expectedSentenceCount) {
     sentenceCount: expectedSentenceCount > 0 && sentences.length === expectedSentenceCount,
     lengths: lengths.length > 0 && lengths.every((length) => length >= 50 && length <= 60),
     endings: sentences.length > 0 && sentences.every((sentence) => sentence.endsWith("함.")),
-    naturalEndings: awkwardEndings.length === 0,
+    naturalEndings: sentences.length > 0 && awkwardEndings.length === 0 && sentences.every(hasNominalMieumEnding),
     forbidden: forbidden.length === 0,
   };
   return {
-    strict: Object.values(checks).every(Boolean), checks,
+    strict: checks.sentenceCount && checks.naturalEndings && checks.forbidden,
+    legacyStrict: Object.values(checks).every(Boolean), checks,
     sentences, lengths, awkwardEndings, forbidden,
   };
 }
@@ -99,7 +100,15 @@ export function auditStoredResults({ students, plan, levels, comments, parts, be
       const evidence = level === "상" ? item?.high : level === "중" ? item?.middle : level === "하" ? item?.low : "";
       return groundingWarnings(sentence, evidence).map((label) => ({ assessmentIndex: index, label }));
     });
-    return { studentId, subject, missing: false, strict: validation.strict, checks: validation.checks, expectedSentences: subjectPlan.length, actualSentences: validation.sentences.length, lengths: validation.lengths, groundingWarnings: warnings };
+    return {
+      studentId, subject, missing: false,
+      strict: validation.strict && warnings.length === 0,
+      formatPass: validation.strict,
+      legacyStrict: validation.legacyStrict,
+      checks: validation.checks,
+      expectedSentences: subjectPlan.length, actualSentences: validation.sentences.length,
+      lengths: validation.lengths, groundingWarnings: warnings,
+    };
   });
   const behaviorByStudent = new Map(behaviors.filter((item) => item.behavior?.trim()).map((item) => [Number(item.studentId), item]));
   const behaviorDetails = students.map((student) => {
@@ -112,23 +121,31 @@ export function auditStoredResults({ students, plan, levels, comments, parts, be
   const groundedComments = commentDetails.filter((item) => !item.missing && item.groundingWarnings.length === 0).length;
   const savedBehaviors = behaviorDetails.filter((item) => !item.missing).length;
   const strictBehaviors = behaviorDetails.filter((item) => item.strict).length;
-  const commentFailureCounts = Object.fromEntries(["sentenceCount", "lengths", "endings", "naturalEndings", "forbidden"]
+  const commentFailureCounts = Object.fromEntries(["sentenceCount", "naturalEndings", "forbidden"]
+    .map((check) => [check, commentDetails.filter((item) => !item.missing && item.checks?.[check] === false).length]));
+  const referenceCounts = Object.fromEntries(["lengths", "endings"]
     .map((check) => [check, commentDetails.filter((item) => !item.missing && item.checks?.[check] === false).length]));
   const commentsBySubject = Object.fromEntries(subjects.map((subject) => {
     const subjectRows = commentDetails.filter((item) => item.subject === subject);
     const subjectStrict = subjectRows.filter((item) => item.strict).length;
-    return [subject, { saved: subjectRows.filter((item) => !item.missing).length, strict: subjectStrict, strictRate: percent(subjectStrict, subjectRows.length) }];
+    return [subject, {
+      saved: subjectRows.filter((item) => !item.missing).length,
+      currentPass: subjectStrict, currentPassRate: percent(subjectStrict, subjectRows.length),
+      strict: subjectStrict, strictRate: percent(subjectStrict, subjectRows.length),
+    }];
   }));
   const commentClassification = commentDetails.map((item) => {
     const formatReasons = [];
     if (item.missing) formatReasons.push("missing");
     if (item.checks?.naturalEndings === false) formatReasons.push("awkwardNominalEnding");
     if (item.checks?.sentenceCount === false) formatReasons.push("sentenceCount");
-    if (item.checks?.lengths === false) formatReasons.push("sentenceLength");
-    if (item.checks?.endings === false) formatReasons.push("ending");
     if (item.checks?.forbidden === false) formatReasons.push("forbiddenExpression");
     return {
       studentId: item.studentId, subject: item.subject, formatReasons,
+      referenceReasons: [
+        ...(item.checks?.lengths === false ? ["legacySentenceLength"] : []),
+        ...(item.checks?.endings === false ? ["literalHamEnding"] : []),
+      ],
       meaningReview: item.groundingWarnings.length > 0,
       groundingWarnings: item.groundingWarnings,
     };
@@ -139,8 +156,14 @@ export function auditStoredResults({ students, plan, levels, comments, parts, be
     scope: { students: students.length, subjects: subjects.length, expectedComments: expectedCommentKeys.length, expectedBehaviors: students.length },
     comments: {
       saved: savedComments, missing: expectedCommentKeys.length - savedComments,
+      policy: "현재 통과는 영역 수·자연스러운 명사형·금지 표현·근거 경고를 반영하며 길이와 문자 그대로 함. 종결은 참고 지표로만 집계",
+      currentPass: strictComments, currentPassRate: percent(strictComments, expectedCommentKeys.length),
       strict: strictComments, strictRate: percent(strictComments, expectedCommentKeys.length),
       failureCounts: commentFailureCounts, bySubject: commentsBySubject,
+      referenceMetrics: {
+        policy: "50~60자와 문자 그대로 함. 종결은 현재 통과 판정에서 제외한 과거 기준 참고 지표",
+        failureCounts: referenceCounts,
+      },
       noGroundingWarning: groundedComments, noGroundingWarningRate: percent(groundedComments, savedComments),
       meaningTarget95Verified: false, unsupportedFactTarget3Verified: false,
       reviewNote: "근거 밖 태도·과정 표현 휴리스틱은 전수 검사했으나 의미 일치도와 미입력 사실 비율의 공식 판정에는 교사 검토가 필요함.",
@@ -149,7 +172,7 @@ export function auditStoredResults({ students, plan, levels, comments, parts, be
         readOnly: true, automaticChangesAllowed: false,
         formatCandidateCount: formatCandidates.length,
         meaningReviewCandidateCount: meaningCandidates.length,
-        reasonCounts: Object.fromEntries(["missing", "awkwardNominalEnding", "sentenceCount", "sentenceLength", "ending", "forbiddenExpression"]
+        reasonCounts: Object.fromEntries(["missing", "awkwardNominalEnding", "sentenceCount", "forbiddenExpression"]
           .map((reason) => [reason, formatCandidates.filter((item) => item.formatReasons.includes(reason)).length])),
         formatCandidates,
         meaningReviewCandidates: meaningCandidates,
