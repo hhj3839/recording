@@ -278,10 +278,11 @@ test("serializes comment-pool batches and caps every reusable pool at twenty", (
   assert.match(assignment, /sentences\.length < COMMENT_POOL_TARGET/);
 });
 
-test("repairs only an exact lab pool count and preserves shared or original rows", () => {
+test("repairs only an exact lab pool count and requires explicit shared-pool approval", () => {
   const route = readFileSync("app/api/comment-pools/repair/route.ts", "utf8");
   assert.match(route, /endsWith\("@giroksam\.test"\)/);
-  assert.match(route, /links\.some\(\(link\) => link\.owner_id !== user\.id\)/);
+  assert.match(route, /sharedOwnerIds\.size && body\.allowShared !== true/);
+  assert.match(route, /sharedOwnerCount: sharedOwnerIds\.size/);
   assert.match(route, /repairs\.length !== expectedCount/);
   assert.match(route, /if \(body\.apply !== true\) return Response\.json/);
   assert.match(route, /status: "retired"/);

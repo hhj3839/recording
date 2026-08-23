@@ -18,7 +18,12 @@ export async function POST(request: Request) {
     if (!user.email.toLowerCase().endsWith("@giroksam.test")) {
       return Response.json({ error: "문장 풀 교정은 실험실 계정에서만 실행할 수 있습니다." }, { status: 403 });
     }
-    const body = await request.json().catch(() => ({})) as { subject?: unknown; expectedCount?: unknown; apply?: unknown };
+    const body = await request.json().catch(() => ({})) as {
+      subject?: unknown;
+      expectedCount?: unknown;
+      allowShared?: unknown;
+      apply?: unknown;
+    };
     const subject = typeof body.subject === "string" ? body.subject.trim() : "";
     const expectedCount = Number(body.expectedCount);
     if (!subject || !Number.isInteger(expectedCount) || expectedCount < 1 || expectedCount > 100) {
@@ -35,8 +40,9 @@ export async function POST(request: Request) {
     const links = versionIds.length ? await selectRows<{ owner_id: string; pool_version_id: number }>("assessment_plan_pool_links", {
       pool_version_id: inValues(versionIds),
     }) : [];
-    if (links.some((link) => link.owner_id !== user.id)) {
-      return Response.json({ error: "다른 계정과 공유된 문장 풀이 있어 교정을 중단했습니다." }, { status: 409 });
+    const sharedOwnerIds = new Set(links.filter((link) => link.owner_id !== user.id).map((link) => link.owner_id));
+    if (sharedOwnerIds.size && body.allowShared !== true) {
+      return Response.json({ error: "다른 계정과 공유된 문장 풀입니다. 공용 풀 교정을 명시적으로 승인해 주세요." }, { status: 409 });
     }
     const rows = versionIds.length ? await selectRows<PoolSentence>("comment_pool_sentences", {
       pool_version_id: inValues(versionIds), order: "id.asc",
@@ -69,6 +75,7 @@ export async function POST(request: Request) {
     const preview = {
       subject, repairCount: repairs.length, affectedPoolCount: affectedVersionIds.length,
       insertCount: insertions.length, reuseCount: repairs.length - insertions.length,
+      shared: sharedOwnerIds.size > 0, sharedOwnerCount: sharedOwnerIds.size,
     };
     if (body.apply !== true) return Response.json({ ...preview, applied: false });
 
