@@ -298,6 +298,15 @@ test("repairs only an exact lab pool count and requires explicit shared-pool app
   assert.doesNotMatch(route, /generated_comments|students|assessment_levels/);
 });
 
+test("requires a second explicit gate before applying the exact 47 shared-pool repairs", () => {
+  const runner = readFileSync("scripts/dry-run-approved-pool-repairs.mjs", "utf8");
+  assert.match(runner, /APPLY_APPROVED_POOL_REPAIRS/);
+  assert.match(runner, /APPROVE_SHARED_POOL_REPAIR/);
+  assert.match(runner, /expectedTotal: 47/);
+  assert.match(runner, /item\.shared !== true/);
+  assert.doesNotMatch(runner, /generated-comments|assessment-levels|class-data|students/);
+});
+
 test("reports AI usage by feature for cost verification", () => {
   const usage = readFileSync("app/ai-usage.ts", "utf8");
   const audit = readFileSync("scripts/load-test-comments.mjs", "utf8");

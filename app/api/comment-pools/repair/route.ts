@@ -13,6 +13,7 @@ type PoolVersion = { id: number; fingerprint: string; approved_count: number };
 type PoolSentence = { id: number; pool_version_id: number; sentence: string; normalized_sentence: string; status: string };
 
 export async function POST(request: Request) {
+  let stage = "authorization";
   try {
     const { user, classId } = await getDataScope();
     if (!user.email.toLowerCase().endsWith("@giroksam.test")) {
@@ -29,6 +30,7 @@ export async function POST(request: Request) {
     if (!subject || !Number.isInteger(expectedCount) || expectedCount < 1 || expectedCount > 100) {
       return Response.json({ error: "교정 과목과 예상 문장 수를 확인해 주세요." }, { status: 400 });
     }
+    stage = "load-plan";
     const plan = await selectRows<PoolPlanItem>("assessment_plans", {
       owner_id: eq(user.id), class_id: eq(classId), order: "sort_order.asc",
     });
@@ -79,10 +81,13 @@ export async function POST(request: Request) {
     };
     if (body.apply !== true) return Response.json({ ...preview, applied: false });
 
+    stage = "save-replacements";
     await upsertRows("comment_pool_sentences", insertions, "pool_version_id,normalized_sentence");
+    stage = "retire-originals";
     await updateRows("comment_pool_sentences", { id: inValues(repairs.map(({ row }) => Number(row.id))) }, {
       status: "retired", updated_at: new Date().toISOString(),
     });
+    stage = "refresh-pools";
     for (const poolVersionId of affectedVersionIds) {
       const approved = await selectRows<{ id: number }>("comment_pool_sentences", {
         pool_version_id: eq(poolVersionId), status: eq("approved"), limit: 20,
@@ -96,6 +101,8 @@ export async function POST(request: Request) {
     }
     return Response.json({ ...preview, applied: true, retiredCount: repairs.length });
   } catch (error) {
-    return dataError(error, "문장 풀 무료 교정을 완료하지 못했습니다.");
+    const response = dataError(error, "문장 풀 무료 교정을 완료하지 못했습니다.");
+    response.headers.set("X-Pool-Repair-Stage", stage);
+    return response;
   }
 }
