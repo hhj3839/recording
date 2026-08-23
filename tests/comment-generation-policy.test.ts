@@ -12,7 +12,7 @@ import { commentAreaOverlapReasons } from "../app/comment-area-diversity.ts";
 import { assignApprovedCommentPools, assignUniquePoolCandidates, buildApprovedCommentPool, buildCanonicalBaselinePart, buildCommentPoolGroups, buildPublicCommentPoolRequests, commentPoolCandidateCount, spreadCandidatesByOpening } from "../app/comment-pool-generation.ts";
 import { assembleRotatedComment } from "../app/comment-assembly.ts";
 import { readApiJson } from "../app/api-response.ts";
-import { approvePoolCandidates, buildCommentPoolSpecs, COMMENT_POOL_TARGET } from "../app/comment-pool-library.ts";
+import { approvePoolCandidates, buildCommentPoolSpecs, COMMENT_POOL_TARGET, repairLegacyPoolCandidate } from "../app/comment-pool-library.ts";
 
 const poolPlan = (overrides: Partial<{ id: number; subject: string; unit: string; goal: string; domain: string; perspective: string; high: string; middle: string; low: string }> = {}) => ({
   id: 1, subject: "사회", unit: "우리 고장", goal: "지역의 모습을 이해한다.", domain: "지리 인식",
@@ -839,6 +839,20 @@ test("recognizes spaced nominal writing as a completed performance across subjec
     validatePoolCandidate("교사의 도움을 받아 작품을 읽고 재미나 감동을 느낀 부분과 그 까닭을 써 냄.", spec).issues,
     [],
   );
+});
+
+test("repairs only legacy unsupported modifiers into a fully revalidated pool sentence", () => {
+  const spec = buildCommentPoolSpecs([poolPlan({
+    high: "지역 자료를 다양한 방법으로 조사하여 체계적으로 정리함.",
+    middle: "지역 자료를 조사하여 정리함.",
+    low: "교사의 도움을 받아 지역 자료를 조사하여 정리함.",
+  })]).find((item) => item.level === "중")!;
+  assert.equal(
+    repairLegacyPoolCandidate("지역 자료를 스스로 조사하여 자연스럽게 정리함.", spec)?.repaired,
+    "지역 자료를 조사하여 정리함.",
+  );
+  assert.equal(repairLegacyPoolCandidate("지역 자료를 조사하여 정리함.", spec), null);
+  assert.equal(repairLegacyPoolCandidate("지역 자료를 설명함.", spec), null);
 });
 
 test("blocks malformed predicates found in the full Korean comment sample", () => {

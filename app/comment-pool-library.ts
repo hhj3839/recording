@@ -80,6 +80,21 @@ export function validatePoolCandidate(candidate: string, spec: CommentPoolSpec) 
   return { text, issues: [...new Set(issues)] };
 }
 
+export function repairLegacyPoolCandidate(candidate: string, spec: CommentPoolSpec) {
+  const original = validatePoolCandidate(candidate, spec);
+  if (!original.issues.length) return null;
+  const repaired = repairSafeNominalEnding(candidate)
+    .replace(/(?:자신\s*있게|스스로|또박또박|또렷하게|또렷이|분명하게|분명히|자연스럽게|적절하게|적절히|간명하게|차근차근|자신의\s*말로)\s*/g, "")
+    .replace(/썼음\.$/, "씀.")
+    .replace(/\s+,/g, ",")
+    .replace(/,\s*,/g, ",")
+    .replace(/\s{2,}/g, " ")
+    .trim();
+  if (!repaired || normalizedPoolSentence(repaired) === normalizedPoolSentence(candidate)) return null;
+  const result = validatePoolCandidate(repaired, spec);
+  return result.issues.length ? null : { original: candidate, repaired: result.text, originalIssues: original.issues };
+}
+
 export function approvePoolCandidates(candidates: string[], spec: CommentPoolSpec, existing: string[] = []) {
   const seen = new Set(existing.map(normalizedPoolSentence));
   const approved: string[] = [];
