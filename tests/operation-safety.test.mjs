@@ -252,11 +252,19 @@ test("limits comment-pool validation to one subject and a lab account", () => {
   assert.match(route, /Math\.min\(requestedMaxGroups, 15\)/);
   assert.match(route, /spec\.subject === subject/);
   assert.match(route, /\.slice\(0, maxGroups\)/);
-  assert.match(route, /maxAiCalls: pending\.length \* 2/);
+  assert.match(route, /maxAiCalls: pending\.reduce/);
   assert.match(route, /targetFingerprints\.length && body\.labOnly !== true/);
   assert.match(route, /targetFingerprints\.includes\(spec\.fingerprint\)/);
   assert.match(route, /specs\.length !== targetFingerprints\.length/);
   assert.match(page, /body: JSON\.stringify\(\{ subject \}\)/);
+});
+
+test("allows only an explicitly bounded lab canonical-pool recovery", () => {
+  const route = readFileSync("app/api/comment-pools/route.ts", "utf8");
+  const runner = readFileSync("app/api/comment-pools/run/route.ts", "utf8");
+  assert.match(route, /canonicalOnly && body\.labOnly !== true/);
+  assert.match(route, /maxAttempts: canonicalOnly \? 0 : 2/);
+  assert.match(runner, /Math\.max\(0, Math\.min\(2/);
 });
 
 test("allows the signed comment-pool runner through the auth proxy", () => {
@@ -312,4 +320,14 @@ test("keeps the full stored-part audit read-only and free of sentence text outpu
   assert.doesNotMatch(afterLogin, /sentence:\s*row\.sentence/);
   assert.match(audit, /criterionSemanticIssues/);
   assert.match(audit, /evidenceBlockingIssues/);
+});
+
+test("limits the approved missing-pool gate to four exact lab pools and eight calls", () => {
+  const runner = readFileSync("scripts/run-approved-missing-pools.mjs", "utf8");
+  assert.match(runner, /RUN_APPROVED_MISSING_POOLS/);
+  assert.match(runner, /@giroksam\.test/);
+  assert.match(runner, /approvedUsageBaseline = 76/);
+  assert.match(runner, /remainingApprovedCalls < 2/);
+  assert.match(runner, /usedCalls > 8/);
+  assert.match(runner, /targetFingerprints/);
 });

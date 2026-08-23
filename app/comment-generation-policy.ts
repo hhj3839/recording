@@ -528,7 +528,7 @@ const genericPerformanceAtoms = [
   { label: "기록하기", criterion: /기록/, comment: /기록|적음|작성|씀|써냄/ },
   { label: "조사하기", criterion: /조사/, comment: /조사|찾아보|살펴보/ },
   { label: "정리하기", criterion: /정리/, comment: /정리|갈무리/ },
-  { label: "표현하기", criterion: /표현|나타내/, comment: /표현|나타냄|드러냄/ },
+  { label: "표현하기", criterion: /표현|나타내/, comment: /표현|나타내|나타냄|드러내|드러냄/ },
   { label: "글 쓰기", criterion: /(?:글|까닭|이유).{0,24}(?:쓰|작성)/, comment: /(?:글|까닭|이유).{0,28}(?:씀|써냄|쓰고|작성(?:함|하고)|적(?:음|고)|쓰기(?:위해|에)\s*(?:노력함|힘씀))/ },
   { label: "만들기", criterion: /만들|제작/, comment: /만들|만듦|제작/ },
   { label: "소개하기", criterion: /소개/, comment: /소개/ },

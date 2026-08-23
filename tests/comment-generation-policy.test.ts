@@ -35,6 +35,14 @@ test("changes the reusable pool identity when its semantic criterion changes", (
   assert.notEqual(before[0].fingerprint, after[0].fingerprint);
 });
 
+test("recognizes conjugated 나타내다 as the same expression performance across subjects", () => {
+  const [spec] = buildCommentPoolSpecs([poolPlan({
+    subject: "수학",
+    high: "나눗셈 상황을 이해하여 정확하게 나눗셈식으로 나타내어 몫을 구한 후 과정을 알맞게 설명한다.",
+  })]);
+  assert.deepEqual(approvePoolCandidates([spec.canonicalSentence], spec).approved, [spec.canonicalSentence]);
+});
+
 test("approves validated pool candidates up to the fixed twenty sentence target", () => {
   const spec = buildCommentPoolSpecs([poolPlan()])[1];
   const candidate = spec.canonicalSentence;
