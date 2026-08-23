@@ -101,7 +101,7 @@ export function positiveGrowthCriterion(level: string | undefined, criterion: st
 }
 
 export function criterionToSafeNominalSentence(criterion: string) {
-  return normalizeGeneratedCommentWhitespace(criterion)
+  const normalized = normalizeGeneratedCommentWhitespace(criterion)
     .replace(/쓸\s*수\s*있다\.$/, "씀.")
     .replace(/만들\s*수\s*있다\.$/, "만듦.")
     .replace(/나눌\s*수\s*있다\.$/, "나눔.")
@@ -120,6 +120,37 @@ export function criterionToSafeNominalSentence(criterion: string) {
     .replace(/된다\.$/, "됨.")
     .replace(/있다\.$/, "있음.")
     .replace(/이다\.$/, "임.");
+  if (!/다\.$/.test(normalized)) return normalized;
+
+  // 과목별 동사 목록 대신 한글 활용 규칙으로 현재형 서술 종결을
+  // 관찰 기록용 명사형으로 바꾼다. `쓴다→씀`, `만든다→만듦`,
+  // `간다→감`, `읽는다→읽음`처럼 새로운 평가계획의 동사에도 적용한다.
+  const attachNominalM = (stem: string) => {
+    const chars = Array.from(stem);
+    const last = chars.at(-1);
+    if (!last) return stem;
+    const code = last.charCodeAt(0);
+    if (code < 0xac00 || code > 0xd7a3) return `${stem}음`;
+    const offset = code - 0xac00;
+    const jong = offset % 28;
+    const base = code - jong;
+    if (jong === 0) chars[chars.length - 1] = String.fromCharCode(base + 16); // ㅁ
+    else if (jong === 8) chars[chars.length - 1] = String.fromCharCode(base + 10); // ㄹ+ㅁ=ㄻ
+    else chars.push("음");
+    return chars.join("");
+  };
+  const progressive = normalized.match(/^(.*)는다\.$/);
+  if (progressive) return `${attachNominalM(progressive[1])}.`;
+  const contracted = normalized.match(/^(.*)([가-힣])다\.$/);
+  if (contracted) {
+    const code = contracted[2].charCodeAt(0);
+    const jong = (code - 0xac00) % 28;
+    if (code >= 0xac00 && code <= 0xd7a3 && jong === 4) { // 관형형 현재 시제 ㄴ
+      const stem = `${contracted[1]}${String.fromCharCode(code - jong)}`;
+      return `${attachNominalM(stem)}.`;
+    }
+  }
+  return normalized;
 }
 
 export function buildCanonicalCommentSentence(criterion: string) {
@@ -479,7 +510,7 @@ const semanticAtoms: SemanticAtom[] = [
   { label: "실천할 일 알기", criterion: /실천.{0,12}(?:일|것).{0,12}(?:알고|안다|알수)/, comment: /실천.{0,14}(?:일|것).{0,14}(?:알고|알며|앎|이해)/ },
   { label: "비교적인 수행 정도", criterion: /(?:비교적|대체로)/, comment: /(?:비교적|대체로)/ },
   { label: "상황에 알맞은 대화 표현하기", criterion: /(?:대화.{0,18}(?:표현|나타내)|(?:표현|나타내).{0,18}대화)/, comment: /(?:대화.{0,20}(?:표현|나타내)|(?:표현|나타내).{0,20}대화)/ },
-  { label: "재미·감동을 느낀 부분과 까닭 쓰기", criterion: /(?:재미|감동).{0,28}(?:부분).{0,20}(?:까닭|이유).{0,12}(?:쓰|쓸|씀|써|적)|(?:부분).{0,20}(?:까닭|이유).{0,12}(?:쓰|쓸|씀|써|적)/, comment: /(?:재미|감동).{0,32}(?:부분).{0,24}(?:까닭|이유).{0,14}(?:씀|썼|써냄|적음|작성함)|(?:부분).{0,24}(?:까닭|이유).{0,14}(?:씀|썼|써냄|적음|작성함)/ },
+  { label: "재미·감동을 느낀 부분과 까닭 쓰기", criterion: /(?:재미|감동).{0,28}(?:부분).{0,20}(?:까닭|이유).{0,12}(?:쓰|쓸|씀|써|적)|(?:부분).{0,20}(?:까닭|이유).{0,12}(?:쓰|쓸|씀|써|적)/, comment: /(?:재미|감동).{0,32}(?:부분).{0,24}(?:까닭|이유).{0,14}(?:씀|썼|써냄|쓰고|적음|적고|작성함|작성하고)|(?:부분).{0,24}(?:까닭|이유).{0,14}(?:씀|썼|써냄|쓰고|적음|적고|작성함|작성하고)/ },
   { label: "마음을 전하는 글 실제로 쓰기", criterion: /마음.{0,16}전하.{0,16}글.{0,48}(?:쓸수|쓰고|씀|써서|작성)/, comment: /마음.{0,18}전하.{0,18}글.{0,48}(?:씀|썼|써냄|작성함)/ },
   { label: "오래된 물건의 쓰임 조사하기", criterion: /오래된물건.{0,24}쓰임.{0,24}조사|조사.{0,24}오래된물건.{0,24}쓰임/, comment: /오래된물건.{0,28}쓰임.{0,28}조사(?:함|한|하여|하고|해|했)|조사(?:함|한|하여|하고|해|했).{0,28}오래된물건.{0,28}쓰임/ },
   { label: "당시 생활 모습 조사하기", criterion: /당시.{0,16}생활모습.{0,24}조사|조사.{0,24}당시.{0,16}생활모습/, comment: /당시.{0,18}(?:사람들의)?생활모습.{0,28}조사(?:함|한|하여|하고|해|했)|조사(?:함|한|하여|하고|해|했).{0,28}당시.{0,18}(?:사람들의)?생활모습/ },
@@ -498,7 +529,7 @@ const genericPerformanceAtoms = [
   { label: "조사하기", criterion: /조사/, comment: /조사|찾아보|살펴보/ },
   { label: "정리하기", criterion: /정리/, comment: /정리|갈무리/ },
   { label: "표현하기", criterion: /표현|나타내/, comment: /표현|나타냄|드러냄/ },
-  { label: "글 쓰기", criterion: /(?:글|까닭|이유).{0,24}(?:쓰|작성)/, comment: /(?:글|까닭|이유).{0,28}(?:씀|작성|적음|쓰기(?:위해|에)\s*(?:노력함|힘씀))/ },
+  { label: "글 쓰기", criterion: /(?:글|까닭|이유).{0,24}(?:쓰|작성)/, comment: /(?:글|까닭|이유).{0,28}(?:씀|쓰고|작성(?:함|하고)|적(?:음|고)|쓰기(?:위해|에)\s*(?:노력함|힘씀))/ },
   { label: "만들기", criterion: /만들|제작/, comment: /만들|만듦|제작/ },
   { label: "소개하기", criterion: /소개/, comment: /소개/ },
   { label: "발표하기", criterion: /발표/, comment: /발표/ },
@@ -549,20 +580,28 @@ export function criterionSemanticIssues(
 ) {
   const normalizedComment = normalizeGroundingText(comment);
   const selected = normalizeGroundingText(selectedCriterion);
+  const selectedCanonical = normalizeGroundingText(buildCanonicalCommentSentence(selectedCriterion));
+  // 선택 기준은 원문 기준형과 서버가 만든 평어형을 함께 해석하되,
+  // 생성 문장은 실제 수행형 정규식으로 엄격히 확인한다. 연결형·서술형·
+  // 명사형의 표면 차이로 정상 수행을 오판하지 않으면서, 방법을 아는 것과
+  // 실제 수행하는 것을 혼동하지 않게 모든 과목에 같은 순서로 적용한다.
+  const selectedHas = (atom: SemanticAtom) => atom.criterion.test(selected) || atom.comment.test(selectedCanonical);
+  const commentHas = (atom: SemanticAtom, text: string) => atom.comment.test(text);
   const required = semanticAtoms
-    .filter((atom) => atom.criterion.test(selected) && !atom.comment.test(normalizedComment))
+    .filter((atom) => selectedHas(atom) && !commentHas(atom, normalizedComment))
     .map((atom) => `평가 기준의 필수 수행 ‘${atom.label}’ 누락`);
   const genericRequired = genericPerformanceAtoms
-    .filter((atom) => atom.criterion.test(selected) && !atom.comment.test(normalizedComment))
+    .filter((atom) => selectedHas(atom) && !commentHas(atom, normalizedComment))
     .map((atom) => `평가 기준의 독립 수행 ‘${atom.label}’ 누락`);
   if (!levelCriteria) return [...new Set([...required, ...genericRequired])];
   const siblings = [levelCriteria.high, levelCriteria.middle, levelCriteria.low]
     .map(normalizeGroundingText)
     .filter((criterion) => criterion !== selected);
   const leaked = semanticAtoms
-    .filter((atom) => !atom.criterion.test(selected)
-      && atom.comment.test(normalizedComment)
-      && siblings.some((criterion) => atom.criterion.test(criterion)))
+    .filter((atom) => !selectedHas(atom)
+      && commentHas(atom, normalizedComment)
+      && siblings.some((criterion) => atom.criterion.test(criterion)
+        || atom.comment.test(normalizeGroundingText(buildCanonicalCommentSentence(criterion)))))
     .map((atom) => `선택하지 않은 평가수준의 수행 ‘${atom.label}’ 포함`);
   return [...new Set([...required, ...genericRequired, ...leaked])];
 }

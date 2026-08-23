@@ -734,6 +734,41 @@ test("allows a manner modifier in a reusable pool when the selected criterion co
   assert.deepEqual(validatePoolCandidate(criterion, spec).issues, []);
 });
 
+test("normalizes Korean declarative endings without subject-specific verb rules", () => {
+  assert.equal(criterionToSafeNominalSentence("마음을 전하는 글을 쓴다."), "마음을 전하는 글을 씀.");
+  assert.equal(criterionToSafeNominalSentence("소개 자료를 만든다."), "소개 자료를 만듦.");
+  assert.equal(criterionToSafeNominalSentence("목적지까지 간다."), "목적지까지 감.");
+  assert.equal(criterionToSafeNominalSentence("설명하는 글을 읽는다."), "설명하는 글을 읽음.");
+});
+
+test("validates connected and nominalized performances consistently across pool levels", async () => {
+  const { validatePoolCandidate } = await import("../app/comment-pool-library.ts");
+  const literature = buildCommentPoolSpecs([poolPlan({
+    subject: "국어", domain: "문학",
+    high: "작품을 읽고 재미나 감동을 느낀 부분과 그 까닭이 무엇인지 쓰고, 재미나 감동을 느낀 부분이 잘 드러나도록 다양한 방법으로 표현할 수 있다.",
+    middle: "작품을 읽고 재미나 감동을 느낀 부분과 그 까닭이 무엇인지 쓸 수 있다.",
+    low: "교사의 도움을 받아 작품을 읽고 재미나 감동을 느낀 부분과 그 까닭이 무엇인지 쓸 수 있다.",
+  })]).find((spec) => spec.level === "상")!;
+  assert.deepEqual(validatePoolCandidate(literature.canonicalSentence, literature).issues, []);
+
+  const writing = buildCommentPoolSpecs([poolPlan({
+    subject: "국어", domain: "쓰기",
+    high: "마음을 전하는 글을 쓰는 방법을 알고, 활용하여 전하고자 하는 마음이 잘 드러나도록 글을 쓸 수 있다.",
+    middle: "마음을 전하는 글을 쓰는 방법을 알고, 마음을 전하는 글을 쓰기 위해 노력한다.",
+    low: "교사의 도움을 받아 마음을 전하는 글을 쓰는 방법을 알고, 마음을 전하는 글을 쓴다.",
+  })]).find((spec) => spec.level === "하")!;
+  assert.equal(writing.canonicalSentence.endsWith("글을 씀."), true);
+  assert.deepEqual(validatePoolCandidate(writing.canonicalSentence, writing).issues, []);
+
+  const crossSubject = buildCommentPoolSpecs([poolPlan({
+    subject: "과학", domain: "탐구",
+    high: "관찰한 결과를 기록하고 특징을 설명한다.",
+    middle: "관찰한 결과를 기록한다.",
+    low: "교사의 도움을 받아 관찰한 결과를 기록한다.",
+  })]).find((spec) => spec.level === "상")!;
+  assert.deepEqual(validatePoolCandidate(crossSubject.canonicalSentence, crossSubject).issues, []);
+});
+
 test("accepts directly equivalent effort and posture wording from the criterion", () => {
   assert.deepEqual(
     evidenceBlockingIssues("생활 속에서 바른 자세를 꾸준히 실천하려는 태도가 돋보임.", "바른 자세를 생활 속에서 실천하려고 노력할 수 있다."),
