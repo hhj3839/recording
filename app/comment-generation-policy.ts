@@ -591,7 +591,10 @@ export function criterionSemanticIssues(
     .filter((atom) => selectedHas(atom) && !commentHas(atom, normalizedComment))
     .map((atom) => `평가 기준의 필수 수행 ‘${atom.label}’ 누락`);
   const genericRequired = genericPerformanceAtoms
-    .filter((atom) => selectedHas(atom) && !commentHas(atom, normalizedComment))
+    // 일반 수행 의무는 평가기준 원문에 해당 동작이 직접 있을 때만 만든다.
+    // 기준 문장의 활용형을 다른 광의 수행(예: 씀 → 기록하기)으로 재해석하면
+    // 원문에 없던 수행을 추가하게 되므로 필수 수행 판정에 사용하지 않는다.
+    .filter((atom) => atom.criterion.test(selected) && !commentHas(atom, normalizedComment))
     .map((atom) => `평가 기준의 독립 수행 ‘${atom.label}’ 누락`);
   if (!levelCriteria) return [...new Set([...required, ...genericRequired])];
   const siblings = [levelCriteria.high, levelCriteria.middle, levelCriteria.low]

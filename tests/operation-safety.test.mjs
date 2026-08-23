@@ -322,6 +322,15 @@ test("keeps the full stored-part audit read-only and free of sentence text outpu
   assert.match(audit, /evidenceBlockingIssues/);
 });
 
+test("keeps the approved-pool audit read-only and reports sentence ids instead of text", () => {
+  const audit = readFileSync("scripts/audit-approved-comment-pools.ts", "utf8");
+  const afterLogin = audit.slice(audit.indexOf("const get ="));
+  assert.doesNotMatch(afterLogin, /method:\s*["'](?:POST|PUT|PATCH|DELETE)["']/);
+  assert.doesNotMatch(audit, /sentence:\s*row\.sentence/);
+  assert.match(audit, /repairLegacyPoolCandidate/);
+  assert.match(audit, /failedIds/);
+});
+
 test("limits the approved missing-pool gate to four exact lab pools and eight calls", () => {
   const runner = readFileSync("scripts/run-approved-missing-pools.mjs", "utf8");
   assert.match(runner, /RUN_APPROVED_MISSING_POOLS/);

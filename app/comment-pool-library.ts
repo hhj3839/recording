@@ -84,7 +84,8 @@ export function repairLegacyPoolCandidate(candidate: string, spec: CommentPoolSp
   const original = validatePoolCandidate(candidate, spec);
   if (!original.issues.length) return null;
   const repaired = repairSafeNominalEnding(candidate)
-    .replace(/(?:자신\s*있게|스스로|또박또박|또렷하게|또렷이|분명하게|분명히|자연스럽게|적절하게|적절히|간명하게|차근차근|자신의\s*말로)\s*/g, "")
+    .replace(/(?:모둠원과\s*)?협력(?:하여|해|하며)\s*/g, "")
+    .replace(/(?:자신\s*있게|스스로|또박또박|또렷하게|또렷이|분명하게|분명히|자연스럽게|적절하게|적절히|간명하게|차근차근|적극적으로|효과적으로|꾸준히|자신의\s*말로)\s*/g, "")
     .replace(/썼음\.$/, "씀.")
     .replace(/\s+,/g, ",")
     .replace(/,\s*,/g, ",")
