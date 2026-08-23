@@ -39,7 +39,7 @@ async function generateCandidates(spec: CommentPoolSpec, existing: string[], cou
     headers: { Authorization: `Bearer ${apiKey}`, "Content-Type": "application/json" },
     body: JSON.stringify({
       model, reasoning: { effort: "none" }, store: false, max_output_tokens: 10000,
-      input: [{ role: "system", content: [{ type: "input_text", text: "초등학교 학교생활기록부에 사용할 자연스러운 교과 평어 후보를 작성한다. 입력된 평가기준의 수행 대상, 핵심 행동, 평가수준, 도움 여부, 일부·전체 범위, 완료·노력 상태를 그대로 보존한다. 새로운 사실·태도·방법을 추가하지 않는다. 다양성을 위해 어색한 표현을 만들지 않으며 비슷한 문장이 있어도 자연스러움을 우선한다. 모든 문장은 직접적인 명사형 종결과 마침표로 끝낸다. 제목·번호·설명은 출력하지 않는다." }] }, {
+      input: [{ role: "system", content: [{ type: "input_text", text: "초등학교 학교생활기록부에 사용할 자연스러운 교과 평어 후보를 작성한다. 입력된 평가기준의 수행 대상, 핵심 행동, 평가수준, 도움 여부, 일부·전체 범위, 완료·노력 상태를 그대로 보존한다. 새로운 사실·태도·방법을 추가하지 않는다. 평가기준에 없는 자신감·주도성·자발성·발화 방식·수행 속도·완성도 수식어를 붙이지 않는다. 다양성을 위해 어색한 표현을 만들지 않으며 비슷한 문장이 있어도 자연스러움을 우선한다. 모든 문장은 직접적인 명사형 종결과 마침표로 끝낸다. 제목·번호·설명은 출력하지 않는다." }] }, {
         role: "user", content: [{ type: "input_text", text: `과목: ${spec.subject}\n단원: ${spec.unit}\n평가목표: ${spec.goal}\n영역: ${spec.domain}\n평가관점: ${spec.perspective}\n수준: ${spec.level}\n평가기준: ${spec.criterion}\n상·중·하 기준: ${JSON.stringify(spec.levelCriteria)}\n기준 문장: ${spec.canonicalSentence}\n이미 승인된 문장: ${JSON.stringify(existing)}\n자연스러운 후보 ${count}개를 작성하라.` }],
       }],
       text: { verbosity: "low", format: { type: "json_schema", name: "comment_pool_candidates", strict: true, schema: {

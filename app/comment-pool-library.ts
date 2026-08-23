@@ -1,5 +1,5 @@
 import { createHash } from "node:crypto";
-import { buildCanonicalCommentSentence, criterionSemanticIssues, evidenceBlockingIssues, levelAppropriatenessIssues, positiveGrowthCriterion, repairSafeNominalEnding, validateGeneratedCommentPart } from "./comment-generation-policy.ts";
+import { buildCanonicalCommentSentence, criterionSemanticIssues, evidenceBlockingIssues, evidenceGroundingWarnings, levelAppropriatenessIssues, positiveGrowthCriterion, repairSafeNominalEnding, validateGeneratedCommentPart } from "./comment-generation-policy.ts";
 
 export const COMMENT_POOL_TARGET = 20;
 export const COMMENT_POOL_GENERATOR_VERSION = "pool-v1";
@@ -74,6 +74,7 @@ export function validatePoolCandidate(candidate: string, spec: CommentPoolSpec) 
     ...(!validateGeneratedCommentPart(text, spec.criterion).valid ? ["문장 형식 또는 명사형 종결 검수 미통과"] : []),
     ...levelAppropriatenessIssues(text, spec.level, spec.criterion),
     ...evidenceBlockingIssues(text, `${evidence} | 생성용 기준: ${spec.criterion}`, spec.criterion),
+    ...evidenceGroundingWarnings(text, spec.criterion).map((issue) => issue.replace(/ 확인 필요$/, "")),
     ...criterionSemanticIssues(text, spec.criterion, spec.levelCriteria),
   ];
   return { text, issues: [...new Set(issues)] };

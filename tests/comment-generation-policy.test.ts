@@ -697,6 +697,43 @@ test("warns about unsupported attitude claims without discarding the sentence", 
   );
 });
 
+test("blocks every unsupported grounding warning from reusable comment pools", async () => {
+  const { validatePoolCandidate } = await import("../app/comment-pool-library.ts");
+  const spec = {
+    fingerprint: "grounding", assessmentPlanId: 1, assessmentIndex: 0,
+    subject: "국어", unit: "대화", goal: "상황에 맞게 표현하기", domain: "듣기·말하기",
+    perspective: "상황에 맞게 표현하는가", level: "중" as const,
+    criterion: "작품 속 인물들의 상황에 알맞은 표정, 몸짓, 목소리, 말투를 알고 대화를 표현함.",
+    levelCriteria: {
+      high: "작품 속 인물들의 상황에 알맞은 표정, 몸짓, 목소리, 말투를 알고 대화를 실감 나게 표현함.",
+      middle: "작품 속 인물들의 상황에 알맞은 표정, 몸짓, 목소리, 말투를 알고 대화를 표현함.",
+      low: "작품 속 인물들의 상황에 알맞은 표정, 몸짓, 목소리, 말투를 알고 대화를 표현하기 위해 노력함.",
+    },
+    canonicalSentence: "작품 속 인물들의 상황에 알맞은 표정, 몸짓, 목소리, 말투를 알고 대화를 표현함.",
+  };
+  assert.deepEqual(validatePoolCandidate(spec.canonicalSentence, spec).issues, []);
+  for (const modifier of ["자신 있게", "스스로", "또박또박", "분명하게", "자연스럽게"]) {
+    const result = validatePoolCandidate(
+      `작품 속 인물들의 상황에 알맞은 표정, 몸짓, 목소리, 말투를 알고 대화를 ${modifier} 표현함.`,
+      spec,
+    );
+    assert.equal(result.issues.some((issue) => issue.includes("평가 근거에 없는")), true, modifier);
+  }
+});
+
+test("allows a manner modifier in a reusable pool when the selected criterion contains it", async () => {
+  const { validatePoolCandidate } = await import("../app/comment-pool-library.ts");
+  const criterion = "설명하는 글을 읽고 중심 문장과 뒷받침 문장을 파악하여 내용을 자연스럽게 간추림.";
+  const spec = {
+    fingerprint: "grounded-manner", assessmentPlanId: 1, assessmentIndex: 0,
+    subject: "국어", unit: "간추리기", goal: "내용 간추리기", domain: "읽기",
+    perspective: "내용을 간추리는가", level: "상" as const, criterion,
+    levelCriteria: { high: criterion, middle: "내용을 간추림.", low: "도움을 받아 내용을 간추림." },
+    canonicalSentence: criterion,
+  };
+  assert.deepEqual(validatePoolCandidate(criterion, spec).issues, []);
+});
+
 test("accepts directly equivalent effort and posture wording from the criterion", () => {
   assert.deepEqual(
     evidenceBlockingIssues("생활 속에서 바른 자세를 꾸준히 실천하려는 태도가 돋보임.", "바른 자세를 생활 속에서 실천하려고 노력할 수 있다."),
