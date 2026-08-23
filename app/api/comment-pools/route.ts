@@ -80,12 +80,16 @@ export async function POST(request: Request) {
   try {
     const { user, classId } = await getDataScope();
     const body = await request.json().catch(() => ({})) as {
-      subject?: unknown; maxGroups?: unknown; labOnly?: unknown; targetFingerprints?: unknown;
+      subject?: unknown; maxGroups?: unknown; labOnly?: unknown; targetFingerprints?: unknown; canonicalOnly?: unknown;
     };
     const subject = typeof body.subject === "string" ? body.subject.trim() : "";
     if (!subject) return Response.json({ error: "AI 평어를 제작할 과목을 선택해 주세요." }, { status: 400 });
     if (body.labOnly === true && !user.email.toLowerCase().endsWith("@giroksam.test")) {
       return Response.json({ error: "제한 검증은 실험실 계정에서만 실행할 수 있습니다." }, { status: 403 });
+    }
+    const canonicalOnly = body.canonicalOnly === true;
+    if (canonicalOnly && body.labOnly !== true) {
+      return Response.json({ error: "기준 문장 전용 복구는 실험실 제한 검증에서만 사용할 수 있습니다." }, { status: 403 });
     }
     const targetFingerprints = Array.isArray(body.targetFingerprints)
       ? [...new Set(body.targetFingerprints.filter((value): value is string => typeof value === "string" && /^[a-f0-9]{64}$/.test(value)))]
@@ -122,7 +126,7 @@ export async function POST(request: Request) {
     const pending = specs.flatMap((spec) => {
       const version = byFingerprint.get(spec.fingerprint);
       return version && Number(version.approved_count ?? 0) < COMMENT_POOL_TARGET
-        ? [{ spec, poolVersionId: Number(version.id) }]
+        ? [{ spec, poolVersionId: Number(version.id), maxAttempts: canonicalOnly ? 0 : 2 }]
         : [];
     }).slice(0, maxGroups);
     if (!pending.length) return Response.json({ ready: true, reused: specs.length });
@@ -133,7 +137,7 @@ export async function POST(request: Request) {
       created_at: new Date().toISOString(), updated_at: new Date().toISOString(),
     }]);
     queueRunner(request, jobs[0].id);
-    return Response.json({ jobId: jobs[0].id, subject, total: pending.length, maxAiCalls: pending.length * 2, reused: specs.length - pending.length }, { status: 202 });
+    return Response.json({ jobId: jobs[0].id, subject, total: pending.length, maxAiCalls: pending.reduce((sum, batch) => sum + batch.maxAttempts, 0), reused: specs.length - pending.length }, { status: 202 });
   } catch (error) {
     return dataError(error, "AI 평어 제작을 시작하지 못했습니다.");
   }

@@ -6,7 +6,7 @@ import { primaryAiModel } from "../../../ai-model-policy";
 import { recordAiUsage } from "../../../ai-usage";
 
 export const maxDuration = 300;
-type PoolBatch = { spec: CommentPoolSpec; poolVersionId: number };
+type PoolBatch = { spec: CommentPoolSpec; poolVersionId: number; maxAttempts?: number };
 type JobRow = {
   id: string; owner_id: string; owner_email: string; class_id: number; status: string; batches: PoolBatch[];
   current_batch: number; total_batches: number; total_items: number; completed_items: number; failed_items: number;
@@ -91,7 +91,8 @@ export async function POST(request: Request) {
       })), "pool_version_id,normalized_sentence");
       approved.push(...canonical);
     }
-    for (let attempt = 0; attempt < 2 && approved.length < COMMENT_POOL_TARGET; attempt += 1) {
+    const maxAttempts = Number.isInteger(batch.maxAttempts) ? Math.max(0, Math.min(2, Number(batch.maxAttempts))) : 2;
+    for (let attempt = 0; attempt < maxAttempts && approved.length < COMMENT_POOL_TARGET; attempt += 1) {
       const requestCount = Math.min(40, Math.max(20, (COMMENT_POOL_TARGET - approved.length) * 2));
       const generated = await generateCandidates(batch.spec, approved, requestCount);
       const selected = approvePoolCandidates(generated.candidates, batch.spec, approved).approved
