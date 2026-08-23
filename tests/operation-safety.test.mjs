@@ -278,6 +278,17 @@ test("serializes comment-pool batches and caps every reusable pool at twenty", (
   assert.match(assignment, /sentences\.length < COMMENT_POOL_TARGET/);
 });
 
+test("repairs only an exact lab pool count and preserves shared or original rows", () => {
+  const route = readFileSync("app/api/comment-pools/repair/route.ts", "utf8");
+  assert.match(route, /endsWith\("@giroksam\.test"\)/);
+  assert.match(route, /links\.some\(\(link\) => link\.owner_id !== user\.id\)/);
+  assert.match(route, /repairs\.length !== expectedCount/);
+  assert.match(route, /if \(body\.apply !== true\) return Response\.json/);
+  assert.match(route, /status: "retired"/);
+  assert.match(route, /source: "teacher_edited"/);
+  assert.doesNotMatch(route, /generated_comments|students|assessment_levels/);
+});
+
 test("reports AI usage by feature for cost verification", () => {
   const usage = readFileSync("app/ai-usage.ts", "utf8");
   const audit = readFileSync("scripts/load-test-comments.mjs", "utf8");
