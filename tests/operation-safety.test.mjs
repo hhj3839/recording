@@ -297,3 +297,10 @@ test("reports AI usage by feature for cost verification", () => {
   assert.match(usage, /estimatedCostUsd: Math\.round/);
   assert.match(audit, /featureUsage: usageData\.byFeature/);
 });
+
+test("uses the current 500 to 600 byte behavior policy in load-test reporting", () => {
+  const runner = readFileSync("scripts/load-test-behaviors.mjs", "utf8");
+  assert.match(runner, /bytes >= 500 && bytes <= 600/);
+  assert.doesNotMatch(runner, /bytes >= 470 && bytes <= 580/);
+  assert.match(runner, /reviewable: currentPolicyPass/);
+});
