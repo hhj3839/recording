@@ -43,6 +43,22 @@ test("recognizes conjugated 나타내다 as the same expression performance acro
   assert.deepEqual(approvePoolCandidates([spec.canonicalSentence], spec).approved, [spec.canonicalSentence]);
 });
 
+test("does not infer a broader recording duty from a criterion that only requires writing", () => {
+  const issues = criterionSemanticIssues(
+    "알파벳 대·소문자를 정확하게 구별하여 씀.",
+    "알파벳 대·소문자를 정확하게 구별하여 쓴다.",
+  );
+  assert.doesNotMatch(issues.join(" "), /기록하기/);
+});
+
+test("repairs unsupported generic modifiers only when the complete sentence revalidates", () => {
+  const [spec] = buildCommentPoolSpecs([poolPlan()]);
+  for (const modifier of ["적극적으로 ", "효과적으로 ", "꾸준히 "]) {
+    const repaired = repairLegacyPoolCandidate(spec.canonicalSentence.replace("지역 자료를", `${modifier}지역 자료를`), spec);
+    assert.equal(repaired?.repaired, spec.canonicalSentence);
+  }
+});
+
 test("approves validated pool candidates up to the fixed twenty sentence target", () => {
   const spec = buildCommentPoolSpecs([poolPlan()])[1];
   const candidate = spec.canonicalSentence;
