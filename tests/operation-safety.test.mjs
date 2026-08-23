@@ -304,3 +304,12 @@ test("uses the current 500 to 600 byte behavior policy in load-test reporting", 
   assert.doesNotMatch(runner, /bytes >= 470 && bytes <= 580/);
   assert.match(runner, /reviewable: currentPolicyPass/);
 });
+
+test("keeps the full stored-part audit read-only and free of sentence text output", () => {
+  const audit = readFileSync("scripts/audit-stored-comment-parts.ts", "utf8");
+  const afterLogin = audit.slice(audit.indexOf("const get ="));
+  assert.doesNotMatch(afterLogin, /method:\s*["'](?:POST|PUT|PATCH|DELETE)["']/);
+  assert.doesNotMatch(afterLogin, /sentence:\s*row\.sentence/);
+  assert.match(audit, /criterionSemanticIssues/);
+  assert.match(audit, /evidenceBlockingIssues/);
+});

@@ -22,6 +22,7 @@
     "test:load-behaviors": "node scripts/load-test-behaviors.mjs",
     "test:load-behaviors:preflight": "node scripts/load-test-behaviors.mjs preflight",
     "test:audit-stored": "node scripts/audit-stored-results.mjs",
+    "audit:stored-parts": "node --experimental-strip-types scripts/audit-stored-comment-parts.ts",
     "audit:stored-classification": "node scripts/audit-stored-results.mjs",
     "audit:teacher-review": "node scripts/summarize-teacher-review.mjs",
     "audit:supabase-platform": "node scripts/audit-supabase-platform.mjs",
