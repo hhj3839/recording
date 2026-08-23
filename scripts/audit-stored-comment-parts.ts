@@ -42,9 +42,9 @@ const [classData, planData, generatedData, poolData] = await Promise.all([
 ]);
 const subjects = [...new Set<string>(planData.plan.map((item: { subject: string }) => item.subject))];
 const plans = new Map(subjects.map((subject) => [subject, planData.plan.filter((item: { subject: string }) => item.subject === subject)]));
-const levels = new Map(classData.levels.map((item: { studentId: number; subject: string; assessmentIndex: number; level: string }) => [
-  `${item.studentId}|${item.subject}|${item.assessmentIndex}`, item.level,
-]));
+const levels = new Map<string, string>(classData.levels.map((item: { studentId: number; subject: string; assessmentIndex: number; level: string }) => [
+  `${item.studentId}|${item.subject}|${item.assessmentIndex}`, String(item.level),
+] as [string, string]));
 const rows = generatedData.parts.map((part: { studentId: number; subject: string; assessmentIndex: number; sentence: string }) => {
   const item = plans.get(part.subject)?.[part.assessmentIndex];
   const level = levels.get(`${part.studentId}|${part.subject}|${part.assessmentIndex}`);
