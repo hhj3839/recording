@@ -308,6 +308,16 @@ test("requires a second explicit gate before applying the exact 47 shared-pool r
   assert.doesNotMatch(runner, /generated-comments|assessment-levels|class-data|students/);
 });
 
+test("locks the final manual pool repair to six shared rows without student data", () => {
+  const route = readFileSync("app/api/comment-pools/manual-repair/route.ts", "utf8");
+  const runner = readFileSync("scripts/run-approved-six-pool-repairs.mjs", "utf8");
+  assert.match(route, /targetIds = \[\.\.\.corrections\.keys\(\)\]/);
+  assert.match(route, /approvalCode !== "APPROVE_SIX_2026_08_24"/);
+  assert.match(route, /status: "retired"/);
+  assert.match(runner, /APPROVE_SHARED_POOL_REPAIR/);
+  assert.doesNotMatch(`${route}\n${runner}`, /generated_comments|assessment_levels|students|classrooms|openai/i);
+});
+
 test("reports AI usage by feature for cost verification", () => {
   const usage = readFileSync("app/ai-usage.ts", "utf8");
   const audit = readFileSync("scripts/load-test-comments.mjs", "utf8");
