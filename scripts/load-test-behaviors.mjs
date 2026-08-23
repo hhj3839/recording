@@ -51,10 +51,12 @@ function validateBehavior(text) {
     const code = last.charCodeAt(0);
     return code >= 0xac00 && code <= 0xd7a3 && (code - 0xac00) % 28 === 16;
   };
+  const currentPolicyPass = bytes >= 500 && bytes <= 600 && sentences.length > 0 && sentences.every(nominalEnding);
   return {
     bytes,
-    strict: bytes >= 500 && bytes <= 600 && sentences.length > 0 && sentences.every(nominalEnding),
-    reviewable: bytes >= 470 && bytes <= 580 && sentences.length > 0 && sentences.every(nominalEnding),
+    strict: currentPolicyPass,
+    // 이전 소비자와의 호환을 위해 필드는 유지하되 현재 정책과 같은 범위를 사용한다.
+    reviewable: currentPolicyPass,
   };
 }
 
