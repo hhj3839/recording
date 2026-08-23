@@ -23,7 +23,8 @@ const get = async (route: string) => {
 const [planData, poolData] = await Promise.all([get("/api/assessment-plan"), get("/api/comment-pools")]);
 const specs = buildCommentPoolSpecs(planData.plan as PoolPlanItem[]);
 const specByFingerprint = new Map(specs.map((spec) => [spec.fingerprint, spec]));
-const details = [];
+type PoolDetail = { sentences: Array<{ id: number; sentence: string }> };
+const details: PoolDetail[] = [];
 for (let index = 0; index < poolData.groups.length; index += 10) {
   const slice = poolData.groups.slice(index, index + 10);
   details.push(...await Promise.all(slice.map((group: { fingerprint: string }) =>
