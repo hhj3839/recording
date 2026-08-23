@@ -8,6 +8,12 @@ const strictSentence = "글의 중심 생각을 정확하게 파악하고 중요
 
 test("validates stored comment format and grounding warnings", () => {
   assert.equal(validateStoredComment(strictSentence, 1).strict, true);
+  const naturalShortSentence = "자료를 살펴 핵심 내용을 정리하여 글로 씀.";
+  const currentPolicy = validateStoredComment(naturalShortSentence, 1);
+  assert.equal(currentPolicy.strict, true);
+  assert.equal(currentPolicy.legacyStrict, false);
+  assert.equal(currentPolicy.checks.lengths, false);
+  assert.equal(currentPolicy.checks.endings, false);
   assert.deepEqual(groundingWarnings("자료를 친구와 협력하여 적극적으로 분류함.", "자료를 기준에 따라 분류할 수 있다."), ["적극적으로", "친구와 협력"]);
 });
 
@@ -27,14 +33,31 @@ test("audits complete stored scope without claiming semantic targets", () => {
   });
   assert.equal(result.scope.expectedComments, 1);
   assert.equal(result.comments.strictRate, 100);
+  assert.equal(result.comments.currentPassRate, 100);
   assert.equal(result.comments.failureCounts.sentenceCount, 0);
+  assert.equal(result.comments.referenceMetrics.failureCounts.lengths, 0);
   assert.equal(result.comments.bySubject["국어"].strictRate, 100);
+  assert.equal(result.comments.bySubject["국어"].currentPassRate, 100);
   assert.equal(result.comments.meaningTarget95Verified, false);
   assert.equal(result.comments.unsupportedFactTarget3Verified, false);
   assert.equal(result.comments.remediation.readOnly, true);
   assert.equal(result.comments.remediation.automaticChangesAllowed, false);
   assert.equal(result.comments.remediation.formatCandidateCount, 0);
   assert.equal(result.behaviors.missing, 1);
+});
+
+test("keeps legacy length and literal 함 ending outside current remediation", () => {
+  const sentence = "자료를 살펴 핵심 내용을 정리하여 글로 씀.";
+  const result = auditStoredResults({
+    students: [{ id: 3 }],
+    plan: [{ subject: "국어", high: sentence, middle: "", low: "" }],
+    levels: [{ studentId: 3, subject: "국어", assessmentIndex: 0, level: "상" }],
+    comments: [{ studentId: 3, subject: "국어", comment: sentence }], parts: [], behaviors: [],
+  });
+  assert.equal(result.comments.strictRate, 100);
+  assert.equal(result.comments.remediation.formatCandidateCount, 0);
+  assert.equal(result.comments.referenceMetrics.failureCounts.lengths, 1);
+  assert.equal(result.comments.referenceMetrics.failureCounts.endings, 1);
 });
 
 test("classifies every stored comment issue without changing data", () => {
