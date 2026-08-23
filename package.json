@@ -26,6 +26,7 @@
     "test:approved-missing-pools": "node scripts/run-approved-missing-pools.mjs",
     "audit:missing-pools": "node --experimental-strip-types scripts/analyze-missing-comment-pools.ts",
     "audit:approved-pools": "node --experimental-strip-types scripts/audit-approved-comment-pools.ts",
+    "audit:approved-pool-repairs": "node scripts/dry-run-approved-pool-repairs.mjs",
     "test:approved-canonical-recovery": "node scripts/run-approved-canonical-pool-recovery.mjs",
     "audit:stored-classification": "node scripts/audit-stored-results.mjs",
     "audit:teacher-review": "node scripts/summarize-teacher-review.mjs",
