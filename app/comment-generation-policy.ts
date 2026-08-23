@@ -373,6 +373,12 @@ const unsupportedGroundingConcepts: Array<{
   { label: "논리적으로", pattern: /논리적/, blocking: false },
   { label: "효과적으로", pattern: /효과적/, blocking: false },
   { label: "원활하게", pattern: /원활/, blocking: false },
+  {
+    label: "입력에 없는 표현 방식·수행 태도",
+    pattern: /(?:또박또박|또렷|분명(?:하게|히)|자연스럽게|적절(?:하게|히)|간명하게|차근차근|자신의말로)/,
+    evidencePattern: /(?:또박또박|또렷|분명(?:하게|히)|자연스럽게|적절(?:하게|히)|간명하게|차근차근|자신의말로)/,
+    blocking: false,
+  },
   { label: "자료 관찰·탐색·분석", pattern: /자료.{0,12}(?:관찰|탐색|분석)/, blocking: true },
   { label: "평가 요소 이해", pattern: /평가요소.{0,8}(?:이해|파악)/, blocking: true },
   { label: "원리나 방법을 자신의 말로 설명", pattern: /(?:원리|방법).{0,12}자신의말.{0,8}설명/, blocking: true },
