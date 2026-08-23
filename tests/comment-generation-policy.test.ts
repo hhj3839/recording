@@ -827,6 +827,20 @@ test("blocks awkward Korean comment constructions found in stored results", () =
   assert.equal(repairSafeNominalEnding("마음이 잘 드러나도록 글을 써냄."), "마음이 잘 드러나도록 글을 써 냄.");
 });
 
+test("recognizes spaced nominal writing as a completed performance across subjects", async () => {
+  const { validatePoolCandidate } = await import("../app/comment-pool-library.ts");
+  const spec = buildCommentPoolSpecs([poolPlan({
+    subject: "국어", domain: "문학",
+    high: "작품을 읽고 재미나 감동을 느낀 부분과 그 까닭을 쓰고 다양한 방법으로 표현할 수 있다.",
+    middle: "작품을 읽고 재미나 감동을 느낀 부분과 그 까닭을 쓸 수 있다.",
+    low: "교사의 도움을 받아 작품을 읽고 재미나 감동을 느낀 부분과 그 까닭을 쓸 수 있다.",
+  })]).find((item) => item.level === "하")!;
+  assert.deepEqual(
+    validatePoolCandidate("교사의 도움을 받아 작품을 읽고 재미나 감동을 느낀 부분과 그 까닭을 써 냄.", spec).issues,
+    [],
+  );
+});
+
 test("blocks malformed predicates found in the full Korean comment sample", () => {
   for (const sentence of [
     "마음을 전하는 글을 쓸 때 쓰는 방법을 알고 이를 활용하여 전하고자 하는 마음이 잘 드러나도록 글을 함.",
