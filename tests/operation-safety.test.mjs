@@ -295,6 +295,7 @@ test("repairs only an exact lab pool count and requires explicit shared-pool app
   assert.match(route, /if \(body\.apply !== true\) return Response\.json/);
   assert.match(route, /status: "retired"/);
   assert.match(route, /source: "teacher_edited"/);
+  assert.match(route, /pendingKeys\.has\(key\)/);
   assert.doesNotMatch(route, /generated_comments|students|assessment_levels/);
 });
 

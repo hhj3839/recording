@@ -61,10 +61,12 @@ export async function POST(request: Request) {
     }
     const affectedVersionIds = [...new Set(repairs.map(({ row }) => Number(row.pool_version_id)))];
     const existingByVersionAndText = new Map(rows.map((row) => [`${row.pool_version_id}:${row.normalized_sentence}`, row]));
+    const pendingKeys = new Set<string>();
     const insertions = repairs.flatMap(({ row, repaired }) => {
       const key = `${row.pool_version_id}:${normalizedPoolSentence(repaired)}`;
       const existing = existingByVersionAndText.get(key);
-      if (existing?.status === "approved") return [];
+      if (existing?.status === "approved" || pendingKeys.has(key)) return [];
+      pendingKeys.add(key);
       return [{
         pool_version_id: row.pool_version_id,
         sentence: repaired,
