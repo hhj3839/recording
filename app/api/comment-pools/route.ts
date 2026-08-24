@@ -151,7 +151,6 @@ export async function POST(request: Request) {
       subject?: unknown; maxGroups?: unknown; labOnly?: unknown; targetFingerprints?: unknown; canonicalOnly?: unknown; refresh?: unknown;
     };
     const subject = typeof body.subject === "string" ? body.subject.trim() : "";
-    if (!subject) return Response.json({ error: "AI 평어를 제작할 과목을 선택해 주세요." }, { status: 400 });
     if (body.labOnly === true && !user.email.toLowerCase().endsWith("@giroksam.test")) {
       return Response.json({ error: "제한 검증은 실험실 계정에서만 실행할 수 있습니다." }, { status: 403 });
     }
@@ -173,7 +172,8 @@ export async function POST(request: Request) {
     const maxGroups = Number.isInteger(requestedMaxGroups) && requestedMaxGroups > 0
       ? Math.min(requestedMaxGroups, 15)
       : Number.POSITIVE_INFINITY;
-    const subjectSpecs = (await currentSpecs(user.id, classId)).filter((spec) => spec.subject === subject);
+    const allSpecs = await currentSpecs(user.id, classId);
+    const subjectSpecs = subject ? allSpecs.filter((spec) => spec.subject === subject) : allSpecs;
     const specs = targetFingerprints.length
       ? subjectSpecs.filter((spec) => targetFingerprints.includes(spec.fingerprint))
       : subjectSpecs;
@@ -209,7 +209,7 @@ export async function POST(request: Request) {
         failed_items: 0, error_message: "", created_at: new Date().toISOString(), updated_at: new Date().toISOString(),
       }]);
       queueRunner(request, jobs[0].id);
-      return Response.json({ jobId: jobs[0].id, subject, total: 1, maxAiCalls: 2, reused: 0, refresh: true }, { status: 202 });
+      return Response.json({ jobId: jobs[0].id, subject: subject || "전체", total: 1, maxAiCalls: 2, reused: 0, refresh: true }, { status: 202 });
     }
     const currentSentences = await approvedSentencesByVersion([...currentLinked.versionById.keys()]);
     const reusableVersionFor = (spec: (typeof specs)[number]) => currentLinked.links
@@ -252,7 +252,7 @@ export async function POST(request: Request) {
       created_at: new Date().toISOString(), updated_at: new Date().toISOString(),
     }]);
     queueRunner(request, jobs[0].id);
-    return Response.json({ jobId: jobs[0].id, subject, total: pending.length, maxAiCalls: pending.reduce((sum, batch) => sum + batch.maxAttempts, 0), reused: specs.length - pending.length }, { status: 202 });
+    return Response.json({ jobId: jobs[0].id, subject: subject || "전체", total: pending.length, maxAiCalls: pending.reduce((sum, batch) => sum + batch.maxAttempts, 0), reused: specs.length - pending.length }, { status: 202 });
   } catch (error) {
     return dataError(error, "AI 평어 제작을 시작하지 못했습니다.");
   }
