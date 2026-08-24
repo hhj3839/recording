@@ -1,12 +1,15 @@
 import { waitUntil } from "@vercel/functions";
-import { eq, selectRows, updateRows, upsertRows } from "../../../../db/supabase";
+import { eq, selectRows, supabaseRequest, updateRows, upsertRows } from "../../../../db/supabase";
 import { approvePoolCandidates, COMMENT_POOL_MINIMUM, COMMENT_POOL_TARGET, normalizedPoolSentence, type CommentPoolSpec } from "../../../comment-pool-library";
 import { signCommentJob, verifyCommentJob } from "../../../comment-generation";
 import { primaryAiModel } from "../../../ai-model-policy";
 import { recordAiUsage } from "../../../ai-usage";
 
 export const maxDuration = 300;
-type PoolBatch = { spec: CommentPoolSpec; poolVersionId: number; maxAttempts?: number };
+type PoolBatch = {
+  spec: CommentPoolSpec; poolVersionId: number; maxAttempts?: number; activateWhenReady?: boolean;
+  previousPoolVersionIds?: number[];
+};
 type JobRow = {
   id: string; owner_id: string; owner_email: string; class_id: number; status: string; batches: PoolBatch[];
   current_batch: number; total_batches: number; total_items: number; completed_items: number; failed_items: number;
@@ -29,6 +32,8 @@ const commentPoolSystemPrompt = `# 역할
 
 # 출력
 지정된 JSON 스키마만 출력한다. 제목·번호·설명은 출력하지 않는다.`;
+
+const inValues = (values: Array<string | number>) => `in.(${values.join(",")})`;
 
 function outputText(payload: unknown) {
   if (!payload || typeof payload !== "object") return "";
@@ -127,10 +132,28 @@ export async function POST(request: Request) {
     await updateRows("comment_pool_versions", { id: eq(batch.poolVersionId) }, {
       status, approved_count: approved.length, updated_at: new Date().toISOString(),
     });
-    failed = approved.length === 0;
-    if (failed) errorMessage = `${batch.spec.subject} ${batch.spec.domain} ${batch.spec.level} 수준의 승인 문장을 확보하지 못했습니다.`;
+    if (batch.activateWhenReady && approved.length >= COMMENT_POOL_MINIMUM) {
+      await upsertRows("assessment_plan_pool_links", [{
+        owner_id: job.owner_id, owner_email: job.owner_email, class_id: Number(job.class_id),
+        assessment_plan_id: batch.spec.assessmentPlanId, pool_version_id: batch.poolVersionId,
+      }], "owner_id,class_id,assessment_plan_id,pool_version_id");
+      const previousPoolVersionIds = (batch.previousPoolVersionIds ?? []).filter((id) => id !== batch.poolVersionId);
+      if (previousPoolVersionIds.length) {
+        await supabaseRequest("assessment_plan_pool_links", {
+          method: "DELETE",
+          query: {
+            owner_id: eq(job.owner_id), class_id: eq(Number(job.class_id)),
+            assessment_plan_id: eq(batch.spec.assessmentPlanId), pool_version_id: inValues(previousPoolVersionIds),
+          },
+        }).catch(() => undefined);
+      }
+    }
+    failed = batch.activateWhenReady ? approved.length < COMMENT_POOL_MINIMUM : approved.length === 0;
+    if (failed) errorMessage = batch.activateWhenReady
+      ? `${batch.spec.subject} ${batch.spec.domain} ${batch.spec.level} 수준의 새 문장이 8개 미만이라 기존 문장 풀을 유지했습니다.`
+      : `${batch.spec.subject} ${batch.spec.domain} ${batch.spec.level} 수준의 승인 문장을 확보하지 못했습니다.`;
   } catch (error) {
-    failed = approved.length === 0;
+    failed = batch.activateWhenReady ? true : approved.length === 0;
     errorMessage = error instanceof Error ? error.message : "AI 평어 제작 오류";
     await updateRows("comment_pool_versions", { id: eq(batch.poolVersionId) }, {
       status: approved.length ? "usable" : "failed", approved_count: approved.length, updated_at: new Date().toISOString(),
