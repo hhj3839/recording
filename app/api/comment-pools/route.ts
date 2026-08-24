@@ -82,7 +82,7 @@ export async function GET(request: Request) {
       .find((version): version is PoolVersionRow => Boolean(version && versionMatchesSpec(version, spec)));
     const groups = specs.map((spec) => {
       const version = linkedVersionFor(spec);
-      const quality = commentPoolQuality(version ? (sentencesByVersion.get(Number(version.id)) ?? []) : []);
+      const quality = commentPoolQuality(version ? (sentencesByVersion.get(Number(version.id)) ?? []) : [], spec.canonicalSentence);
       return {
         fingerprint: spec.fingerprint, subject: spec.subject, unit: spec.unit, domain: spec.domain,
         assessmentIndex: spec.assessmentIndex, level: spec.level,
@@ -206,7 +206,7 @@ export async function POST(request: Request) {
       .find((version): version is PoolVersionRow => Boolean(
         version
         && versionMatchesSpec(version, spec)
-        && commentPoolQuality(currentSentences.get(Number(version.id)) ?? []).reusable,
+        && commentPoolQuality(currentSentences.get(Number(version.id)) ?? [], spec.canonicalSentence).reusable,
       ));
     const specsToCreate = specs.filter((spec) => !reusableVersionFor(spec));
     if (!specsToCreate.length) return Response.json({ ready: true, reused: specs.length });
@@ -227,7 +227,7 @@ export async function POST(request: Request) {
     }), "owner_id,class_id,assessment_plan_id,pool_version_id");
     const pending = specsToCreate.flatMap((spec) => {
       const version = byFingerprint.get(spec.fingerprint);
-      const quality = commentPoolQuality(version ? (sentencesByVersion.get(Number(version.id)) ?? []) : []);
+      const quality = commentPoolQuality(version ? (sentencesByVersion.get(Number(version.id)) ?? []) : [], spec.canonicalSentence);
       return version && !quality.reusable
         ? [{ spec, poolVersionId: Number(version.id), maxAttempts: canonicalOnly ? 0 : 2 }]
         : [];

@@ -111,6 +111,23 @@ test("reuses a validated pool with distinct observation scenes and openings", ()
   assert.equal(commentPoolQuality(diverse).reusable, true);
 });
 
+test("rejects a diverse but over-compressed pool when a detailed criterion loses information", () => {
+  const reference = "작품 속 인물들의 상황에 알맞은 표정, 몸짓, 목소리, 말투를 알고 작품 속 인물들의 대화를 실감 나게 표현함.";
+  const compressed = [
+    "인물의 처지에 맞는 목소리로 대화를 표현함.",
+    "장면을 살펴 알맞은 말투로 인물의 말을 전달함.",
+    "상황에 어울리는 표정으로 작품의 대화를 나타냄.",
+    "등장인물의 마음을 생각하며 몸짓으로 표현함.",
+    "작품의 분위기를 파악하여 대화를 실감 있게 말함.",
+    "대화 장면에 맞추어 목소리와 표정을 활용함.",
+    "인물의 상황을 고려해 어울리는 말투로 표현함.",
+    "친구와 역할을 나누어 작품 속 대화를 나타냄.",
+  ];
+  const quality = commentPoolQuality(compressed, reference);
+  assert.equal(quality.reusable, false);
+  assert.ok(quality.issues.includes("평가기준 정보량 보존 부족"));
+});
+
 test("uses the same low-cost model for the initial request and retry", () => {
   assert.equal(generationModel(0, 2), "gpt-5.4-mini");
   assert.equal(generationModel(1, 2), "gpt-5.4-mini");
