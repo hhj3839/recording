@@ -279,7 +279,7 @@ test("resets only the current assessment plan pool links", () => {
   assert.match(page, /fetch\("\/api\/comment-pools", \{ method: "DELETE" \}\)/);
 });
 
-test("rebuilds one pool as a separate version and switches only after validation", () => {
+test("keeps isolated pool refresh safe without exposing a teacher-facing selection action", () => {
   const route = readFileSync("app/api/comment-pools/route.ts", "utf8");
   const runner = readFileSync("app/api/comment-pools/run/route.ts", "utf8");
   const page = readFileSync("app/page.tsx", "utf8");
@@ -291,8 +291,8 @@ test("rebuilds one pool as a separate version and switches only after validation
   assert.match(runner, /upsertRows\("assessment_plan_pool_links"/);
   assert.match(runner, /method: "DELETE"[\s\S]*previousPoolVersionIds/);
   assert.match(runner, /batch\.activateWhenReady \? !quality\.reusable/);
-  assert.match(page, /기존 승인 문장은 삭제하지 않고 보존합니다/);
-  assert.match(page, /targetFingerprints: \[selected\.fingerprint\], maxGroups: 1, refresh: true/);
+  assert.doesNotMatch(page, /선택 풀 새로 제작/);
+  assert.doesNotMatch(page, /targetFingerprints: \[selected\.fingerprint\], maxGroups: 1, refresh: true/);
 });
 
 test("allows only an explicitly bounded lab canonical-pool recovery", () => {
