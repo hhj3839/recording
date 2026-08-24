@@ -246,10 +246,10 @@ test("clears a comment before regeneration without a confirmation dialog", () =>
   assert.match(page, /disabled=\{!hasLevel \|\| !!rewriteBusyKey\}/);
 });
 
-test("limits comment-pool validation to one subject and a lab account", () => {
+test("continues all remaining pools while keeping bounded lab validation", () => {
   const route = readFileSync("app/api/comment-pools/route.ts", "utf8");
   const page = readFileSync("app/page.tsx", "utf8");
-  assert.match(route, /if \(!subject\) return Response\.json\(\{ error: "AI 평어를 제작할 과목을 선택해 주세요\." \}, \{ status: 400 \}\)/);
+  assert.match(route, /const subjectSpecs = subject \? allSpecs\.filter[\s\S]*: allSpecs/);
   assert.match(route, /user\.email\.toLowerCase\(\)\.endsWith\("@giroksam\.test"\)/);
   assert.match(route, /Math\.min\(requestedMaxGroups, 15\)/);
   assert.match(route, /spec\.subject === subject/);
@@ -258,7 +258,8 @@ test("limits comment-pool validation to one subject and a lab account", () => {
   assert.match(route, /targetFingerprints\.length && body\.labOnly !== true/);
   assert.match(route, /targetFingerprints\.includes\(spec\.fingerprint\)/);
   assert.match(route, /specs\.length !== targetFingerprints\.length/);
-  assert.match(page, /body: JSON\.stringify\(\{ subject \}\)/);
+  assert.match(page, /body: JSON\.stringify\(\{\}\)/);
+  assert.match(page, /남은 모든 과목의 AI 평어를 이어서 제작합니다/);
 });
 
 test("resets only the current assessment plan pool links", () => {
@@ -299,11 +300,13 @@ test("shows resumable pool production progress beside the ready count", () => {
   const page = readFileSync("app/page.tsx", "utf8");
   const route = readFileSync("app/api/comment-pools/route.ts", "utf8");
   assert.match(page, /ready-count[\s\S]*준비 완료[\s\S]*pool-progress/);
-  assert.match(page, /selectedSubjectPending[\s\S]*개 이어서 제작/);
+  assert.match(page, /poolSummary\.needsGeneration[\s\S]*개 이어서 제작/);
+  assert.match(page, /body: JSON\.stringify\(\{\}\)/);
   assert.match(page, /제작·검수 중/);
   assert.doesNotMatch(page, /개 제작·보완 필요/);
   assert.match(route, /activeJob: activeJob \? publicJob\(activeJob\) : null/);
   assert.match(route, /current: current \? \{ subject:/);
+  assert.match(route, /const subjectSpecs = subject \? allSpecs\.filter[\s\S]*: allSpecs/);
 });
 
 test("allows only an explicitly bounded lab canonical-pool recovery", () => {

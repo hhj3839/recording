@@ -809,16 +809,13 @@ function PlanManager({ plan, onChanged, current }: { plan: AssessmentPlan[]; onC
   }, []);
   const startPoolProduction = async () => {
     if (!plan.length || poolBusy) return;
-    const subject = poolGroups.find((group) => group.fingerprint === selectedPoolFingerprint)?.subject
-      ?? plan[0]?.subject ?? "";
-    const subjectGroups = poolGroups.filter((group) => group.subject === subject);
-    const subjectPending = subjectGroups.filter((group) => group.status !== "ready").length;
-    if (!subject || !window.confirm(`${subject} 평가영역·수준별 자연스러운 승인 문장 8~12개를 목표로 AI 평어를 제작합니다.\n현재 제작 또는 보완이 필요한 묶음은 ${subjectPending}개이며 최대 ${subjectPending * 2}회 호출합니다.\n\nAI API를 사용해 제작을 시작할까요?`)) return;
+    const pending = poolSummary.needsGeneration;
+    if (!pending || !window.confirm(`현재 평가계획에 남은 모든 과목의 AI 평어를 이어서 제작합니다.\n제작 또는 보완이 필요한 묶음은 ${pending}개이며 최대 ${pending * 2}회 호출합니다. 완료된 문장 풀은 그대로 재사용합니다.\n\nAI API를 사용해 제작을 시작할까요?`)) return;
     setPoolBusy(true);
     setErrors([]);
     try {
       const response = await fetch("/api/comment-pools", {
-        method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ subject }),
+        method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({}),
       });
       const result = await readApiJson<{ ready?: boolean; jobId?: string; total?: number }>(response, "AI 평어 제작을 시작하지 못했습니다.");
       if (!response.ok) throw new Error(result.error || "AI 평어 제작을 시작하지 못했습니다.");
@@ -886,8 +883,6 @@ function PlanManager({ plan, onChanged, current }: { plan: AssessmentPlan[]; onC
   };
   const sharedYears = [...new Set(sharedPlans.map((item) => item.schoolYear))].sort((a, b) => b - a);
   const sharedSubjects = [...new Set(sharedPlans.flatMap((item) => item.subjects))].sort((a, b) => a.localeCompare(b, "ko"));
-  const selectedPoolSubject = poolGroups.find((group) => group.fingerprint === selectedPoolFingerprint)?.subject ?? poolGroups[0]?.subject ?? "";
-  const selectedSubjectPending = poolGroups.filter((group) => group.subject === selectedPoolSubject && group.status !== "ready").length;
   const activePoolJob = Boolean(poolJob && ["queued", "running"].includes(poolJob.status));
   const filteredSharedPlans = sharedPlans.filter((item) => {
     const search = sharedSearch.trim().toLowerCase();
@@ -912,7 +907,7 @@ function PlanManager({ plan, onChanged, current }: { plan: AssessmentPlan[]; onC
           <span><b>{poolSummary.total}</b>개 영역·수준</span>
           <span className="ready-count"><b>{poolSummary.ready}/{poolSummary.total}</b> 준비 완료</span>
           {activePoolJob && poolJob ? <span className="pool-progress" role="status"><i aria-hidden="true" /> <b>{poolJob.completed}/{poolJob.total}</b> {poolJob.current ? `${poolJob.current.subject} · ${poolJob.current.domain} · ${poolJob.current.level} 제작·검수 중` : "제작 대기 중"}</span>
-            : selectedSubjectPending > 0 ? <button className="pool-continue" disabled={poolBusy || !plan.length} onClick={() => void startPoolProduction()}>{selectedPoolSubject} {selectedSubjectPending}개 이어서 제작</button>
+            : poolSummary.needsGeneration > 0 ? <button className="pool-continue" disabled={poolBusy || !plan.length} onClick={() => void startPoolProduction()}>{poolSummary.needsGeneration}개 이어서 제작</button>
               : poolSummary.needsGeneration === 0 ? <span className="all-ready">전체 준비 완료</span> : null}
         </div>
         {!!poolGroups.length && <div className="ai-pool-browser">
