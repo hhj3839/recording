@@ -12,7 +12,7 @@ import { commentAreaOverlapReasons } from "../app/comment-area-diversity.ts";
 import { assignApprovedCommentPools, assignUniquePoolCandidates, buildApprovedCommentPool, buildCanonicalBaselinePart, buildCommentPoolGroups, buildPublicCommentPoolRequests, commentPoolCandidateCount, spreadCandidatesByOpening } from "../app/comment-pool-generation.ts";
 import { assembleRotatedComment } from "../app/comment-assembly.ts";
 import { readApiJson } from "../app/api-response.ts";
-import { approvePoolCandidates, buildCommentPoolSpecs, COMMENT_POOL_CLUSTER_LIMIT, COMMENT_POOL_CLUSTER_THRESHOLD, COMMENT_POOL_MINIMUM, COMMENT_POOL_OPENING_LIMIT, COMMENT_POOL_SIMILARITY_LIMIT, COMMENT_POOL_TARGET, poolSentenceOpening, poolSentenceSimilarity, repairLegacyPoolCandidate } from "../app/comment-pool-library.ts";
+import { approvePoolCandidates, buildCommentPoolSpecs, commentPoolQuality, COMMENT_POOL_CLUSTER_LIMIT, COMMENT_POOL_CLUSTER_THRESHOLD, COMMENT_POOL_MINIMUM, COMMENT_POOL_OPENING_LIMIT, COMMENT_POOL_SIMILARITY_LIMIT, COMMENT_POOL_TARGET, poolSentenceOpening, poolSentenceSimilarity, repairLegacyPoolCandidate } from "../app/comment-pool-library.ts";
 
 const poolPlan = (overrides: Partial<{ id: number; subject: string; unit: string; goal: string; domain: string; perspective: string; high: string; middle: string; low: string }> = {}) => ({
   id: 1, subject: "사회", unit: "우리 고장", goal: "지역의 모습을 이해한다.", domain: "지리 인식",
@@ -79,6 +79,36 @@ test("measures near-identical pool sentences and groups their openings", () => {
   assert.equal(COMMENT_POOL_CLUSTER_THRESHOLD, 0.75);
   assert.equal(COMMENT_POOL_CLUSTER_LIMIT, 2);
   assert.equal(COMMENT_POOL_OPENING_LIMIT, 2);
+});
+
+test("does not reuse a numerically complete pool whose sentences share one template", () => {
+  const repeated = [
+    "작품 속 인물의 상황에 알맞은 표정과 말투로 대화를 실감 나게 표현함.",
+    "작품 속 인물의 상황에 알맞은 표정과 말투로 대화를 생생하게 표현함.",
+    "작품 속 인물의 상황에 알맞은 표정과 말투를 활용하여 대화를 표현함.",
+    "작품 속 인물의 상황에 알맞은 몸짓과 목소리로 대화를 실감 있게 표현함.",
+    "작품 속 인물의 상황에 알맞은 몸짓과 목소리로 대화를 생생하게 표현함.",
+    "작품 속 인물의 상황에 알맞은 몸짓과 목소리를 활용하여 대화를 표현함.",
+    "작품 속 인물의 상황에 알맞은 표정과 목소리로 대화를 실감 나게 표현함.",
+    "작품 속 인물의 상황에 알맞은 표정과 목소리로 대화를 자연스럽게 표현함.",
+  ];
+  const quality = commentPoolQuality(repeated);
+  assert.equal(quality.reusable, false);
+  assert.ok(quality.issues.includes("문장 첫머리 다양성 부족"));
+});
+
+test("reuses a validated pool with distinct observation scenes and openings", () => {
+  const diverse = [
+    "인물의 감정 변화를 살피고 상황에 알맞은 말투로 대화를 실감 나게 표현함.",
+    "장면의 분위기에 맞추어 목소리의 크기와 빠르기를 조절하며 대화를 표현함.",
+    "짝과 역할을 나누어 인물의 처지가 드러나는 몸짓과 표정으로 대화함.",
+    "대화 장면을 떠올리며 등장인물의 마음이 전해지도록 목소리를 조절함.",
+    "상황 그림에서 인물의 처지를 파악한 뒤 어울리는 말투로 장면을 나타냄.",
+    "작품을 읽고 인물의 성격을 고려하여 표정과 몸짓을 조화롭게 활용함.",
+    "친구의 표현을 살펴본 뒤 장면에 어울리는 목소리로 인물의 말을 전달함.",
+    "등장인물의 관계를 생각하며 상황에 맞는 표정과 말투로 대화를 이어 감.",
+  ];
+  assert.equal(commentPoolQuality(diverse).reusable, true);
 });
 
 test("uses the same low-cost model for the initial request and retry", () => {

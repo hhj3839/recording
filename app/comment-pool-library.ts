@@ -7,7 +7,10 @@ export const COMMENT_POOL_SIMILARITY_LIMIT = 0.9;
 export const COMMENT_POOL_CLUSTER_THRESHOLD = 0.75;
 export const COMMENT_POOL_CLUSTER_LIMIT = 2;
 export const COMMENT_POOL_OPENING_LIMIT = 2;
-export const COMMENT_POOL_GENERATOR_VERSION = "pool-v1";
+export const COMMENT_POOL_REUSE_MINIMUM_OPENING_RATIO = 0.5;
+export const COMMENT_POOL_REUSE_MAX_CLUSTER_RATIO = 0.2;
+export const COMMENT_POOL_REUSE_MAX_NEAREST_SIMILARITY = 0.82;
+export const COMMENT_POOL_GENERATOR_VERSION = "pool-v2-quality-gated";
 export type PoolLevel = "상" | "중" | "하";
 
 export type PoolPlanItem = {
@@ -16,10 +19,12 @@ export type PoolPlanItem = {
   unit: string;
   goal: string;
   domain: string;
+  assessment_type?: string;
   perspective: string;
   high: string;
   middle: string;
   low: string;
+  caution?: string;
   sort_order?: number;
 };
 
@@ -31,10 +36,12 @@ export type CommentPoolSpec = {
   unit: string;
   goal: string;
   domain: string;
+  assessmentType?: string;
   perspective: string;
   level: PoolLevel;
   criterion: string;
   levelCriteria: { high: string; middle: string; low: string };
+  caution?: string;
   canonicalSentence: string;
 };
 
@@ -60,11 +67,55 @@ export function poolSentenceOpening(value: string) {
   return compactPoolSentence(value).slice(0, 15);
 }
 
+export function commentPoolQuality(sentences: string[]) {
+  const normalized = sentences.map(normalizedPoolSentence).filter(Boolean);
+  const unique = [...new Set(normalized)];
+  const pairSimilarities: number[] = [];
+  const nearest = unique.map((sentence, index) => {
+    let highest = 0;
+    unique.forEach((other, otherIndex) => {
+      if (index === otherIndex) return;
+      const similarity = poolSentenceSimilarity(sentence, other);
+      pairSimilarities.push(index < otherIndex ? similarity : -1);
+      highest = Math.max(highest, similarity);
+    });
+    return highest;
+  });
+  const comparablePairs = pairSimilarities.filter((value) => value >= 0);
+  const clusteredPairs = comparablePairs.filter((value) => value >= COMMENT_POOL_CLUSTER_THRESHOLD).length;
+  const openingCount = new Set(unique.map(poolSentenceOpening)).size;
+  const openingRatio = unique.length ? openingCount / unique.length : 0;
+  const clusterRatio = comparablePairs.length ? clusteredPairs / comparablePairs.length : 0;
+  const averageNearestSimilarity = nearest.length
+    ? nearest.reduce((sum, value) => sum + value, 0) / nearest.length
+    : 0;
+  const issues = [
+    ...(unique.length < COMMENT_POOL_MINIMUM ? ["승인 문장 수 부족"] : []),
+    ...(unique.length !== normalized.length ? ["완전히 같은 승인 문장 중복"] : []),
+    ...(openingRatio < COMMENT_POOL_REUSE_MINIMUM_OPENING_RATIO ? ["문장 첫머리 다양성 부족"] : []),
+    ...(clusterRatio > COMMENT_POOL_REUSE_MAX_CLUSTER_RATIO ? ["유사 문장 군집 과다"] : []),
+    ...(averageNearestSimilarity > COMMENT_POOL_REUSE_MAX_NEAREST_SIMILARITY ? ["문장 구조 다양성 부족"] : []),
+  ];
+  return {
+    reusable: issues.length === 0,
+    issues,
+    count: normalized.length,
+    uniqueCount: unique.length,
+    openingCount,
+    openingRatio,
+    clusteredPairs,
+    totalPairs: comparablePairs.length,
+    clusterRatio,
+    averageNearestSimilarity,
+  };
+}
+
 export function poolFingerprint(input: Omit<CommentPoolSpec, "fingerprint" | "assessmentPlanId" | "assessmentIndex" | "canonicalSentence">) {
   return createHash("sha256").update(JSON.stringify([
     COMMENT_POOL_GENERATOR_VERSION,
-    stable(input.subject), stable(input.unit), stable(input.goal), stable(input.domain), stable(input.perspective), input.level,
+    stable(input.subject), stable(input.unit), stable(input.goal), stable(input.domain), stable(input.assessmentType ?? ""), stable(input.perspective), input.level,
     stable(input.criterion), stable(input.levelCriteria.high), stable(input.levelCriteria.middle), stable(input.levelCriteria.low),
+    stable(input.caution ?? ""),
   ])).digest("hex");
 }
 
@@ -77,8 +128,9 @@ export function buildCommentPoolSpecs(plan: PoolPlanItem[]): CommentPoolSpec[] {
       const criterion = positiveGrowthCriterion(level, rawCriterion);
       if (!criterion) return [];
       const base = {
-        subject: stable(item.subject), unit: stable(item.unit), goal: stable(item.goal), domain: stable(item.domain), perspective: stable(item.perspective), level,
-        criterion, levelCriteria,
+        subject: stable(item.subject), unit: stable(item.unit), goal: stable(item.goal), domain: stable(item.domain),
+        assessmentType: stable(item.assessment_type ?? ""), perspective: stable(item.perspective), level,
+        criterion, levelCriteria, caution: stable(item.caution ?? ""),
       };
       return [{
         ...base,

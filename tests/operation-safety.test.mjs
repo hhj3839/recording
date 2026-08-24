@@ -287,10 +287,10 @@ test("rebuilds one pool as a separate version and switches only after validation
   assert.match(route, /insertRows<PoolVersionRow>\("comment_pool_versions"/);
   assert.match(route, /activateWhenReady: true/);
   assert.match(route, /previousPoolVersionIds/);
-  assert.match(runner, /batch\.activateWhenReady && approved\.length >= COMMENT_POOL_MINIMUM/);
+  assert.match(runner, /batch\.activateWhenReady && quality\.reusable/);
   assert.match(runner, /upsertRows\("assessment_plan_pool_links"/);
   assert.match(runner, /method: "DELETE"[\s\S]*previousPoolVersionIds/);
-  assert.match(runner, /batch\.activateWhenReady \? approved\.length < COMMENT_POOL_MINIMUM/);
+  assert.match(runner, /batch\.activateWhenReady \? !quality\.reusable/);
   assert.match(page, /기존 승인 문장은 삭제하지 않고 보존합니다/);
   assert.match(page, /targetFingerprints: \[selected\.fingerprint\], maxGroups: 1, refresh: true/);
 });

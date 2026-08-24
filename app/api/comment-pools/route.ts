@@ -1,7 +1,7 @@
 import { waitUntil } from "@vercel/functions";
 import { createHash } from "node:crypto";
 import { eq, insertRows, selectRows, supabaseRequest, upsertRows } from "../../../db/supabase";
-import { buildCommentPoolSpecs, COMMENT_POOL_GENERATOR_VERSION, COMMENT_POOL_MINIMUM, COMMENT_POOL_TARGET, type PoolPlanItem } from "../../comment-pool-library";
+import { buildCommentPoolSpecs, commentPoolQuality, COMMENT_POOL_GENERATOR_VERSION, COMMENT_POOL_TARGET, type PoolPlanItem } from "../../comment-pool-library";
 import { signCommentJob } from "../../comment-generation";
 import { dataError, getDataScope } from "../../data-scope";
 
@@ -37,6 +37,18 @@ async function linkedVersions(ownerId: string, classId: number, specs: ReturnTyp
   return { links, versions, versionById };
 }
 
+async function approvedSentencesByVersion(versionIds: number[]) {
+  const rows = versionIds.length ? await selectRows<{ pool_version_id: number; sentence: string }>("comment_pool_sentences", {
+    pool_version_id: inValues(versionIds), status: eq("approved"), order: "id.asc",
+  }) : [];
+  const byVersion = new Map<number, string[]>();
+  rows.forEach((row) => {
+    const versionId = Number(row.pool_version_id);
+    byVersion.set(versionId, [...(byVersion.get(versionId) ?? []), row.sentence]);
+  });
+  return byVersion;
+}
+
 function queueRunner(request: Request, jobId: string) {
   const url = new URL("/api/comment-pools/run", request.url);
   waitUntil(fetch(url, {
@@ -63,16 +75,19 @@ export async function GET(request: Request) {
     }
     const specs = await currentSpecs(user.id, classId);
     const { links, versionById } = await linkedVersions(user.id, classId, specs);
+    const sentencesByVersion = await approvedSentencesByVersion([...versionById.keys()]);
     const linkedVersionFor = (spec: (typeof specs)[number]) => links
       .filter((link) => Number(link.assessment_plan_id) === spec.assessmentPlanId)
       .map((link) => versionById.get(Number(link.pool_version_id)))
       .find((version): version is PoolVersionRow => Boolean(version && versionMatchesSpec(version, spec)));
     const groups = specs.map((spec) => {
       const version = linkedVersionFor(spec);
+      const quality = commentPoolQuality(version ? (sentencesByVersion.get(Number(version.id)) ?? []) : []);
       return {
         fingerprint: spec.fingerprint, subject: spec.subject, unit: spec.unit, domain: spec.domain,
         assessmentIndex: spec.assessmentIndex, level: spec.level,
-        status: version?.status ?? "needs_generation", approvedCount: Number(version?.approved_count ?? 0),
+        status: quality.reusable ? "ready" : "needs_generation",
+        approvedCount: Number(version?.approved_count ?? 0), qualityIssues: quality.issues,
         targetCount: COMMENT_POOL_TARGET, poolVersionId: version ? Number(version.id) : null,
       };
     });
@@ -86,9 +101,9 @@ export async function GET(request: Request) {
       groups,
       summary: {
         total: groups.length,
-        ready: groups.filter((group) => group.approvedCount >= COMMENT_POOL_MINIMUM).length,
+        ready: groups.filter((group) => group.status === "ready").length,
         usable: groups.filter((group) => group.approvedCount > 0).length,
-        needsGeneration: groups.filter((group) => group.approvedCount < COMMENT_POOL_MINIMUM).length,
+        needsGeneration: groups.filter((group) => group.status !== "ready").length,
       },
       sentences: sentences.map((row) => ({ id: Number(row.id), sentence: row.sentence })),
     }, { headers: { "Cache-Control": "private, no-store" } });
@@ -184,23 +199,36 @@ export async function POST(request: Request) {
       queueRunner(request, jobs[0].id);
       return Response.json({ jobId: jobs[0].id, subject, total: 1, maxAiCalls: 2, reused: 0, refresh: true }, { status: 202 });
     }
-    const versions = await upsertRows<PoolVersionRow>("comment_pool_versions", specs.map((spec) => ({
+    const currentSentences = await approvedSentencesByVersion([...currentLinked.versionById.keys()]);
+    const reusableVersionFor = (spec: (typeof specs)[number]) => currentLinked.links
+      .filter((link) => Number(link.assessment_plan_id) === spec.assessmentPlanId)
+      .map((link) => currentLinked.versionById.get(Number(link.pool_version_id)))
+      .find((version): version is PoolVersionRow => Boolean(
+        version
+        && versionMatchesSpec(version, spec)
+        && commentPoolQuality(currentSentences.get(Number(version.id)) ?? []).reusable,
+      ));
+    const specsToCreate = specs.filter((spec) => !reusableVersionFor(spec));
+    if (!specsToCreate.length) return Response.json({ ready: true, reused: specs.length });
+    const versions = await upsertRows<PoolVersionRow>("comment_pool_versions", specsToCreate.map((spec) => ({
       fingerprint: spec.fingerprint, subject: spec.subject, unit: spec.unit, domain: spec.domain,
       level: spec.level, criterion: spec.criterion, level_criteria: spec.levelCriteria,
       canonical_sentence: spec.canonicalSentence, target_count: COMMENT_POOL_TARGET,
       generator_version: COMMENT_POOL_GENERATOR_VERSION, created_by: user.id, updated_at: new Date().toISOString(),
     })), "fingerprint");
     const byFingerprint = new Map(versions.map((row) => [row.fingerprint, row]));
-    await upsertRows("assessment_plan_pool_links", specs.flatMap((spec) => {
+    const sentencesByVersion = await approvedSentencesByVersion(versions.map((version) => Number(version.id)));
+    await upsertRows("assessment_plan_pool_links", specsToCreate.flatMap((spec) => {
       const version = byFingerprint.get(spec.fingerprint);
       return version ? [{
         owner_id: user.id, owner_email: user.email, class_id: classId,
         assessment_plan_id: spec.assessmentPlanId, pool_version_id: Number(version.id),
       }] : [];
     }), "owner_id,class_id,assessment_plan_id,pool_version_id");
-    const pending = specs.flatMap((spec) => {
+    const pending = specsToCreate.flatMap((spec) => {
       const version = byFingerprint.get(spec.fingerprint);
-      return version && Number(version.approved_count ?? 0) < COMMENT_POOL_MINIMUM
+      const quality = commentPoolQuality(version ? (sentencesByVersion.get(Number(version.id)) ?? []) : []);
+      return version && !quality.reusable
         ? [{ spec, poolVersionId: Number(version.id), maxAttempts: canonicalOnly ? 0 : 2 }]
         : [];
     }).slice(0, maxGroups);
