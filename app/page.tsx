@@ -820,6 +820,24 @@ function PlanManager({ plan, onChanged, current }: { plan: AssessmentPlan[]; onC
       setErrors([error instanceof Error ? error.message : "AI 평어 제작을 시작하지 못했습니다."]);
     } finally { setPoolBusy(false); }
   };
+  const resetPoolLinks = async () => {
+    if (!plan.length || poolBusy || poolSummary.usable === 0) return;
+    if (!window.confirm(`현재 평가계획의 AI 평어를 초기화할까요?\n\n제작된 AI 평어 목록만 비워집니다. 학생에게 이미 저장된 교과평어와 평가계획·평가수준, 공유 승인 문장 원문은 유지됩니다.`)) return;
+    setPoolBusy(true);
+    setErrors([]);
+    try {
+      const response = await fetch("/api/comment-pools", { method: "DELETE" });
+      const result = await readApiJson<{ resetGroups?: number }>(response, "AI 평어를 초기화하지 못했습니다.");
+      if (!response.ok) throw new Error(result.error || "AI 평어를 초기화하지 못했습니다.");
+      setSelectedPoolFingerprint("");
+      setPoolSentences([]);
+      setPoolJob(null);
+      await loadPoolStatus();
+      setMessage(`AI 평어 ${Number(result.resetGroups ?? 0)}개 영역·수준을 초기화했습니다. 필요할 때 AI 평어 제작을 다시 실행할 수 있습니다.`);
+    } catch (error) {
+      setErrors([error instanceof Error ? error.message : "AI 평어를 초기화하지 못했습니다."]);
+    } finally { setPoolBusy(false); }
+  };
   useEffect(() => {
     if (planSection !== "ai") return;
     const timer = window.setTimeout(() => {
@@ -872,7 +890,7 @@ function PlanManager({ plan, onChanged, current }: { plan: AssessmentPlan[]; onC
       <button role="tab" aria-selected={planSection === "ai"} className={planSection === "ai" ? "active" : ""} onClick={() => setPlanSection("ai")}>AI 평어{poolSummary.needsGeneration > 0 ? " · 제작 필요" : ""}</button>
     </div>
     {planSection === "ai" && <section className="ai-comment-pool-panel">
-      <div className="section-heading"><div><p className="eyebrow">평가계획용 문장 풀</p><h2>AI 평어</h2><p>학생에게 배정하기 전, 평가영역·수준별 평어를 최대 20개씩 제작하고 검수합니다.</p></div><button disabled={poolBusy || !plan.length || poolSummary.needsGeneration === 0 || Boolean(poolJob && ["queued", "running"].includes(poolJob.status))} onClick={() => void startPoolProduction()}>{poolJob && ["queued", "running"].includes(poolJob.status) ? "AI 평어 제작 중…" : poolSummary.needsGeneration ? "AI 평어 제작" : "AI 평어 준비 완료"}</button></div>
+      <div className="section-heading"><div><p className="eyebrow">평가계획용 문장 풀</p><h2>AI 평어</h2><p>학생에게 배정하기 전, 평가영역·수준별 평어를 최대 20개씩 제작하고 검수합니다.</p></div><div className="ai-pool-heading-actions"><button disabled={poolBusy || !plan.length || poolSummary.needsGeneration === 0 || Boolean(poolJob && ["queued", "running"].includes(poolJob.status))} onClick={() => void startPoolProduction()}>{poolJob && ["queued", "running"].includes(poolJob.status) ? "AI 평어 제작 중…" : poolSummary.needsGeneration ? "AI 평어 제작" : "AI 평어 준비 완료"}</button><button className="danger-text" disabled={poolBusy || !plan.length || poolSummary.usable === 0 || Boolean(poolJob && ["queued", "running"].includes(poolJob.status))} onClick={() => void resetPoolLinks()}>AI 평어 초기화</button></div></div>
       {!plan.length ? <p className="empty-cell">평가계획을 먼저 저장해 주세요.</p> : <>
         <div className="ai-pool-summary">
           <span><b>{poolSummary.total}</b>개 영역·수준</span>

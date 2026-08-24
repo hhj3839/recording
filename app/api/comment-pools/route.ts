@@ -1,5 +1,5 @@
 import { waitUntil } from "@vercel/functions";
-import { eq, insertRows, selectRows, upsertRows } from "../../../db/supabase";
+import { eq, insertRows, selectRows, supabaseRequest, upsertRows } from "../../../db/supabase";
 import { buildCommentPoolSpecs, COMMENT_POOL_GENERATOR_VERSION, COMMENT_POOL_TARGET, type PoolPlanItem } from "../../comment-pool-library";
 import { signCommentJob } from "../../comment-generation";
 import { dataError, getDataScope } from "../../data-scope";
@@ -43,12 +43,18 @@ export async function GET(request: Request) {
       } }, { headers: { "Cache-Control": "private, no-store" } });
     }
     const specs = await currentSpecs(user.id, classId);
+    const assessmentPlanIds = [...new Set(specs.map((spec) => spec.assessmentPlanId))];
+    const links = assessmentPlanIds.length ? await selectRows<{ assessment_plan_id: number; pool_version_id: number }>("assessment_plan_pool_links", {
+      owner_id: eq(user.id), class_id: eq(classId), assessment_plan_id: inValues(assessmentPlanIds),
+    }) : [];
+    const linkedVersionsByPlan = new Set(links.map((link) => `${Number(link.assessment_plan_id)}|${Number(link.pool_version_id)}`));
     const versions = specs.length ? await selectRows<PoolVersionRow>("comment_pool_versions", {
       fingerprint: inValues(specs.map((spec) => spec.fingerprint)),
     }) : [];
     const versionByFingerprint = new Map(versions.map((version) => [version.fingerprint, version]));
     const groups = specs.map((spec) => {
-      const version = versionByFingerprint.get(spec.fingerprint);
+      const candidate = versionByFingerprint.get(spec.fingerprint);
+      const version = candidate && linkedVersionsByPlan.has(`${spec.assessmentPlanId}|${Number(candidate.id)}`) ? candidate : undefined;
       return {
         fingerprint: spec.fingerprint, subject: spec.subject, unit: spec.unit, domain: spec.domain,
         assessmentIndex: spec.assessmentIndex, level: spec.level,
@@ -57,7 +63,12 @@ export async function GET(request: Request) {
       };
     });
     const detailFingerprint = params.get("fingerprint");
-    const detailVersion = detailFingerprint ? versionByFingerprint.get(detailFingerprint) : undefined;
+    const detailSpec = detailFingerprint ? specs.find((spec) => spec.fingerprint === detailFingerprint) : undefined;
+    const detailCandidate = detailFingerprint ? versionByFingerprint.get(detailFingerprint) : undefined;
+    const detailVersion = detailSpec && detailCandidate
+      && linkedVersionsByPlan.has(`${detailSpec.assessmentPlanId}|${Number(detailCandidate.id)}`)
+      ? detailCandidate
+      : undefined;
     const sentences = detailVersion ? await selectRows<{ id: number; sentence: string }>("comment_pool_sentences", {
       pool_version_id: eq(detailVersion.id), status: eq("approved"), order: "id.asc", limit: COMMENT_POOL_TARGET,
     }) : [];
@@ -73,6 +84,26 @@ export async function GET(request: Request) {
     }, { headers: { "Cache-Control": "private, no-store" } });
   } catch (error) {
     return dataError(error, "AI 평어 준비 상태를 불러오지 못했습니다.");
+  }
+}
+
+export async function DELETE() {
+  try {
+    const { user, classId } = await getDataScope();
+    const specs = await currentSpecs(user.id, classId);
+    const assessmentPlanIds = [...new Set(specs.map((spec) => spec.assessmentPlanId))];
+    if (!assessmentPlanIds.length) return Response.json({ resetGroups: 0, resetPlanItems: 0 });
+    const activeJob = (await selectRows<{ id: string }>("generation_jobs", {
+      owner_id: eq(user.id), class_id: eq(classId), job_type: eq("comment-pools"), status: "in.(queued,running)", limit: 1,
+    }))[0];
+    if (activeJob) return Response.json({ error: "AI 평어 제작이 끝난 뒤 초기화해 주세요." }, { status: 409 });
+    await supabaseRequest("assessment_plan_pool_links", {
+      method: "DELETE",
+      query: { owner_id: eq(user.id), class_id: eq(classId), assessment_plan_id: inValues(assessmentPlanIds) },
+    });
+    return Response.json({ resetGroups: specs.length, resetPlanItems: assessmentPlanIds.length });
+  } catch (error) {
+    return dataError(error, "AI 평어를 초기화하지 못했습니다.");
   }
 }
 
