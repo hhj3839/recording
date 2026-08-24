@@ -1,4 +1,5 @@
 import { waitUntil } from "@vercel/functions";
+import { createHash } from "node:crypto";
 import { eq, insertRows, selectRows, supabaseRequest, upsertRows } from "../../../db/supabase";
 import { buildCommentPoolSpecs, COMMENT_POOL_GENERATOR_VERSION, COMMENT_POOL_MINIMUM, COMMENT_POOL_TARGET, type PoolPlanItem } from "../../comment-pool-library";
 import { signCommentJob } from "../../comment-generation";
@@ -6,7 +7,7 @@ import { dataError, getDataScope } from "../../data-scope";
 
 type PoolVersionRow = {
   id: number; fingerprint: string; status: string; approved_count: number; target_count: number;
-  subject: string; domain: string; level: string; updated_at: string;
+  subject: string; unit: string; domain: string; level: string; criterion: string; updated_at: string;
 };
 
 const inValues = (values: Array<string | number>) => `in.(${values.join(",")})`;
@@ -16,6 +17,24 @@ async function currentSpecs(ownerId: string, classId: number) {
     owner_id: eq(ownerId), class_id: eq(classId), order: "sort_order.asc",
   });
   return buildCommentPoolSpecs(plan);
+}
+
+function versionMatchesSpec(version: PoolVersionRow, spec: ReturnType<typeof buildCommentPoolSpecs>[number]) {
+  return version.subject === spec.subject && version.unit === spec.unit && version.domain === spec.domain
+    && version.level === spec.level && version.criterion === spec.criterion;
+}
+
+async function linkedVersions(ownerId: string, classId: number, specs: ReturnType<typeof buildCommentPoolSpecs>) {
+  const assessmentPlanIds = [...new Set(specs.map((spec) => spec.assessmentPlanId))];
+  const links = assessmentPlanIds.length ? await selectRows<{ assessment_plan_id: number; pool_version_id: number }>("assessment_plan_pool_links", {
+    owner_id: eq(ownerId), class_id: eq(classId), assessment_plan_id: inValues(assessmentPlanIds), order: "id.desc",
+  }) : [];
+  const versionIds = [...new Set(links.map((link) => Number(link.pool_version_id)))];
+  const versions = versionIds.length ? await selectRows<PoolVersionRow>("comment_pool_versions", {
+    id: inValues(versionIds), order: "updated_at.desc",
+  }) : [];
+  const versionById = new Map(versions.map((version) => [Number(version.id), version]));
+  return { links, versions, versionById };
 }
 
 function queueRunner(request: Request, jobId: string) {
@@ -43,18 +62,13 @@ export async function GET(request: Request) {
       } }, { headers: { "Cache-Control": "private, no-store" } });
     }
     const specs = await currentSpecs(user.id, classId);
-    const assessmentPlanIds = [...new Set(specs.map((spec) => spec.assessmentPlanId))];
-    const links = assessmentPlanIds.length ? await selectRows<{ assessment_plan_id: number; pool_version_id: number }>("assessment_plan_pool_links", {
-      owner_id: eq(user.id), class_id: eq(classId), assessment_plan_id: inValues(assessmentPlanIds),
-    }) : [];
-    const linkedVersionsByPlan = new Set(links.map((link) => `${Number(link.assessment_plan_id)}|${Number(link.pool_version_id)}`));
-    const versions = specs.length ? await selectRows<PoolVersionRow>("comment_pool_versions", {
-      fingerprint: inValues(specs.map((spec) => spec.fingerprint)),
-    }) : [];
-    const versionByFingerprint = new Map(versions.map((version) => [version.fingerprint, version]));
+    const { links, versionById } = await linkedVersions(user.id, classId, specs);
+    const linkedVersionFor = (spec: (typeof specs)[number]) => links
+      .filter((link) => Number(link.assessment_plan_id) === spec.assessmentPlanId)
+      .map((link) => versionById.get(Number(link.pool_version_id)))
+      .find((version): version is PoolVersionRow => Boolean(version && versionMatchesSpec(version, spec)));
     const groups = specs.map((spec) => {
-      const candidate = versionByFingerprint.get(spec.fingerprint);
-      const version = candidate && linkedVersionsByPlan.has(`${spec.assessmentPlanId}|${Number(candidate.id)}`) ? candidate : undefined;
+      const version = linkedVersionFor(spec);
       return {
         fingerprint: spec.fingerprint, subject: spec.subject, unit: spec.unit, domain: spec.domain,
         assessmentIndex: spec.assessmentIndex, level: spec.level,
@@ -64,11 +78,7 @@ export async function GET(request: Request) {
     });
     const detailFingerprint = params.get("fingerprint");
     const detailSpec = detailFingerprint ? specs.find((spec) => spec.fingerprint === detailFingerprint) : undefined;
-    const detailCandidate = detailFingerprint ? versionByFingerprint.get(detailFingerprint) : undefined;
-    const detailVersion = detailSpec && detailCandidate
-      && linkedVersionsByPlan.has(`${detailSpec.assessmentPlanId}|${Number(detailCandidate.id)}`)
-      ? detailCandidate
-      : undefined;
+    const detailVersion = detailSpec ? linkedVersionFor(detailSpec) : undefined;
     const sentences = detailVersion ? await selectRows<{ id: number; sentence: string }>("comment_pool_sentences", {
       pool_version_id: eq(detailVersion.id), status: eq("approved"), order: "id.asc", limit: COMMENT_POOL_TARGET,
     }) : [];
@@ -111,7 +121,7 @@ export async function POST(request: Request) {
   try {
     const { user, classId } = await getDataScope();
     const body = await request.json().catch(() => ({})) as {
-      subject?: unknown; maxGroups?: unknown; labOnly?: unknown; targetFingerprints?: unknown; canonicalOnly?: unknown;
+      subject?: unknown; maxGroups?: unknown; labOnly?: unknown; targetFingerprints?: unknown; canonicalOnly?: unknown; refresh?: unknown;
     };
     const subject = typeof body.subject === "string" ? body.subject.trim() : "";
     if (!subject) return Response.json({ error: "AI 평어를 제작할 과목을 선택해 주세요." }, { status: 400 });
@@ -125,8 +135,12 @@ export async function POST(request: Request) {
     const targetFingerprints = Array.isArray(body.targetFingerprints)
       ? [...new Set(body.targetFingerprints.filter((value): value is string => typeof value === "string" && /^[a-f0-9]{64}$/.test(value)))]
       : [];
-    if (targetFingerprints.length && body.labOnly !== true) {
+    const refresh = body.refresh === true;
+    if (targetFingerprints.length && body.labOnly !== true && !refresh) {
       return Response.json({ error: "개별 문장 풀 지정은 실험실 제한 검증에서만 사용할 수 있습니다." }, { status: 403 });
+    }
+    if (refresh && targetFingerprints.length !== 1) {
+      return Response.json({ error: "새 버전으로 다시 제작할 문장 풀 한 개를 지정해야 합니다." }, { status: 400 });
     }
     const requestedMaxGroups = Number(body.maxGroups);
     const maxGroups = Number.isInteger(requestedMaxGroups) && requestedMaxGroups > 0
@@ -139,6 +153,36 @@ export async function POST(request: Request) {
     if (!specs.length) return Response.json({ error: "저장된 평가계획이 없습니다." }, { status: 400 });
     if (targetFingerprints.length !== 0 && specs.length !== targetFingerprints.length) {
       return Response.json({ error: "지정한 문장 풀 중 현재 평가계획과 일치하지 않는 항목이 있습니다." }, { status: 400 });
+    }
+    const currentLinked = await linkedVersions(user.id, classId, specs);
+    if (refresh) {
+      const spec = specs[0];
+      const previousPoolVersionIds = currentLinked.links
+        .filter((link) => Number(link.assessment_plan_id) === spec.assessmentPlanId)
+        .map((link) => currentLinked.versionById.get(Number(link.pool_version_id)))
+        .filter((version): version is PoolVersionRow => Boolean(version && versionMatchesSpec(version, spec)))
+        .map((version) => Number(version.id));
+      if (!previousPoolVersionIds.length) return Response.json({ error: "다시 제작할 기존 문장 풀을 찾을 수 없습니다." }, { status: 404 });
+      const refreshFingerprint = createHash("sha256")
+        .update(`${spec.fingerprint}|refresh|${user.id}|${classId}|${Date.now()}`)
+        .digest("hex");
+      const version = (await insertRows<PoolVersionRow>("comment_pool_versions", [{
+        fingerprint: refreshFingerprint, subject: spec.subject, unit: spec.unit, domain: spec.domain,
+        level: spec.level, criterion: spec.criterion, level_criteria: spec.levelCriteria,
+        canonical_sentence: spec.canonicalSentence, target_count: COMMENT_POOL_TARGET,
+        generator_version: `${COMMENT_POOL_GENERATOR_VERSION}-refresh`, created_by: user.id,
+        updated_at: new Date().toISOString(),
+      }]))[0];
+      const jobs = await insertRows<{ id: string }>("generation_jobs", [{
+        owner_id: user.id, owner_email: user.email, class_id: classId, job_type: "comment-pools",
+        status: "queued", batches: [{
+          spec, poolVersionId: Number(version.id), maxAttempts: 2, activateWhenReady: true,
+          previousPoolVersionIds,
+        }], current_batch: 0, total_batches: 1, total_items: 1, completed_items: 0,
+        failed_items: 0, error_message: "", created_at: new Date().toISOString(), updated_at: new Date().toISOString(),
+      }]);
+      queueRunner(request, jobs[0].id);
+      return Response.json({ jobId: jobs[0].id, subject, total: 1, maxAiCalls: 2, reused: 0, refresh: true }, { status: 202 });
     }
     const versions = await upsertRows<PoolVersionRow>("comment_pool_versions", specs.map((spec) => ({
       fingerprint: spec.fingerprint, subject: spec.subject, unit: spec.unit, domain: spec.domain,

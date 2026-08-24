@@ -831,6 +831,27 @@ function PlanManager({ plan, onChanged, current }: { plan: AssessmentPlan[]; onC
       setErrors([error instanceof Error ? error.message : "AI 평어 제작을 시작하지 못했습니다."]);
     } finally { setPoolBusy(false); }
   };
+  const refreshSelectedPool = async () => {
+    const selected = poolGroups.find((group) => group.fingerprint === selectedPoolFingerprint);
+    if (!selected || selected.approvedCount < 1 || poolBusy) return;
+    if (!window.confirm(`${selected.subject} · ${selected.domain} · ${selected.level} 문장 풀을 새 버전으로 다시 제작할까요?\n\n기존 승인 문장은 삭제하지 않고 보존합니다. 새 문장이 8개 이상 검수를 통과한 경우에만 현재 학급을 새 버전으로 전환하며, 최대 2회 AI API를 호출합니다.`)) return;
+    setPoolBusy(true);
+    setErrors([]);
+    try {
+      const response = await fetch("/api/comment-pools", {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          subject: selected.subject, targetFingerprints: [selected.fingerprint], maxGroups: 1, refresh: true,
+        }),
+      });
+      const result = await readApiJson<{ jobId?: string; total?: number }>(response, "선택한 AI 평어를 다시 제작하지 못했습니다.");
+      if (!response.ok || !result.jobId) throw new Error(result.error || "선택한 AI 평어를 다시 제작하지 못했습니다.");
+      setPoolJob({ id: result.jobId, status: "queued", completed: 0, total: Number(result.total ?? 1), failed: 0, error: "" });
+      setMessage("선택한 AI 평어의 새 버전 제작을 시작했습니다. 기존 버전은 새 문장 검수 완료 전까지 그대로 유지됩니다.");
+    } catch (error) {
+      setErrors([error instanceof Error ? error.message : "선택한 AI 평어를 다시 제작하지 못했습니다."]);
+    } finally { setPoolBusy(false); }
+  };
   const resetPoolLinks = async () => {
     if (!plan.length || poolBusy || poolSummary.usable === 0) return;
     if (!window.confirm(`현재 평가계획의 AI 평어를 초기화할까요?\n\n제작된 AI 평어 목록만 비워집니다. 학생에게 이미 저장된 교과평어와 평가계획·평가수준, 공유 승인 문장 원문은 유지됩니다.`)) return;
@@ -910,7 +931,7 @@ function PlanManager({ plan, onChanged, current }: { plan: AssessmentPlan[]; onC
           {poolJob && ["queued", "running"].includes(poolJob.status) && <span><b>{poolJob.completed}/{poolJob.total}</b> 제작 중</span>}
         </div>
         {!!poolGroups.length && <div className="ai-pool-browser">
-          <label><span>과목·영역·수준</span><select value={selectedPoolFingerprint} onChange={(event) => setSelectedPoolFingerprint(event.target.value)}>{poolGroups.map((group) => <option value={group.fingerprint} key={group.fingerprint}>{group.subject} · {group.domain} · {group.level} ({group.approvedCount}/{group.targetCount})</option>)}</select></label>
+          <div className="ai-pool-selection-row"><label><span>과목·영역·수준</span><select value={selectedPoolFingerprint} onChange={(event) => setSelectedPoolFingerprint(event.target.value)}>{poolGroups.map((group) => <option value={group.fingerprint} key={group.fingerprint}>{group.subject} · {group.domain} · {group.level} ({group.approvedCount}/{group.targetCount})</option>)}</select></label><button className="secondary" disabled={poolBusy || !poolGroups.find((group) => group.fingerprint === selectedPoolFingerprint)?.approvedCount || Boolean(poolJob && ["queued", "running"].includes(poolJob.status))} onClick={() => void refreshSelectedPool()}>선택 풀 새로 제작</button></div>
           <div className="ai-pool-sentence-list">{poolSentencesLoading ? <p className="empty-cell" role="status">선택한 AI 평어를 불러오는 중입니다.</p> : poolSentences.length ? poolSentences.map((row, index) => <p key={row.id}><b>{index + 1}</b><span>{row.sentence}</span></p>) : <p className="empty-cell">아직 제작된 승인 문장이 없습니다.</p>}</div>
         </div>}
       </>}

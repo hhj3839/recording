@@ -273,10 +273,26 @@ test("resets only the current assessment plan pool links", () => {
   assert.match(resetRoute, /owner_id: eq\(user\.id\), class_id: eq\(classId\), assessment_plan_id: inValues\(assessmentPlanIds\)/);
   assert.doesNotMatch(resetRoute, /comment_pool_versions["']/);
   assert.doesNotMatch(resetRoute, /comment_pool_sentences["']/);
-  assert.match(route, /linkedVersionsByPlan\.has\(`\$\{detailSpec\.assessmentPlanId\}\|\$\{Number\(detailCandidate\.id\)\}`\)/);
+  assert.match(route, /const detailVersion = detailSpec \? linkedVersionFor\(detailSpec\) : undefined/);
   assert.match(page, /AI 평어 제작[\s\S]*AI 평어 초기화/);
   assert.match(page, /학생에게 이미 저장된 교과평어와 평가계획·평가수준, 공유 승인 문장 원문은 유지됩니다/);
   assert.match(page, /fetch\("\/api\/comment-pools", \{ method: "DELETE" \}\)/);
+});
+
+test("rebuilds one pool as a separate version and switches only after validation", () => {
+  const route = readFileSync("app/api/comment-pools/route.ts", "utf8");
+  const runner = readFileSync("app/api/comment-pools/run/route.ts", "utf8");
+  const page = readFileSync("app/page.tsx", "utf8");
+  assert.match(route, /refresh && targetFingerprints\.length !== 1/);
+  assert.match(route, /insertRows<PoolVersionRow>\("comment_pool_versions"/);
+  assert.match(route, /activateWhenReady: true/);
+  assert.match(route, /previousPoolVersionIds/);
+  assert.match(runner, /batch\.activateWhenReady && approved\.length >= COMMENT_POOL_MINIMUM/);
+  assert.match(runner, /upsertRows\("assessment_plan_pool_links"/);
+  assert.match(runner, /method: "DELETE"[\s\S]*previousPoolVersionIds/);
+  assert.match(runner, /batch\.activateWhenReady \? approved\.length < COMMENT_POOL_MINIMUM/);
+  assert.match(page, /기존 승인 문장은 삭제하지 않고 보존합니다/);
+  assert.match(page, /targetFingerprints: \[selected\.fingerprint\], maxGroups: 1, refresh: true/);
 });
 
 test("allows only an explicitly bounded lab canonical-pool recovery", () => {
