@@ -4,6 +4,7 @@ import {
   criterionSemanticIssues,
   evidenceBlockingIssues,
   levelAppropriatenessIssues,
+  positiveGrowthCriterion,
   validateGeneratedCommentPart,
 } from "../app/comment-generation-policy.ts";
 
@@ -48,7 +49,8 @@ const levels = new Map<string, string>(classData.levels.map((item: { studentId: 
 const rows = generatedData.parts.map((part: { studentId: number; subject: string; assessmentIndex: number; sentence: string }) => {
   const item = plans.get(part.subject)?.[part.assessmentIndex];
   const level = levels.get(`${part.studentId}|${part.subject}|${part.assessmentIndex}`);
-  const criterion = level === "상" ? item?.high : level === "중" ? item?.middle : level === "하" ? item?.low : "";
+  const rawCriterion = level === "상" ? item?.high : level === "중" ? item?.middle : level === "하" ? item?.low : "";
+  const criterion = positiveGrowthCriterion(level, rawCriterion ?? "");
   const levelCriteria = { high: item?.high ?? "", middle: item?.middle ?? "", low: item?.low ?? "" };
   const issues = [
     ...(!validateGeneratedCommentPart(part.sentence, criterion).valid ? ["형식·명사형"] : []),
