@@ -261,6 +261,24 @@ test("limits comment-pool validation to one subject and a lab account", () => {
   assert.match(page, /body: JSON\.stringify\(\{ subject \}\)/);
 });
 
+test("resets only the current assessment plan pool links", () => {
+  const route = readFileSync("app/api/comment-pools/route.ts", "utf8");
+  const page = readFileSync("app/page.tsx", "utf8");
+  const resetStart = route.indexOf("export async function DELETE");
+  const resetEnd = route.indexOf("export async function POST", resetStart);
+  const resetRoute = route.slice(resetStart, resetEnd);
+  assert.ok(resetStart >= 0 && resetEnd > resetStart);
+  assert.match(resetRoute, /getDataScope\(\)/);
+  assert.match(resetRoute, /assessment_plan_pool_links/);
+  assert.match(resetRoute, /owner_id: eq\(user\.id\), class_id: eq\(classId\), assessment_plan_id: inValues\(assessmentPlanIds\)/);
+  assert.doesNotMatch(resetRoute, /comment_pool_versions["']/);
+  assert.doesNotMatch(resetRoute, /comment_pool_sentences["']/);
+  assert.match(route, /linkedVersionsByPlan\.has\(`\$\{detailSpec\.assessmentPlanId\}\|\$\{Number\(detailCandidate\.id\)\}`\)/);
+  assert.match(page, /AI 평어 제작[\s\S]*AI 평어 초기화/);
+  assert.match(page, /학생에게 이미 저장된 교과평어와 평가계획·평가수준, 공유 승인 문장 원문은 유지됩니다/);
+  assert.match(page, /fetch\("\/api\/comment-pools", \{ method: "DELETE" \}\)/);
+});
+
 test("allows only an explicitly bounded lab canonical-pool recovery", () => {
   const route = readFileSync("app/api/comment-pools/route.ts", "utf8");
   const runner = readFileSync("app/api/comment-pools/run/route.ts", "utf8");
