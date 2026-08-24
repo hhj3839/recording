@@ -30,6 +30,8 @@ const commentPoolSystemPrompt = `# 역할
 - 후보 전체를 하나의 문장 집합으로 보고 수행 대상·활동 장면·과정·결과 중 근거가 있는 요소의 제시 순서를 분산한다.
 - 같은 첫 15글자와 같은 주어·목적어·서술어 배열을 반복하지 않는다.
 - 문장마다 시작 표현과 문장 골격을 달리하되 핵심 성취와 수준은 동일하게 유지한다.
+- 평가기준이 구체적이면 핵심 수행 요소를 생략해 짧게 줄이지 말고, 실제 관찰 장면과 수행 결과가 함께 드러나는 50~80자 내외의 문장으로 작성한다.
+- 평가기준에 여러 수행 요소가 있으면 각 후보에도 그 요소를 빠짐없이 자연스럽게 연결한다.
 - 이미 승인된 문장과 사실상 같은 문장은 작성하지 않는다.
 - 다양성을 위해 어색한 문장이나 새로운 사실을 만들지 않는다.
 
@@ -117,7 +119,7 @@ export async function POST(request: Request) {
       approved.push(...canonical);
     }
     const maxAttempts = Number.isInteger(batch.maxAttempts) ? Math.max(0, Math.min(2, Number(batch.maxAttempts))) : 2;
-    for (let attempt = 0; attempt < maxAttempts && !commentPoolQuality(approved).reusable; attempt += 1) {
+    for (let attempt = 0; attempt < maxAttempts && !commentPoolQuality(approved, batch.spec.canonicalSentence).reusable; attempt += 1) {
       const requestCount = attempt === 0 ? 15 : 10;
       const generated = await generateCandidates(batch.spec, approved, requestCount);
       const selected = approvePoolCandidates(generated.candidates, batch.spec, approved).approved
@@ -131,7 +133,7 @@ export async function POST(request: Request) {
       }
       await recordAiUsage({ ownerId: job.owner_id, ownerEmail: job.owner_email, classId: Number(job.class_id), feature: `comment-pool-attempt-${attempt + 1}`, ...generated.usage });
     }
-    const quality = commentPoolQuality(approved);
+    const quality = commentPoolQuality(approved, batch.spec.canonicalSentence);
     const status = quality.reusable ? "ready" : approved.length ? "usable" : "failed";
     await updateRows("comment_pool_versions", { id: eq(batch.poolVersionId) }, {
       status, approved_count: approved.length, updated_at: new Date().toISOString(),

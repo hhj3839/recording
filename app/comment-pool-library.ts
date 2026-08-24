@@ -67,7 +67,7 @@ export function poolSentenceOpening(value: string) {
   return compactPoolSentence(value).slice(0, 15);
 }
 
-export function commentPoolQuality(sentences: string[]) {
+export function commentPoolQuality(sentences: string[], referenceSentence = "") {
   const normalized = sentences.map(normalizedPoolSentence).filter(Boolean);
   const unique = [...new Set(normalized)];
   const pairSimilarities: number[] = [];
@@ -89,12 +89,18 @@ export function commentPoolQuality(sentences: string[]) {
   const averageNearestSimilarity = nearest.length
     ? nearest.reduce((sum, value) => sum + value, 0) / nearest.length
     : 0;
+  const averageLength = normalized.length
+    ? normalized.reduce((sum, sentence) => sum + sentence.length, 0) / normalized.length
+    : 0;
+  const referenceLength = normalizedPoolSentence(referenceSentence).length;
+  const minimumAverageLength = referenceLength >= 50 ? Math.max(45, referenceLength * 0.8) : 0;
   const issues = [
     ...(unique.length < COMMENT_POOL_MINIMUM ? ["승인 문장 수 부족"] : []),
     ...(unique.length !== normalized.length ? ["완전히 같은 승인 문장 중복"] : []),
     ...(openingRatio < COMMENT_POOL_REUSE_MINIMUM_OPENING_RATIO ? ["문장 첫머리 다양성 부족"] : []),
     ...(clusterRatio > COMMENT_POOL_REUSE_MAX_CLUSTER_RATIO ? ["유사 문장 군집 과다"] : []),
     ...(averageNearestSimilarity > COMMENT_POOL_REUSE_MAX_NEAREST_SIMILARITY ? ["문장 구조 다양성 부족"] : []),
+    ...(minimumAverageLength > 0 && averageLength < minimumAverageLength ? ["평가기준 정보량 보존 부족"] : []),
   ];
   return {
     reusable: issues.length === 0,
@@ -107,6 +113,9 @@ export function commentPoolQuality(sentences: string[]) {
     totalPairs: comparablePairs.length,
     clusterRatio,
     averageNearestSimilarity,
+    averageLength,
+    referenceLength,
+    minimumAverageLength,
   };
 }
 
