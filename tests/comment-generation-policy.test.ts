@@ -12,7 +12,7 @@ import { commentAreaOverlapReasons } from "../app/comment-area-diversity.ts";
 import { assignApprovedCommentPools, assignUniquePoolCandidates, buildApprovedCommentPool, buildCanonicalBaselinePart, buildCommentPoolGroups, buildPublicCommentPoolRequests, commentPoolCandidateCount, spreadCandidatesByOpening } from "../app/comment-pool-generation.ts";
 import { assembleRotatedComment } from "../app/comment-assembly.ts";
 import { readApiJson } from "../app/api-response.ts";
-import { approvePoolCandidates, buildCommentPoolSpecs, COMMENT_POOL_TARGET, repairLegacyPoolCandidate } from "../app/comment-pool-library.ts";
+import { approvePoolCandidates, buildCommentPoolSpecs, COMMENT_POOL_OPENING_LIMIT, COMMENT_POOL_SIMILARITY_LIMIT, COMMENT_POOL_TARGET, poolSentenceOpening, poolSentenceSimilarity, repairLegacyPoolCandidate } from "../app/comment-pool-library.ts";
 
 const poolPlan = (overrides: Partial<{ id: number; subject: string; unit: string; goal: string; domain: string; perspective: string; high: string; middle: string; low: string }> = {}) => ({
   id: 1, subject: "사회", unit: "우리 고장", goal: "지역의 모습을 이해한다.", domain: "지리 인식",
@@ -65,6 +65,16 @@ test("approves validated pool candidates up to the fixed twenty sentence target"
   const approved = approvePoolCandidates(Array.from({ length: 25 }, (_, index) => index ? `${candidate.slice(0, -1)} ${index}함.` : candidate), spec);
   assert.ok(approved.approved.length <= COMMENT_POOL_TARGET);
   assert.ok(approved.approved.includes(candidate));
+});
+
+test("measures near-identical pool sentences and groups their openings", () => {
+  const first = "지역 자료를 살펴 지역의 특징을 정확하게 설명함.";
+  const nearDuplicate = "지역 자료를 살펴, 지역의 특징을 정확하게 설명함.";
+  const distinct = "여러 자료에서 찾은 내용을 바탕으로 지역의 특징을 설명함.";
+  assert.ok(poolSentenceSimilarity(first, nearDuplicate) >= COMMENT_POOL_SIMILARITY_LIMIT);
+  assert.ok(poolSentenceSimilarity(first, distinct) < COMMENT_POOL_SIMILARITY_LIMIT);
+  assert.equal(poolSentenceOpening(first), poolSentenceOpening(nearDuplicate));
+  assert.equal(COMMENT_POOL_OPENING_LIMIT, 7);
 });
 
 test("uses the same low-cost model for the initial request and retry", () => {

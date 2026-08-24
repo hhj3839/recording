@@ -554,6 +554,8 @@ function PlanManager({ plan, onChanged, current }: { plan: AssessmentPlan[]; onC
   const [poolSummary, setPoolSummary] = useState({ total: 0, ready: 0, usable: 0, needsGeneration: 0 });
   const [selectedPoolFingerprint, setSelectedPoolFingerprint] = useState("");
   const [poolSentences, setPoolSentences] = useState<Array<{ id: number; sentence: string }>>([]);
+  const [poolSentencesLoading, setPoolSentencesLoading] = useState(false);
+  const poolSentenceRequestRef = useRef(0);
   const [poolBusy, setPoolBusy] = useState(false);
   const [poolJob, setPoolJob] = useState<{ id: string; status: string; completed: number; total: number; failed: number; error: string } | null>(null);
   const columns: Array<[keyof AssessmentPlan, string]> = [
@@ -784,15 +786,24 @@ function PlanManager({ plan, onChanged, current }: { plan: AssessmentPlan[]; onC
     await loadSharedPlans();
   };
   const loadPoolStatus = useCallback(async (fingerprint = "") => {
-    const response = await fetch(`/api/comment-pools${fingerprint ? `?fingerprint=${encodeURIComponent(fingerprint)}` : ""}`, { cache: "no-store" });
-    const result = await readApiJson<{ groups?: CommentPoolGroupView[]; summary?: typeof poolSummary; sentences?: Array<{ id: number; sentence: string }> }>(response, "AI 평어 상태를 불러오지 못했습니다.");
-    if (!response.ok) throw new Error(result.error || "AI 평어 상태를 불러오지 못했습니다.");
-    if (result.groups) {
-      setPoolGroups(result.groups);
-      setPoolSummary(result.summary ?? { total: 0, ready: 0, usable: 0, needsGeneration: 0 });
-      if (result.groups[0]) setSelectedPoolFingerprint((current) => current || result.groups![0].fingerprint);
+    const requestId = fingerprint ? ++poolSentenceRequestRef.current : 0;
+    if (fingerprint) {
+      setPoolSentences([]);
+      setPoolSentencesLoading(true);
     }
-    if (result.sentences) setPoolSentences(result.sentences);
+    try {
+      const response = await fetch(`/api/comment-pools${fingerprint ? `?fingerprint=${encodeURIComponent(fingerprint)}` : ""}`, { cache: "no-store" });
+      const result = await readApiJson<{ groups?: CommentPoolGroupView[]; summary?: typeof poolSummary; sentences?: Array<{ id: number; sentence: string }> }>(response, "AI 평어 상태를 불러오지 못했습니다.");
+      if (!response.ok) throw new Error(result.error || "AI 평어 상태를 불러오지 못했습니다.");
+      if (result.groups) {
+        setPoolGroups(result.groups);
+        setPoolSummary(result.summary ?? { total: 0, ready: 0, usable: 0, needsGeneration: 0 });
+        if (result.groups[0]) setSelectedPoolFingerprint((current) => current || result.groups![0].fingerprint);
+      }
+      if (result.sentences && (!fingerprint || requestId === poolSentenceRequestRef.current)) setPoolSentences(result.sentences);
+    } finally {
+      if (fingerprint && requestId === poolSentenceRequestRef.current) setPoolSentencesLoading(false);
+    }
   }, []);
   const startPoolProduction = async () => {
     if (!plan.length || poolBusy) return;
@@ -900,7 +911,7 @@ function PlanManager({ plan, onChanged, current }: { plan: AssessmentPlan[]; onC
         </div>
         {!!poolGroups.length && <div className="ai-pool-browser">
           <label><span>과목·영역·수준</span><select value={selectedPoolFingerprint} onChange={(event) => setSelectedPoolFingerprint(event.target.value)}>{poolGroups.map((group) => <option value={group.fingerprint} key={group.fingerprint}>{group.subject} · {group.domain} · {group.level} ({group.approvedCount}/{group.targetCount})</option>)}</select></label>
-          <div className="ai-pool-sentence-list">{poolSentences.length ? poolSentences.map((row, index) => <p key={row.id}><b>{index + 1}</b><span>{row.sentence}</span></p>) : <p className="empty-cell">아직 제작된 승인 문장이 없습니다.</p>}</div>
+          <div className="ai-pool-sentence-list">{poolSentencesLoading ? <p className="empty-cell" role="status">선택한 AI 평어를 불러오는 중입니다.</p> : poolSentences.length ? poolSentences.map((row, index) => <p key={row.id}><b>{index + 1}</b><span>{row.sentence}</span></p>) : <p className="empty-cell">아직 제작된 승인 문장이 없습니다.</p>}</div>
         </div>}
       </>}
     </section>}
