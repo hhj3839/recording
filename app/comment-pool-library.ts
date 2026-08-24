@@ -1,9 +1,12 @@
 import { createHash } from "node:crypto";
 import { buildCanonicalCommentSentence, criterionSemanticIssues, evidenceBlockingIssues, evidenceGroundingWarnings, levelAppropriatenessIssues, positiveGrowthCriterion, repairSafeNominalEnding, validateGeneratedCommentPart } from "./comment-generation-policy.ts";
 
-export const COMMENT_POOL_TARGET = 20;
-export const COMMENT_POOL_SIMILARITY_LIMIT = 0.92;
-export const COMMENT_POOL_OPENING_LIMIT = Math.ceil(COMMENT_POOL_TARGET / 3);
+export const COMMENT_POOL_TARGET = 12;
+export const COMMENT_POOL_MINIMUM = 8;
+export const COMMENT_POOL_SIMILARITY_LIMIT = 0.9;
+export const COMMENT_POOL_CLUSTER_THRESHOLD = 0.75;
+export const COMMENT_POOL_CLUSTER_LIMIT = 2;
+export const COMMENT_POOL_OPENING_LIMIT = 2;
 export const COMMENT_POOL_GENERATOR_VERSION = "pool-v1";
 export type PoolLevel = "상" | "중" | "하";
 
@@ -146,12 +149,15 @@ export function approvePoolCandidates(candidates: string[], spec: CommentPoolSpe
       ...candidate,
       opening: poolSentenceOpening(candidate.text),
       similarity: references.reduce((highest, reference) => Math.max(highest, poolSentenceSimilarity(candidate.text, reference)), 0),
+      clusterSize: references.filter((reference) => poolSentenceSimilarity(candidate.text, reference) >= COMMENT_POOL_CLUSTER_THRESHOLD).length,
     })).sort((left, right) =>
-      left.similarity - right.similarity
+      left.clusterSize - right.clusterSize
       || (openingCounts.get(left.opening) ?? 0) - (openingCounts.get(right.opening) ?? 0)
+      || left.similarity - right.similarity
       || left.index - right.index);
     const selected = ranked.find((candidate) =>
       candidate.similarity < COMMENT_POOL_SIMILARITY_LIMIT
+      && candidate.clusterSize < COMMENT_POOL_CLUSTER_LIMIT
       && (openingCounts.get(candidate.opening) ?? 0) < COMMENT_POOL_OPENING_LIMIT);
     if (!selected) break;
     approved.push(selected.text);

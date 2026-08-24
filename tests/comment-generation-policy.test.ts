@@ -12,7 +12,7 @@ import { commentAreaOverlapReasons } from "../app/comment-area-diversity.ts";
 import { assignApprovedCommentPools, assignUniquePoolCandidates, buildApprovedCommentPool, buildCanonicalBaselinePart, buildCommentPoolGroups, buildPublicCommentPoolRequests, commentPoolCandidateCount, spreadCandidatesByOpening } from "../app/comment-pool-generation.ts";
 import { assembleRotatedComment } from "../app/comment-assembly.ts";
 import { readApiJson } from "../app/api-response.ts";
-import { approvePoolCandidates, buildCommentPoolSpecs, COMMENT_POOL_OPENING_LIMIT, COMMENT_POOL_SIMILARITY_LIMIT, COMMENT_POOL_TARGET, poolSentenceOpening, poolSentenceSimilarity, repairLegacyPoolCandidate } from "../app/comment-pool-library.ts";
+import { approvePoolCandidates, buildCommentPoolSpecs, COMMENT_POOL_CLUSTER_LIMIT, COMMENT_POOL_CLUSTER_THRESHOLD, COMMENT_POOL_MINIMUM, COMMENT_POOL_OPENING_LIMIT, COMMENT_POOL_SIMILARITY_LIMIT, COMMENT_POOL_TARGET, poolSentenceOpening, poolSentenceSimilarity, repairLegacyPoolCandidate } from "../app/comment-pool-library.ts";
 
 const poolPlan = (overrides: Partial<{ id: number; subject: string; unit: string; goal: string; domain: string; perspective: string; high: string; middle: string; low: string }> = {}) => ({
   id: 1, subject: "사회", unit: "우리 고장", goal: "지역의 모습을 이해한다.", domain: "지리 인식",
@@ -59,7 +59,7 @@ test("repairs unsupported generic modifiers only when the complete sentence reva
   }
 });
 
-test("approves validated pool candidates up to the fixed twenty sentence target", () => {
+test("approves validated pool candidates up to the natural twelve sentence target", () => {
   const spec = buildCommentPoolSpecs([poolPlan()])[1];
   const candidate = spec.canonicalSentence;
   const approved = approvePoolCandidates(Array.from({ length: 25 }, (_, index) => index ? `${candidate.slice(0, -1)} ${index}함.` : candidate), spec);
@@ -74,7 +74,11 @@ test("measures near-identical pool sentences and groups their openings", () => {
   assert.ok(poolSentenceSimilarity(first, nearDuplicate) >= COMMENT_POOL_SIMILARITY_LIMIT);
   assert.ok(poolSentenceSimilarity(first, distinct) < COMMENT_POOL_SIMILARITY_LIMIT);
   assert.equal(poolSentenceOpening(first), poolSentenceOpening(nearDuplicate));
-  assert.equal(COMMENT_POOL_OPENING_LIMIT, 7);
+  assert.equal(COMMENT_POOL_TARGET, 12);
+  assert.equal(COMMENT_POOL_MINIMUM, 8);
+  assert.equal(COMMENT_POOL_CLUSTER_THRESHOLD, 0.75);
+  assert.equal(COMMENT_POOL_CLUSTER_LIMIT, 2);
+  assert.equal(COMMENT_POOL_OPENING_LIMIT, 2);
 });
 
 test("uses the same low-cost model for the initial request and retry", () => {

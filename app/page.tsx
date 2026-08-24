@@ -810,8 +810,8 @@ function PlanManager({ plan, onChanged, current }: { plan: AssessmentPlan[]; onC
     const subject = poolGroups.find((group) => group.fingerprint === selectedPoolFingerprint)?.subject
       ?? plan[0]?.subject ?? "";
     const subjectGroups = poolGroups.filter((group) => group.subject === subject);
-    const subjectPending = subjectGroups.filter((group) => group.approvedCount < group.targetCount).length;
-    if (!subject || !window.confirm(`${subject} 평가영역·수준별 승인 문장 20개를 목표로 AI 평어를 제작합니다.\n현재 제작 또는 보완이 필요한 묶음은 ${subjectPending}개이며 최대 ${subjectPending * 2}회 호출합니다.\n\nAI API를 사용해 제작을 시작할까요?`)) return;
+    const subjectPending = subjectGroups.filter((group) => group.approvedCount < Math.min(8, group.targetCount)).length;
+    if (!subject || !window.confirm(`${subject} 평가영역·수준별 자연스러운 승인 문장 8~12개를 목표로 AI 평어를 제작합니다.\n현재 제작 또는 보완이 필요한 묶음은 ${subjectPending}개이며 최대 ${subjectPending * 2}회 호출합니다.\n\nAI API를 사용해 제작을 시작할까요?`)) return;
     setPoolBusy(true);
     setErrors([]);
     try {
@@ -901,7 +901,7 @@ function PlanManager({ plan, onChanged, current }: { plan: AssessmentPlan[]; onC
       <button role="tab" aria-selected={planSection === "ai"} className={planSection === "ai" ? "active" : ""} onClick={() => setPlanSection("ai")}>AI 평어{poolSummary.needsGeneration > 0 ? " · 제작 필요" : ""}</button>
     </div>
     {planSection === "ai" && <section className="ai-comment-pool-panel">
-      <div className="section-heading"><div><p className="eyebrow">평가계획용 문장 풀</p><h2>AI 평어</h2><p>학생에게 배정하기 전, 평가영역·수준별 평어를 최대 20개씩 제작하고 검수합니다.</p></div><div className="ai-pool-heading-actions"><button disabled={poolBusy || !plan.length || poolSummary.needsGeneration === 0 || Boolean(poolJob && ["queued", "running"].includes(poolJob.status))} onClick={() => void startPoolProduction()}>{poolJob && ["queued", "running"].includes(poolJob.status) ? "AI 평어 제작 중…" : poolSummary.needsGeneration ? "AI 평어 제작" : "AI 평어 준비 완료"}</button><button className="danger-text" disabled={poolBusy || !plan.length || poolSummary.usable === 0 || Boolean(poolJob && ["queued", "running"].includes(poolJob.status))} onClick={() => void resetPoolLinks()}>AI 평어 초기화</button></div></div>
+      <div className="section-heading"><div><p className="eyebrow">평가계획용 문장 풀</p><h2>AI 평어</h2><p>학생에게 배정하기 전, 평가영역·수준별로 자연스러운 평어 8~12개를 제작하고 검수합니다.</p></div><div className="ai-pool-heading-actions"><button disabled={poolBusy || !plan.length || poolSummary.needsGeneration === 0 || Boolean(poolJob && ["queued", "running"].includes(poolJob.status))} onClick={() => void startPoolProduction()}>{poolJob && ["queued", "running"].includes(poolJob.status) ? "AI 평어 제작 중…" : poolSummary.needsGeneration ? "AI 평어 제작" : "AI 평어 준비 완료"}</button><button className="danger-text" disabled={poolBusy || !plan.length || poolSummary.usable === 0 || Boolean(poolJob && ["queued", "running"].includes(poolJob.status))} onClick={() => void resetPoolLinks()}>AI 평어 초기화</button></div></div>
       {!plan.length ? <p className="empty-cell">평가계획을 먼저 저장해 주세요.</p> : <>
         <div className="ai-pool-summary">
           <span><b>{poolSummary.total}</b>개 영역·수준</span>
