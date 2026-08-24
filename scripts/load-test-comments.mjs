@@ -27,7 +27,10 @@ function hasNaturalNominalEnding(sentence) {
   const last = normalized.at(-1);
   if (!last) return false;
   const code = last.charCodeAt(0);
-  return code >= 0xac00 && code <= 0xd7a3 && (code - 0xac00) % 28 === 16;
+  if (code < 0xac00 || code > 0xd7a3) return false;
+  const finalConsonant = (code - 0xac00) % 28;
+  // ㅁ뿐 아니라 `앎·만듦`처럼 ㄹ+ㅁ으로 명사형이 되는 활용도 정상 종결임.
+  return finalConsonant === 10 || finalConsonant === 16;
 }
 
 function estimateAreaBatches(scores) {
@@ -42,6 +45,8 @@ function estimateAreaBatches(scores) {
 function validateComment(comment, expectedSentenceCount) {
   const sentences = comment.trim().split(/(?<=\.)\s+/).map((item) => item.trim()).filter(Boolean);
   const lengths = sentences.map((sentence) => Array.from(sentence).length);
+  const nonNominalEndingTails = sentences.filter((sentence) => !hasNaturalNominalEnding(sentence))
+    .map((sentence) => Array.from(sentence).slice(-16).join(""));
   const awkwardEndings = sentences.filter((sentence) =>
     /(?:고|며|아|어|감|함)\s*함\.$/.test(sentence)
     || /(?:보임|됨)함\.$/.test(sentence)
@@ -60,6 +65,7 @@ function validateComment(comment, expectedSentenceCount) {
     sentenceCount: sentences.length,
     lengths,
     awkwardEndings,
+    nonNominalEndingTails,
   };
 }
 

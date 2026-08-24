@@ -72,6 +72,7 @@ test("comment jobs assign prepared approved pools without a paid AI call", () =>
 
 test("comment prompt uses adaptive lengths and natural nominal endings", () => {
   const source = readFileSync("app/comment-generation.ts", "utf8");
+  const audit = readFileSync("scripts/load-test-comments.mjs", "utf8");
   const page = readFileSync("app/page.tsx", "utf8");
   assert.match(source, /근거 사전의 lengthTarget을 목표/);
   assert.match(source, /평가기준의 정보량보다 길이를 우선하지 않는다/);
@@ -79,6 +80,7 @@ test("comment prompt uses adaptive lengths and natural nominal endings", () => {
   assert.match(source, /‘문제를 해결하는 능력이 뛰어남\.’, ‘학습 내용을 적용하는 태도가 돋보임\.’, ‘꾸준히 성장하는 모습이 인상적임\.’/);
   assert.match(source, /문자 그대로 ‘함\.’만 뜻하지 않으며 함·음·임 계열/);
   assert.match(source, /‘하였다\.’, ‘합니다\.’, ‘입니다\.’, ‘할 수 있다\.’, ‘모습이다\.’ 같은 서술형 종결은 절대 사용하지 않는다/);
+  assert.match(audit, /finalConsonant === 10 \|\| finalConsonant === 16/);
   assert.doesNotMatch(page, /명사형 종결 확인/);
   assert.doesNotMatch(page, /text && !validation\.endingsOk/);
 });
@@ -344,6 +346,11 @@ test("uses the current 500 to 600 byte behavior policy in load-test reporting", 
   assert.match(runner, /bytes >= 500 && bytes <= 600/);
   assert.doesNotMatch(runner, /bytes >= 470 && bytes <= 580/);
   assert.match(runner, /reviewable: currentPolicyPass/);
+  assert.match(runner, /mode === "audit"/);
+  const auditStart = runner.indexOf('if (mode === "audit")');
+  const auditEnd = runner.indexOf('if (["preflight"', auditStart);
+  assert.ok(auditStart >= 0 && auditEnd > auditStart);
+  assert.doesNotMatch(runner.slice(auditStart, auditEnd), /method:\s*["'](?:POST|PUT|PATCH|DELETE)/);
 });
 
 test("keeps the full stored-part audit read-only and free of sentence text output", () => {

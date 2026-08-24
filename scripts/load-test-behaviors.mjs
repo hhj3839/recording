@@ -78,6 +78,22 @@ const request = async (route, options = {}) => {
   return data;
 };
 
+if (mode === "audit") {
+  const [classData, behaviorData, usage] = await Promise.all([
+    request("/api/class-data"), request("/api/student-behaviors"), request("/api/usage"),
+  ]);
+  const activeIds = new Set(classData.students.map((student) => Number(student.id)));
+  const current = behaviorData.behaviors.filter((item) => activeIds.has(Number(item.studentId)) && String(item.behavior || "").trim());
+  const validations = current.map((item) => ({ studentId: Number(item.studentId), ...validateBehavior(item.behavior) }));
+  process.stdout.write(`${JSON.stringify({
+    mode: "audit", readOnly: true, activeStudents: activeIds.size, savedBehaviors: current.length,
+    strictCount: validations.filter((item) => item.strict).length,
+    strictSuccessRate: activeIds.size ? Math.round(validations.filter((item) => item.strict).length / activeIds.size * 10000) / 100 : 0,
+    invalidSamples: validations.filter((item) => !item.strict), monthlyUsage: usage.monthly,
+  })}\n`);
+  process.exit(0);
+}
+
 if (["preflight", "seed", "sample", "full"].includes(mode)) {
   const [classData, behaviorData, usage] = await Promise.all([
     request("/api/class-data"), request("/api/student-behaviors"), request("/api/usage"),
