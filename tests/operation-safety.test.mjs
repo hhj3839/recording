@@ -295,6 +295,17 @@ test("keeps isolated pool refresh safe without exposing a teacher-facing selecti
   assert.doesNotMatch(page, /targetFingerprints: \[selected\.fingerprint\], maxGroups: 1, refresh: true/);
 });
 
+test("shows resumable pool production progress beside the ready count", () => {
+  const page = readFileSync("app/page.tsx", "utf8");
+  const route = readFileSync("app/api/comment-pools/route.ts", "utf8");
+  assert.match(page, /ready-count[\s\S]*준비 완료[\s\S]*pool-progress/);
+  assert.match(page, /selectedSubjectPending[\s\S]*개 이어서 제작/);
+  assert.match(page, /제작·검수 중/);
+  assert.doesNotMatch(page, /개 제작·보완 필요/);
+  assert.match(route, /activeJob: activeJob \? publicJob\(activeJob\) : null/);
+  assert.match(route, /current: current \? \{ subject:/);
+});
+
 test("allows only an explicitly bounded lab canonical-pool recovery", () => {
   const route = readFileSync("app/api/comment-pools/route.ts", "utf8");
   const runner = readFileSync("app/api/comment-pools/run/route.ts", "utf8");

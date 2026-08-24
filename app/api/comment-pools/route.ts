@@ -57,6 +57,16 @@ function queueRunner(request: Request, jobId: string) {
   }).catch(() => undefined));
 }
 
+function publicJob(job: Record<string, unknown>) {
+  const batches = Array.isArray(job.batches) ? job.batches as Array<{ spec?: { subject?: string; domain?: string; level?: string } }> : [];
+  const current = batches[Math.max(0, Number(job.current_batch) || 0)]?.spec;
+  return {
+    id: String(job.id), status: String(job.status), completed: Number(job.completed_items), total: Number(job.total_items),
+    failed: Number(job.failed_items), error: String(job.error_message ?? ""),
+    current: current ? { subject: String(current.subject ?? ""), domain: String(current.domain ?? ""), level: String(current.level ?? "") } : null,
+  };
+}
+
 export async function GET(request: Request) {
   try {
     const { user, classId } = await getDataScope();
@@ -68,10 +78,7 @@ export async function GET(request: Request) {
       }))[0];
       if (!job) return Response.json({ error: "AI 평어 제작 작업을 찾을 수 없습니다." }, { status: 404 });
       if (["queued", "running"].includes(String(job.status))) queueRunner(request, jobId);
-      return Response.json({ job: {
-        id: job.id, status: job.status, completed: Number(job.completed_items), total: Number(job.total_items),
-        failed: Number(job.failed_items), error: String(job.error_message ?? ""),
-      } }, { headers: { "Cache-Control": "private, no-store" } });
+      return Response.json({ job: publicJob(job) }, { headers: { "Cache-Control": "private, no-store" } });
     }
     const specs = await currentSpecs(user.id, classId);
     const { links, versionById } = await linkedVersions(user.id, classId, specs);
@@ -97,6 +104,10 @@ export async function GET(request: Request) {
     const sentences = detailVersion ? await selectRows<{ id: number; sentence: string }>("comment_pool_sentences", {
       pool_version_id: eq(detailVersion.id), status: eq("approved"), order: "id.asc", limit: COMMENT_POOL_TARGET,
     }) : [];
+    const activeJob = (await selectRows<Record<string, unknown>>("generation_jobs", {
+      owner_id: eq(user.id), class_id: eq(classId), job_type: eq("comment-pools"), status: "in.(queued,running)", order: "updated_at.desc", limit: 1,
+    }))[0];
+    if (activeJob) queueRunner(request, String(activeJob.id));
     return Response.json({
       groups,
       summary: {
@@ -105,6 +116,7 @@ export async function GET(request: Request) {
         usable: groups.filter((group) => group.approvedCount > 0).length,
         needsGeneration: groups.filter((group) => group.status !== "ready").length,
       },
+      activeJob: activeJob ? publicJob(activeJob) : null,
       sentences: sentences.map((row) => ({ id: Number(row.id), sentence: row.sentence })),
     }, { headers: { "Cache-Control": "private, no-store" } });
   } catch (error) {
