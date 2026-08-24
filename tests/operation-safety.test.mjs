@@ -295,7 +295,7 @@ test("allows the signed comment-pool runner through the auth proxy", () => {
   assert.match(runner, /status: 403/);
 });
 
-test("serializes comment-pool batches and caps every reusable pool at twenty", () => {
+test("serializes comment-pool batches and caps every reusable pool at the current target", () => {
   const producer = readFileSync("app/api/comment-pools/run/route.ts", "utf8");
   const poolApi = readFileSync("app/api/comment-pools/route.ts", "utf8");
   const assignment = readFileSync("app/api/comment-jobs/run/route.ts", "utf8");

@@ -1,5 +1,5 @@
 import { eq, selectRows, updateRows, upsertRows } from "../../../../db/supabase";
-import { buildCommentPoolSpecs, normalizedPoolSentence, validatePoolCandidate, type PoolPlanItem } from "../../../comment-pool-library";
+import { buildCommentPoolSpecs, COMMENT_POOL_MINIMUM, COMMENT_POOL_TARGET, normalizedPoolSentence, validatePoolCandidate, type PoolPlanItem } from "../../../comment-pool-library";
 import { dataError, getDataScope } from "../../../data-scope";
 
 const corrections = new Map<number, string>([
@@ -56,8 +56,8 @@ export async function POST(request: Request) {
     await upsertRows("comment_pool_sentences", insertions, "pool_version_id,normalized_sentence");
     await updateRows("comment_pool_sentences", { id: inValues(targetIds) }, { status: "retired", updated_at: new Date().toISOString() });
     for (const poolVersionId of versionIds) {
-      const approved = await selectRows<{ id: number }>("comment_pool_sentences", { pool_version_id: eq(poolVersionId), status: eq("approved"), limit: 20 });
-      await updateRows("comment_pool_versions", { id: eq(poolVersionId) }, { approved_count: approved.length, status: approved.length >= 20 ? "ready" : "usable", updated_at: new Date().toISOString() });
+      const approved = await selectRows<{ id: number }>("comment_pool_sentences", { pool_version_id: eq(poolVersionId), status: eq("approved"), limit: COMMENT_POOL_TARGET });
+      await updateRows("comment_pool_versions", { id: eq(poolVersionId) }, { approved_count: approved.length, status: approved.length >= COMMENT_POOL_MINIMUM ? "ready" : "usable", updated_at: new Date().toISOString() });
     }
     return Response.json({ ...preview, applied: true, retiredCount: 6 });
   } catch (error) {

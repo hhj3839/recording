@@ -1,6 +1,6 @@
 import { waitUntil } from "@vercel/functions";
 import { eq, insertRows, selectRows, supabaseRequest, upsertRows } from "../../../db/supabase";
-import { buildCommentPoolSpecs, COMMENT_POOL_GENERATOR_VERSION, COMMENT_POOL_TARGET, type PoolPlanItem } from "../../comment-pool-library";
+import { buildCommentPoolSpecs, COMMENT_POOL_GENERATOR_VERSION, COMMENT_POOL_MINIMUM, COMMENT_POOL_TARGET, type PoolPlanItem } from "../../comment-pool-library";
 import { signCommentJob } from "../../comment-generation";
 import { dataError, getDataScope } from "../../data-scope";
 
@@ -76,9 +76,9 @@ export async function GET(request: Request) {
       groups,
       summary: {
         total: groups.length,
-        ready: groups.filter((group) => group.approvedCount >= COMMENT_POOL_TARGET).length,
+        ready: groups.filter((group) => group.approvedCount >= COMMENT_POOL_MINIMUM).length,
         usable: groups.filter((group) => group.approvedCount > 0).length,
-        needsGeneration: groups.filter((group) => group.approvedCount < COMMENT_POOL_TARGET).length,
+        needsGeneration: groups.filter((group) => group.approvedCount < COMMENT_POOL_MINIMUM).length,
       },
       sentences: sentences.map((row) => ({ id: Number(row.id), sentence: row.sentence })),
     }, { headers: { "Cache-Control": "private, no-store" } });
@@ -156,7 +156,7 @@ export async function POST(request: Request) {
     }), "owner_id,class_id,assessment_plan_id,pool_version_id");
     const pending = specs.flatMap((spec) => {
       const version = byFingerprint.get(spec.fingerprint);
-      return version && Number(version.approved_count ?? 0) < COMMENT_POOL_TARGET
+      return version && Number(version.approved_count ?? 0) < COMMENT_POOL_MINIMUM
         ? [{ spec, poolVersionId: Number(version.id), maxAttempts: canonicalOnly ? 0 : 2 }]
         : [];
     }).slice(0, maxGroups);
