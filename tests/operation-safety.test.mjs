@@ -301,6 +301,7 @@ test("shows resumable pool production progress beside the ready count", () => {
   const route = readFileSync("app/api/comment-pools/route.ts", "utf8");
   assert.match(page, /ready-count[\s\S]*준비 완료[\s\S]*pool-progress/);
   assert.match(page, /poolSummary\.needsGeneration[\s\S]*개 이어서 제작/);
+  assert.match(page, /poolSummary\.ready === 0 \? "AI 평어 제작"/);
   assert.match(page, /body: JSON\.stringify\(\{\}\)/);
   assert.match(page, /제작·검수 중/);
   assert.doesNotMatch(page, /개 제작·보완 필요/);

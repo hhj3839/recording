@@ -907,7 +907,7 @@ function PlanManager({ plan, onChanged, current }: { plan: AssessmentPlan[]; onC
           <span><b>{poolSummary.total}</b>개 영역·수준</span>
           <span className="ready-count"><b>{poolSummary.ready}/{poolSummary.total}</b> 준비 완료</span>
           {activePoolJob && poolJob ? <span className="pool-progress" role="status"><i aria-hidden="true" /> <b>{poolJob.completed}/{poolJob.total}</b> {poolJob.current ? `${poolJob.current.subject} · ${poolJob.current.domain} · ${poolJob.current.level} 제작·검수 중` : "제작 대기 중"}</span>
-            : poolSummary.needsGeneration > 0 ? <button className="pool-continue" disabled={poolBusy || !plan.length} onClick={() => void startPoolProduction()}>{poolSummary.needsGeneration}개 이어서 제작</button>
+            : poolSummary.needsGeneration > 0 ? <button className="pool-continue" disabled={poolBusy || !plan.length} onClick={() => void startPoolProduction()}>{poolSummary.ready === 0 ? "AI 평어 제작" : `${poolSummary.needsGeneration}개 이어서 제작`}</button>
               : poolSummary.needsGeneration === 0 ? <span className="all-ready">전체 준비 완료</span> : null}
         </div>
         {!!poolGroups.length && <div className="ai-pool-browser">
