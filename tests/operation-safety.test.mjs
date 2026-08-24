@@ -318,6 +318,19 @@ test("locks the final manual pool repair to six shared rows without student data
   assert.doesNotMatch(`${route}\n${runner}`, /generated_comments|assessment_levels|students|classrooms|openai/i);
 });
 
+test("locks the full pool reassignment to the lab 25 by 9 scope with zero AI usage", () => {
+  const runner = readFileSync("scripts/run-approved-full-pool-reassignment.mjs", "utf8");
+  assert.match(runner, /RUN_APPROVED_FULL_POOL_REASSIGNMENT/);
+  assert.match(runner, /CONFIRM_ZERO_AI_POOL_REASSIGNMENT/);
+  assert.match(runner, /email\.endsWith\("@giroksam\.test"\)/);
+  assert.match(runner, /students\.length !== 25/);
+  assert.match(runner, /subjects\.length !== 9/);
+  assert.match(runner, /totalItems !== 625/);
+  assert.match(runner, /forceTargetRegeneration: true/);
+  assert.match(runner, /usageAfter\.monthly !== usageBefore\.monthly/);
+  assert.doesNotMatch(runner, /generate-comment|openai|assessment-levels|classrooms/i);
+});
+
 test("reports AI usage by feature for cost verification", () => {
   const usage = readFileSync("app/ai-usage.ts", "utf8");
   const audit = readFileSync("scripts/load-test-comments.mjs", "utf8");
@@ -340,6 +353,7 @@ test("keeps the full stored-part audit read-only and free of sentence text outpu
   assert.doesNotMatch(afterLogin, /sentence:\s*row\.sentence/);
   assert.match(audit, /criterionSemanticIssues/);
   assert.match(audit, /evidenceBlockingIssues/);
+  assert.match(audit, /positiveGrowthCriterion\(level, rawCriterion/);
 });
 
 test("keeps the approved-pool audit read-only and reports sentence ids instead of text", () => {
