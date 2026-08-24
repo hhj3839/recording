@@ -2,6 +2,8 @@ import { createHash } from "node:crypto";
 import { buildCanonicalCommentSentence, criterionSemanticIssues, evidenceBlockingIssues, evidenceGroundingWarnings, levelAppropriatenessIssues, positiveGrowthCriterion, repairSafeNominalEnding, validateGeneratedCommentPart } from "./comment-generation-policy.ts";
 
 export const COMMENT_POOL_TARGET = 20;
+export const COMMENT_POOL_SIMILARITY_LIMIT = 0.92;
+export const COMMENT_POOL_OPENING_LIMIT = Math.ceil(COMMENT_POOL_TARGET / 3);
 export const COMMENT_POOL_GENERATOR_VERSION = "pool-v1";
 export type PoolLevel = "상" | "중" | "하";
 
@@ -35,6 +37,25 @@ export type CommentPoolSpec = {
 
 const stable = (value: string) => value.normalize("NFKC").replace(/\s+/g, " ").trim();
 export const normalizedPoolSentence = (value: string) => stable(value).replace(/[.!?。！？]+$/g, "");
+
+const compactPoolSentence = (value: string) => normalizedPoolSentence(value).replace(/[^가-힣A-Za-z0-9]/g, "");
+
+export function poolSentenceSimilarity(left: string, right: string) {
+  const grams = (value: string) => {
+    const compact = compactPoolSentence(value);
+    if (compact.length < 3) return new Set(compact ? [compact] : []);
+    return new Set(Array.from({ length: compact.length - 2 }, (_, index) => compact.slice(index, index + 3)));
+  };
+  const leftGrams = grams(left);
+  const rightGrams = grams(right);
+  const common = [...leftGrams].filter((gram) => rightGrams.has(gram)).length;
+  const union = new Set([...leftGrams, ...rightGrams]).size;
+  return union ? common / union : 0;
+}
+
+export function poolSentenceOpening(value: string) {
+  return compactPoolSentence(value).slice(0, 15);
+}
 
 export function poolFingerprint(input: Omit<CommentPoolSpec, "fingerprint" | "assessmentPlanId" | "assessmentIndex" | "canonicalSentence">) {
   return createHash("sha256").update(JSON.stringify([
@@ -98,9 +119,9 @@ export function repairLegacyPoolCandidate(candidate: string, spec: CommentPoolSp
 
 export function approvePoolCandidates(candidates: string[], spec: CommentPoolSpec, existing: string[] = []) {
   const seen = new Set(existing.map(normalizedPoolSentence));
-  const approved: string[] = [];
+  const validated: Array<{ text: string; index: number }> = [];
   const rejectedIssues = new Set<string>();
-  for (const candidate of candidates) {
+  for (const [index, candidate] of candidates.entries()) {
     const result = validatePoolCandidate(candidate, spec);
     if (result.issues.length) {
       result.issues.forEach((issue) => rejectedIssues.add(issue));
@@ -109,8 +130,34 @@ export function approvePoolCandidates(candidates: string[], spec: CommentPoolSpe
     const key = normalizedPoolSentence(result.text);
     if (!key || seen.has(key)) continue;
     seen.add(key);
-    approved.push(result.text);
-    if (existing.length + approved.length >= COMMENT_POOL_TARGET) break;
+    validated.push({ text: result.text, index });
+  }
+
+  const approved: string[] = [];
+  const references = [...existing];
+  const openingCounts = new Map<string, number>();
+  references.forEach((sentence) => {
+    const opening = poolSentenceOpening(sentence);
+    openingCounts.set(opening, (openingCounts.get(opening) ?? 0) + 1);
+  });
+  const remaining = [...validated];
+  while (remaining.length && existing.length + approved.length < COMMENT_POOL_TARGET) {
+    const ranked = remaining.map((candidate) => ({
+      ...candidate,
+      opening: poolSentenceOpening(candidate.text),
+      similarity: references.reduce((highest, reference) => Math.max(highest, poolSentenceSimilarity(candidate.text, reference)), 0),
+    })).sort((left, right) =>
+      left.similarity - right.similarity
+      || (openingCounts.get(left.opening) ?? 0) - (openingCounts.get(right.opening) ?? 0)
+      || left.index - right.index);
+    const selected = ranked.find((candidate) =>
+      candidate.similarity < COMMENT_POOL_SIMILARITY_LIMIT
+      && (openingCounts.get(candidate.opening) ?? 0) < COMMENT_POOL_OPENING_LIMIT);
+    if (!selected) break;
+    approved.push(selected.text);
+    references.push(selected.text);
+    openingCounts.set(selected.opening, (openingCounts.get(selected.opening) ?? 0) + 1);
+    remaining.splice(remaining.findIndex((candidate) => candidate.index === selected.index), 1);
   }
   return { approved, rejectedIssues: [...rejectedIssues] };
 }
