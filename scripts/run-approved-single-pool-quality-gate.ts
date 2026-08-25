@@ -95,13 +95,14 @@ const similarities = sentences.flatMap((sentence: string, index: number) =>
   sentences.slice(index + 1).map((other: string) => poolSentenceSimilarity(sentence, other)));
 const calls = Number(usageAfter.monthly) - Number(usageBefore.monthly);
 if (calls > 2) throw new Error(`Approved maximum exceeded: ${calls}/2 calls`);
+const activated = jobState?.job?.status === "completed";
 
 process.stdout.write(`${JSON.stringify({
   mode: "approved-single-pool-quality-gate",
   labOnly: true,
   scope: { subject: target.subject, unit: target.unit, domain: target.domain, level: target.level },
   preservedPreviousPoolVersions: previousGroups.map((group: { poolVersionId?: number }) => group.poolVersionId).filter(Boolean),
-  job: { id: started.jobId, status: jobState?.job?.status, error: jobState?.job?.error ?? "" },
+  job: { id: started.jobId, status: jobState?.job?.status, activated, error: jobState?.job?.error ?? "" },
   elapsedSeconds: Math.round((Date.now() - startedAt) / 100) / 10,
   usage: {
     calls,
@@ -111,15 +112,16 @@ process.stdout.write(`${JSON.stringify({
     totalTokens: Number(usageAfter.tokens?.total) - Number(usageBefore.tokens?.total),
     estimatedCostUsd: Math.round((Number(usageAfter.estimatedCostUsd) - Number(usageBefore.estimatedCostUsd)) * 1_000_000) / 1_000_000,
   },
-  poolQuality: commentPoolQuality(sentences, target.canonicalSentence),
-  grounding: {
+  activePoolSource: activated ? "newly_generated" : "retained_previous",
+  activePoolQuality: commentPoolQuality(sentences, target.canonicalSentence),
+  activePoolGrounding: {
     passing: validations.filter((result: { issues: string[] }) => result.issues.length === 0).length,
     failing: validations.filter((result: { issues: string[] }) => result.issues.length > 0).length,
     issues: [...new Set(validations.flatMap((result: { issues: string[] }) => result.issues))],
   },
-  similarity: {
+  activePoolSimilarity: {
     maximum: similarities.length ? Math.max(...similarities) : 0,
     average: similarities.length ? similarities.reduce((sum: number, value: number) => sum + value, 0) / similarities.length : 0,
   },
-  sentences,
+  activePoolSentences: sentences,
 }, null, 2)}\n`);
