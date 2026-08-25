@@ -50,6 +50,24 @@ test("structures every pool prompt around at least two grounded observation elem
   assert.match(prompt, /무엇을 어떻게 수행하여 어떤 결과를 보였는지/);
   assert.match(prompt, /자연스러운 후보 15개/);
   assert.match(prompt, /기존 승인 문장임/);
+  assert.match(prompt, /나열된 핵심 대상·표현 요소는 하나도 생략하지 않는다/);
+});
+
+test("preserves every generally enumerated criterion element across subjects", () => {
+  const criterion = "작품 속 인물들의 상황에 알맞은 표정, 몸짓, 목소리, 말투를 알고 대화를 실감 나게 표현함.";
+  assert.deepEqual(
+    criterionSemanticIssues("인물의 상황에 맞는 표정과 몸짓을 살려 대화를 실감 나게 표현함.", criterion),
+    [
+      "평가 기준의 병렬 핵심 요소 ‘목소리’ 누락",
+      "평가 기준의 병렬 핵심 요소 ‘말투’ 누락",
+    ],
+  );
+  assert.deepEqual(
+    criterionSemanticIssues("인물의 상황에 알맞은 표정, 몸짓, 목소리, 말투를 알고 대화를 실감 나게 표현함.", criterion),
+    [],
+  );
+  const geometry = "선분, 반직선, 직선을 정확하게 구별하고 알맞게 긋는 수행을 보임.";
+  assert.match(criterionSemanticIssues("선분과 직선을 정확하게 구별하고 알맞게 긋는 수행을 보임.", geometry).join(" "), /‘반직선’ 누락/);
 });
 
 test("compiles one shared evidence ledger with dynamic combination targets", () => {
@@ -1136,7 +1154,11 @@ test("requires the original Korean performance instead of knowledge or effort su
   assert.equal(criterionSemanticIssues("작품에서 재미와 감동을 느낀 부분을 읽고 정리함.", reaction).some((issue) => issue.includes("부분과 까닭 쓰기")), true);
   assert.equal(criterionSemanticIssues("마음을 전하는 글을 쓰는 방법을 알고 글을 쓰기 위해 노력함.", letter).some((issue) => issue.includes("실제로 쓰기")), true);
 
-  assert.deepEqual(criterionSemanticIssues("작품 속 인물들의 상황에 알맞은 표정과 몸짓으로 대화를 실감 나게 표현함.", dialogue), []);
+  assert.deepEqual(criterionSemanticIssues("작품 속 인물들의 상황에 알맞은 표정과 몸짓으로 대화를 실감 나게 표현함.", dialogue), [
+    "평가 기준의 병렬 핵심 요소 ‘목소리’ 누락",
+    "평가 기준의 병렬 핵심 요소 ‘말투’ 누락",
+  ]);
+  assert.deepEqual(criterionSemanticIssues("작품 속 인물들의 상황에 알맞은 표정, 몸짓, 목소리, 말투로 대화를 실감 나게 표현함.", dialogue), []);
   assert.deepEqual(criterionSemanticIssues("작품을 읽고 재미와 감동을 느낀 부분과 그 까닭을 씀.", reaction), []);
   assert.deepEqual(criterionSemanticIssues("마음을 전하는 글을 쓰는 방법을 알고 전하고자 하는 마음이 드러나도록 글을 씀.", letter), []);
 });

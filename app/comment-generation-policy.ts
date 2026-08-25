@@ -489,6 +489,14 @@ export type CommentLevelCriteria = { high: string; middle: string; low: string }
 
 type SemanticAtom = { label: string; criterion: RegExp; comment: RegExp };
 
+function enumeratedCriterionElements(criterion: string) {
+  const particle = /(?:으로|로|에서|에게|을|를|이|가|은|는|과|와|도)$/;
+  const groups = criterion.normalize("NFKC").match(/[가-힣]{2,12}(?:\s*(?:,|·|ㆍ)\s*[가-힣]{2,12}){2,}/g) ?? [];
+  return [...new Set(groups.flatMap((group) => group.split(/\s*(?:,|·|ㆍ)\s*/)
+    .map((item) => item.replace(particle, "").trim())
+    .filter((item) => item.length >= 2)))];
+}
+
 // 평가기준에서 직접 확인할 수 있는 수행요소만 검사한다. 목표·관점은 문맥
 // 자료일 뿐 필수 수행이나 학생의 실제 행동으로 승격하지 않는다.
 const semanticAtoms: SemanticAtom[] = [
@@ -597,7 +605,10 @@ export function criterionSemanticIssues(
     // 원문에 없던 수행을 추가하게 되므로 필수 수행 판정에 사용하지 않는다.
     .filter((atom) => atom.criterion.test(selected) && !commentHas(atom, normalizedComment))
     .map((atom) => `평가 기준의 독립 수행 ‘${atom.label}’ 누락`);
-  if (!levelCriteria) return [...new Set([...required, ...genericRequired])];
+  const enumeratedRequired = enumeratedCriterionElements(selectedCriterion)
+    .filter((element) => !normalizedComment.includes(normalizeGroundingText(element)))
+    .map((element) => `평가 기준의 병렬 핵심 요소 ‘${element}’ 누락`);
+  if (!levelCriteria) return [...new Set([...required, ...genericRequired, ...enumeratedRequired])];
   const siblings = [levelCriteria.high, levelCriteria.middle, levelCriteria.low]
     .map(normalizeGroundingText)
     .filter((criterion) => criterion !== selected);
@@ -607,7 +618,7 @@ export function criterionSemanticIssues(
       && siblings.some((criterion) => atom.criterion.test(criterion)
         || atom.comment.test(normalizeGroundingText(buildCanonicalCommentSentence(criterion)))))
     .map((atom) => `선택하지 않은 평가수준의 수행 ‘${atom.label}’ 포함`);
-  return [...new Set([...required, ...genericRequired, ...leaked])];
+  return [...new Set([...required, ...genericRequired, ...enumeratedRequired, ...leaked])];
 }
 
 export function isCommentLengthReviewIssue(issue: string) {
