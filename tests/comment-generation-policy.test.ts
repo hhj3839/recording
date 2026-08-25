@@ -12,12 +12,77 @@ import { commentAreaOverlapReasons } from "../app/comment-area-diversity.ts";
 import { assignApprovedCommentPools, assignUniquePoolCandidates, buildApprovedCommentPool, buildCanonicalBaselinePart, buildCommentPoolGroups, buildPublicCommentPoolRequests, commentPoolCandidateCount, spreadCandidatesByOpening } from "../app/comment-pool-generation.ts";
 import { assembleRotatedComment } from "../app/comment-assembly.ts";
 import { readApiJson } from "../app/api-response.ts";
-import { approvePoolCandidates, buildCommentPoolSpecs, commentPoolQuality, COMMENT_POOL_CLUSTER_LIMIT, COMMENT_POOL_CLUSTER_THRESHOLD, COMMENT_POOL_MINIMUM, COMMENT_POOL_OPENING_LIMIT, COMMENT_POOL_SIMILARITY_LIMIT, COMMENT_POOL_TARGET, poolSentenceOpening, poolSentenceSimilarity, repairLegacyPoolCandidate } from "../app/comment-pool-library.ts";
+import { approvePoolCandidates, buildCommentPoolSpecs, commentPoolQuality, COMMENT_POOL_CLUSTER_LIMIT, COMMENT_POOL_CLUSTER_THRESHOLD, COMMENT_POOL_MINIMUM, COMMENT_POOL_OPENING_LIMIT, COMMENT_POOL_SIMILARITY_LIMIT, COMMENT_POOL_TARGET, poolCandidateQualityScore, poolSentenceOpening, poolSentenceSimilarity, repairLegacyPoolCandidate, validatePoolCandidate } from "../app/comment-pool-library.ts";
+import { buildCommentPoolCandidatePrompt, commentPoolSystemPrompt } from "../app/comment-pool-prompt.ts";
 
 const poolPlan = (overrides: Partial<{ id: number; subject: string; unit: string; goal: string; domain: string; perspective: string; high: string; middle: string; low: string }> = {}) => ({
   id: 1, subject: "사회", unit: "우리 고장", goal: "지역의 모습을 이해한다.", domain: "지리 인식",
   perspective: "지역 자료를 조사하고 정리하는가?", high: "지역 자료를 다양한 방법으로 조사하여 체계적으로 정리함.",
   middle: "지역 자료를 조사하여 정리함.", low: "교사의 도움을 받아 지역 자료를 조사하여 정리함.", ...overrides,
+});
+
+test("structures every pool prompt around at least two grounded observation elements", () => {
+  const [spec] = buildCommentPoolSpecs([poolPlan({
+    perspective: "지역 자료를 조사하는가? / 조사 결과를 기준에 따라 정리하는가?",
+  })]);
+  const prompt = buildCommentPoolCandidatePrompt(spec, ["기존 승인 문장임."], 15);
+  assert.match(commentPoolSystemPrompt, /서로 다른 근거 요소를 문장마다 최소 2개 결합/);
+  assert.match(commentPoolSystemPrompt, /근거 요소가 실제로 하나뿐이면 새 사실을 만들지 말고/);
+  assert.match(prompt, /# 관찰 근거 구성표/);
+  assert.match(prompt, /평가관점: 지역 자료를 조사하는가/);
+  assert.match(prompt, /평가관점: 조사 결과를 기준에 따라 정리하는가/);
+  assert.match(prompt, /서로 다른 요소를 최소 2개 반영/);
+  assert.match(prompt, /무엇을 어떻게 수행하여 어떤 결과를 보였는지/);
+  assert.match(prompt, /자연스러운 후보 15개/);
+  assert.match(prompt, /기존 승인 문장임/);
+});
+
+test("accepts rich activities grounded anywhere in the assessment plan without weakening the selected level", () => {
+  const [spec] = buildCommentPoolSpecs([poolPlan({
+    goal: "지역 자료를 조사하고 결과를 공유한다.",
+    perspective: "지역 자료를 조사하여 정리하는가? / 조사 결과를 발표하는가?",
+    middle: "지역 자료를 조사하여 정리함.",
+  })]).filter((item) => item.level === "중");
+  assert.deepEqual(
+    validatePoolCandidate("지역 자료를 조사하여 정리하고 그 결과를 발표함.", spec).issues,
+    [],
+  );
+  assert.equal(
+    validatePoolCandidate("지역 자료를 정확하게 조사하여 정리하고 그 결과를 발표함.", spec)
+      .issues.some((issue) => issue.includes("정확")),
+    true,
+  );
+});
+
+test("accepts a concrete activity from the assessment caution but not from nowhere", () => {
+  const [base] = buildCommentPoolSpecs([poolPlan({
+    goal: "들은 내용을 알맞게 표현한다.",
+    perspective: "들은 내용을 표현하는가?",
+    high: "들은 내용을 알맞게 표현함.",
+  })]);
+  const withActivity = { ...base, caution: "상황 그림을 살펴보고 들은 내용을 표현하도록 한다." };
+  assert.deepEqual(
+    validatePoolCandidate("상황 그림을 살펴보고 들은 내용을 알맞게 표현함.", withActivity).issues,
+    [],
+  );
+  assert.equal(
+    validatePoolCandidate("상황 그림을 살펴보고 들은 내용을 알맞게 표현함.", base)
+      .issues.some((issue) => issue.includes("구체적 표현 방법")),
+    true,
+  );
+});
+
+test("keeps safe concise candidates and ranks grounded detailed candidates higher", () => {
+  const [spec] = buildCommentPoolSpecs([poolPlan({
+    goal: "지역 자료를 조사하고 정리한 내용을 공유한다.",
+    perspective: "지역 자료를 조사하는가? / 조사 결과를 정리하여 발표하는가?",
+    middle: "지역 자료를 조사하여 정리함.",
+  })]).filter((item) => item.level === "중");
+  const concise = "지역 자료를 조사하여 결과를 정리함.";
+  const detailed = "여러 지역 자료를 조사하고 그 결과를 기준에 따라 정리하여 친구들 앞에서 발표함.";
+  assert.deepEqual(validatePoolCandidate(concise, spec).issues, []);
+  assert.deepEqual(validatePoolCandidate(concise, spec).qualityWarnings, ["권장 길이 50~80자 이탈"]);
+  assert.equal(poolCandidateQualityScore(detailed, spec) > poolCandidateQualityScore(concise, spec), true);
 });
 
 test("creates three reusable pool identities without student data", () => {

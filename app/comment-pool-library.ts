@@ -154,15 +154,45 @@ export function buildCommentPoolSpecs(plan: PoolPlanItem[]): CommentPoolSpec[] {
 
 export function validatePoolCandidate(candidate: string, spec: CommentPoolSpec) {
   const text = repairSafeNominalEnding(candidate);
-  const evidence = `${spec.unit} | ${spec.domain} | 수준: ${spec.level} | 기준: ${spec.criterion}`;
+  // 활동·관찰 장면은 평가계획 전체에서 근거를 찾되, 수행 수준과 필수
+  // 성취는 선택 수준 평가기준에만 묶어 다른 수준의 의미 유입을 막는다.
+  const planEvidence = [
+    `단원: ${spec.unit}`,
+    `영역: ${spec.domain}`,
+    `평가목표: ${spec.goal}`,
+    `평가관점: ${spec.perspective}`,
+    `평가유형: ${spec.assessmentType ?? ""}`,
+    `평가상의 유의점: ${spec.caution ?? ""}`,
+    `선택 수준 기준: ${spec.criterion}`,
+  ].filter(Boolean).join(" | ");
+  const allowedActivityEvidence = [spec.perspective, spec.caution ?? ""].filter(Boolean).join(" | ");
+  const format = validateGeneratedCommentPart(text, spec.criterion);
+  const structuralFormatValid = format.sentenceCountOk && format.endingsOk && format.naturalEndingsOk
+    && format.predicateIssues.length === 0 && format.forbidden.length === 0;
   const issues = [
-    ...(!validateGeneratedCommentPart(text, spec.criterion).valid ? ["문장 형식 또는 명사형 종결 검수 미통과"] : []),
+    ...(!structuralFormatValid ? ["문장 형식 또는 명사형 종결 검수 미통과"] : []),
     ...levelAppropriatenessIssues(text, spec.level, spec.criterion),
-    ...evidenceBlockingIssues(text, `${evidence} | 생성용 기준: ${spec.criterion}`, spec.criterion),
-    ...evidenceGroundingWarnings(text, spec.criterion).map((issue) => issue.replace(/ 확인 필요$/, "")),
+    ...evidenceBlockingIssues(text, planEvidence, spec.criterion, allowedActivityEvidence),
+    ...evidenceGroundingWarnings(text, planEvidence).map((issue) => issue.replace(/ 확인 필요$/, "")),
     ...criterionSemanticIssues(text, spec.criterion, spec.levelCriteria),
   ];
-  return { text, issues: [...new Set(issues)] };
+  const qualityWarnings = [
+    ...(format.lengths[0] < 50 || format.lengths[0] > 80 ? ["권장 길이 50~80자 이탈"] : []),
+  ];
+  return { text, issues: [...new Set(issues)], qualityWarnings, qualityScore: poolCandidateQualityScore(text, spec) };
+}
+
+export function poolCandidateQualityScore(candidate: string, spec: CommentPoolSpec) {
+  const text = repairSafeNominalEnding(candidate);
+  const length = Array.from(normalizedPoolSentence(text)).length;
+  const lengthScore = length >= 50 && length <= 80
+    ? 30
+    : Math.max(0, 30 - Math.min(Math.abs(length - 50), Math.abs(length - 80)) * 2);
+  const evidenceText = `${spec.goal} ${spec.perspective} ${spec.caution ?? ""}`.normalize("NFKC");
+  const groundedActivityWords = ["관찰", "조사", "토의", "발표", "역할", "그림", "실험", "만들", "표현", "설명", "정리", "비교", "분류"]
+    .filter((word) => evidenceText.includes(word) && text.includes(word)).length;
+  const connectiveVariety = new Set(text.match(/(?:하며|하여|하고|뒤|후|통해|바탕으로|살펴|활용해)/g) ?? []).size;
+  return lengthScore + Math.min(30, groundedActivityWords * 10) + Math.min(10, connectiveVariety * 5);
 }
 
 export function repairLegacyPoolCandidate(candidate: string, spec: CommentPoolSpec) {
@@ -209,11 +239,13 @@ export function approvePoolCandidates(candidates: string[], spec: CommentPoolSpe
     const ranked = remaining.map((candidate) => ({
       ...candidate,
       opening: poolSentenceOpening(candidate.text),
+      qualityScore: poolCandidateQualityScore(candidate.text, spec),
       similarity: references.reduce((highest, reference) => Math.max(highest, poolSentenceSimilarity(candidate.text, reference)), 0),
       clusterSize: references.filter((reference) => poolSentenceSimilarity(candidate.text, reference) >= COMMENT_POOL_CLUSTER_THRESHOLD).length,
     })).sort((left, right) =>
       left.clusterSize - right.clusterSize
       || (openingCounts.get(left.opening) ?? 0) - (openingCounts.get(right.opening) ?? 0)
+      || right.qualityScore - left.qualityScore
       || left.similarity - right.similarity
       || left.index - right.index);
     const selected = ranked.find((candidate) =>

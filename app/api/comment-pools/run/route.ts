@@ -4,6 +4,7 @@ import { approvePoolCandidates, commentPoolQuality, COMMENT_POOL_TARGET, normali
 import { signCommentJob, verifyCommentJob } from "../../../comment-generation";
 import { primaryAiModel } from "../../../ai-model-policy";
 import { recordAiUsage } from "../../../ai-usage";
+import { buildCommentPoolCandidatePrompt, commentPoolSystemPrompt } from "../../../comment-pool-prompt";
 
 export const maxDuration = 300;
 type PoolBatch = {
@@ -15,28 +16,6 @@ type JobRow = {
   current_batch: number; total_batches: number; total_items: number; completed_items: number; failed_items: number;
   error_message: string; updated_at: string; started_at?: string | null;
 };
-
-const commentPoolSystemPrompt = `# 역할
-당신은 초등학교 담임교사의 학생평가 작성 전문가이다.
-학교생활기록부 교과학습발달상황에 사용할 자연스러운 교과 평어 후보를 작성한다.
-
-# 작성
-- 선택된 평가기준의 의미와 수행 수준을 정확하게 유지한다.
-- 입력되지 않은 행동, 태도, 방법이나 성과를 추가하지 않는다.
-- 평가목표·평가관점·평가유형·유의점을 함께 분석하되, 실제 활동이 명시된 경우에만 관찰 장면으로 활용한다.
-- 평가기준을 그대로 복사하거나 단어 몇 개만 치환하지 말고 관찰 가능한 학생의 수행으로 자연스럽게 표현한다.
-- 긍정적인 학교생활기록부 문체로 작성한다.
-- 모든 문장은 자연스러운 명사형 종결과 마침표로 끝낸다.
-- 후보 전체를 하나의 문장 집합으로 보고 수행 대상·활동 장면·과정·결과 중 근거가 있는 요소의 제시 순서를 분산한다.
-- 같은 첫 15글자와 같은 주어·목적어·서술어 배열을 반복하지 않는다.
-- 문장마다 시작 표현과 문장 골격을 달리하되 핵심 성취와 수준은 동일하게 유지한다.
-- 평가기준이 구체적이면 핵심 수행 요소를 생략해 짧게 줄이지 말고, 실제 관찰 장면과 수행 결과가 함께 드러나는 50~80자 내외의 문장으로 작성한다.
-- 평가기준에 여러 수행 요소가 있으면 각 후보에도 그 요소를 빠짐없이 자연스럽게 연결한다.
-- 이미 승인된 문장과 사실상 같은 문장은 작성하지 않는다.
-- 다양성을 위해 어색한 문장이나 새로운 사실을 만들지 않는다.
-
-# 출력
-지정된 JSON 스키마만 출력한다. 제목·번호·설명은 출력하지 않는다.`;
 
 const inValues = (values: Array<string | number>) => `in.(${values.join(",")})`;
 
@@ -67,9 +46,9 @@ async function generateCandidates(spec: CommentPoolSpec, existing: string[], cou
     body: JSON.stringify({
       model, reasoning: { effort: "none" }, store: false, max_output_tokens: 10000,
       input: [{ role: "system", content: [{ type: "input_text", text: commentPoolSystemPrompt }] }, {
-        role: "user", content: [{ type: "input_text", text: `# 이번 문장 풀\n과목: ${spec.subject}\n단원: ${spec.unit}\n평가목표: ${spec.goal}\n영역: ${spec.domain}\n평가유형: ${spec.assessmentType || "미입력"}\n평가관점: ${spec.perspective}\n선택 수준: ${spec.level}\n선택 수준 평가기준: ${spec.criterion}\n상·중·하 전체 기준: ${JSON.stringify(spec.levelCriteria)}\n평가상의 유의점: ${spec.caution || "미입력"}\n의미 보존용 기준 문장: ${spec.canonicalSentence}\n이미 승인된 문장: ${JSON.stringify(existing)}\n\n# 요청\n이미 승인된 문장을 반복하지 말고 자연스러운 후보 ${count}개를 작성한다. 의미 보존용 기준 문장은 사실성과 수준을 확인하는 기준이지 문장 틀이 아니다. 조사·연결어만 바꾸는 변형을 만들지 않는다. 후보 전체의 첫 15글자, 관찰 장면, 절의 순서와 서술어 배열을 서로 비교하여 유사한 후보는 출력 전에 다시 작성한다. 최종 출력에는 JSON 후보만 포함한다.` }],
+        role: "user", content: [{ type: "input_text", text: buildCommentPoolCandidatePrompt(spec, existing, count) }],
       }],
-      text: { verbosity: "low", format: { type: "json_schema", name: "comment_pool_candidates", strict: true, schema: {
+      text: { verbosity: "medium", format: { type: "json_schema", name: "comment_pool_candidates", strict: true, schema: {
         type: "object", additionalProperties: false, required: ["candidates"], properties: {
           candidates: { type: "array", minItems: count, maxItems: count, items: { type: "string" } },
         },
