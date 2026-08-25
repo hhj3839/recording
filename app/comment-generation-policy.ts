@@ -421,7 +421,7 @@ const unsupportedGroundingConcepts: Array<{
   { label: "실감 나게", pattern: /실감나게/, blocking: true },
   { label: "다양한 방법", pattern: /다양한방법/, blocking: true },
   { label: "이해하기 쉽게", pattern: /이해하기쉽게/, blocking: true },
-  { label: "입력에 없는 구체적 표현 방법", pattern: /(?:그림|시|노래|만화)(?:이나|나|와|과|으로|로)/, blocking: true },
+  { label: "입력에 없는 구체적 표현 방법", pattern: /(?:그림|시|노래|만화)(?:이나|나|와|과|으로|로|을|를)/, blocking: true },
   { label: "말하기·발표 활동", pattern: /(?:말로풀어|말로표현|말하기|발표|구술)/, evidencePattern: /(?:말|대화|목소리|말투|발표|구술|듣기)/, blocking: true },
   { label: "내용 간추리기·요약하기", pattern: /(?:간추|요약)/, evidencePattern: /(?:간추|요약)/, blocking: true },
   { label: "자료 내용을 나누거나 구분하기", pattern: /자료(?:의)?내용.{0,10}(?:나누|구분)/, evidencePattern: /자료(?:의)?내용.{0,10}(?:나누|구분)/, blocking: true },
@@ -449,10 +449,11 @@ export function evidenceGroundingWarnings(comment: string, evidence: string) {
     .map(({ label }) => `평가 근거에 없는 ‘${label}’ 표현 확인 필요`);
 }
 
-export function evidenceBlockingIssues(comment: string, evidence: string, requiredEvidence = evidence) {
+export function evidenceBlockingIssues(comment: string, evidence: string, requiredEvidence = evidence, allowedMethodEvidence = requiredEvidence) {
   const normalizedComment = normalizeGroundingText(comment);
   const normalizedEvidence = normalizeGroundingText(evidence);
   const normalizedRequiredEvidence = normalizeGroundingText(requiredEvidence);
+  const normalizedAllowedMethodEvidence = normalizeGroundingText(allowedMethodEvidence);
   const unsupported = unsupportedGroundingConcepts
     .filter(({ pattern, evidencePattern, exclude, blocking }) => blocking
       && pattern.test(normalizedComment)
@@ -462,7 +463,7 @@ export function evidenceBlockingIssues(comment: string, evidence: string, requir
   const concreteMethodLeak = ["그림", "시", "노래", "만화"]
     .filter((method) => normalizedComment.includes(method)
       && normalizedEvidence.includes(method)
-      && !normalizedRequiredEvidence.includes(method)
+      && !normalizedAllowedMethodEvidence.includes(method)
       && !normalizedRequiredEvidence.includes("다양한방법"))
     .map((method) => `선택한 평가수준에 없는 구체적 표현 방법 ‘${method}’ 포함`);
   const required = [
@@ -477,7 +478,7 @@ export function evidenceBlockingIssues(comment: string, evidence: string, requir
     { evidence: /방법.{0,12}알고/, comment: /방법.{0,18}(?:알고|앎|이해)/, label: "방법을 알고 있음" },
     { evidence: /정확(?:하게|히)/, comment: /정확|바르게/, label: "정확한 수행 정도" },
     { evidence: /실감나게/, comment: /실감|생생/, label: "실감 나거나 생생한 표현 수준" },
-    { evidence: /다양한방법/, comment: /다양한방법|여러방법|(?:그림|시|노래|만화)(?:이나|나|와|과|으로|로)/, label: "다양한 방법으로 수행하기" },
+    { evidence: /다양한방법/, comment: /다양한방법|여러방법|(?:그림|시|노래|만화)(?:이나|나|와|과|으로|로|을|를)/, label: "다양한 방법으로 수행하기" },
     { evidence: /이해하기쉽게/, comment: /이해하기쉽게|알기쉽게/, label: "이해하기 쉽게 수행하기" },
   ].filter((item) => item.evidence.test(normalizedRequiredEvidence) && !item.comment.test(normalizedComment))
     .map((item) => `평가 기준의 필수 조건 ‘${item.label}’ 누락`);
