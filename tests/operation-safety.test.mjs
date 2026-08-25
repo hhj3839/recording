@@ -307,6 +307,12 @@ test("limits failed pool sentence audits to the owning lab account and terminal 
   assert.match(route, /scope: \{ subject: spec\.subject, unit: spec\.unit, domain: spec\.domain, level: spec\.level \}/);
   assert.doesNotMatch(route.slice(route.indexOf('params.get("audit") === "1"'), route.indexOf("return Response.json({ job: publicJob(job) }")), /student_id|studentId/);
   assert.match(runner, /jobId=.*&audit=1/);
+  const audit = readFileSync("scripts/audit-comment-pool-job.ts", "utf8");
+  assert.match(audit, /COMMENT_POOL_JOB_ID/);
+  assert.match(audit, /@giroksam\.test/);
+  const poolRequest = audit.slice(audit.indexOf("/api/comment-pools?jobId="));
+  assert.match(poolRequest, /method: "GET"/);
+  assert.doesNotMatch(poolRequest, /method: "(?:POST|PUT|PATCH|DELETE)"/);
 });
 
 test("shows resumable pool production progress beside the ready count", () => {

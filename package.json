@@ -26,6 +26,7 @@
     "test:approved-missing-pools": "node scripts/run-approved-missing-pools.mjs",
     "audit:missing-pools": "node --experimental-strip-types scripts/analyze-missing-comment-pools.ts",
     "audit:approved-pools": "node --experimental-strip-types scripts/audit-approved-comment-pools.ts",
+    "audit:comment-pool-job": "node --experimental-strip-types scripts/audit-comment-pool-job.ts",
     "test:approved-single-pool-quality": "node --experimental-strip-types scripts/run-approved-single-pool-quality-gate.ts",
     "audit:approved-pool-repairs": "node scripts/dry-run-approved-pool-repairs.mjs",
     "repair:approved-six-pools": "node scripts/run-approved-six-pool-repairs.mjs",
