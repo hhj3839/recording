@@ -70,6 +70,20 @@ test("preserves every generally enumerated criterion element across subjects", (
   assert.match(criterionSemanticIssues("선분과 직선을 정확하게 구별하고 알맞게 긋는 수행을 보임.", geometry).join(" "), /‘반직선’ 누락/);
 });
 
+test("blocks stronger accuracy wording that exists only in a sibling level", () => {
+  const spec = buildCommentPoolSpecs([poolPlan({
+    subject: "수학", unit: "평면도형", domain: "도형",
+    high: "선분, 반직선, 직선을 정확하게 구별하고 알맞게 긋는다.",
+    middle: "선분, 반직선, 직선을 구별하고 긋는다.",
+    low: "교사의 도움을 받아 선분, 반직선, 직선을 구별한다.",
+  })]).find((item) => item.level === "중")!;
+  assert.deepEqual(validatePoolCandidate("선분, 반직선, 직선을 구별하고 긋음.", spec).issues, []);
+  for (const wording of ["알맞게", "바르게", "올바르게", "정확하게"]) {
+    const result = validatePoolCandidate(`선분, 반직선, 직선을 구별하고 ${wording} 그음.`, spec);
+    assert.equal(result.issues.some((issue) => issue.includes("선택하지 않은 평가수준")), true, wording);
+  }
+});
+
 test("compiles one shared evidence ledger with dynamic combination targets", () => {
   const rich = compileCommentPoolEvidence({
     criterion: "지역 자료를 조사하여 정리함.",
