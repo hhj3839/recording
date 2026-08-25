@@ -1,7 +1,7 @@
 import { waitUntil } from "@vercel/functions";
 import { createHash } from "node:crypto";
 import { eq, insertRows, selectRows, supabaseRequest, upsertRows } from "../../../db/supabase";
-import { buildCommentPoolSpecs, commentPoolQuality, COMMENT_POOL_GENERATOR_VERSION, COMMENT_POOL_TARGET, type PoolPlanItem } from "../../comment-pool-library";
+import { buildCommentPoolSpecs, commentPoolQuality, COMMENT_POOL_GENERATOR_VERSION, COMMENT_POOL_TARGET, validatePoolCandidate, type CommentPoolSpec, type PoolPlanItem } from "../../comment-pool-library";
 import { signCommentJob } from "../../comment-generation";
 import { dataError, getDataScope } from "../../data-scope";
 
@@ -78,6 +78,38 @@ export async function GET(request: Request) {
       }))[0];
       if (!job) return Response.json({ error: "AI 평어 제작 작업을 찾을 수 없습니다." }, { status: 404 });
       if (["queued", "running"].includes(String(job.status))) queueRunner(request, jobId);
+      if (params.get("audit") === "1") {
+        if (!user.email.toLowerCase().endsWith("@giroksam.test")) {
+          return Response.json({ error: "제한 품질 감사는 실험실 계정에서만 확인할 수 있습니다." }, { status: 403 });
+        }
+        if (["queued", "running"].includes(String(job.status))) {
+          return Response.json({ error: "제작이 끝난 뒤 품질 감사를 확인해 주세요." }, { status: 409 });
+        }
+        const batches = Array.isArray(job.batches) ? job.batches as Array<{ spec?: CommentPoolSpec; poolVersionId?: number }> : [];
+        const versionIds = batches.map((batch) => Number(batch.poolVersionId)).filter(Number.isInteger);
+        const rows = versionIds.length ? await selectRows<{ pool_version_id: number; sentence: string }>("comment_pool_sentences", {
+          pool_version_id: inValues(versionIds), status: eq("approved"), order: "id.asc",
+        }) : [];
+        const audit = batches.flatMap((batch) => {
+          const spec = batch.spec;
+          const poolVersionId = Number(batch.poolVersionId);
+          if (!spec || !Number.isInteger(poolVersionId)) return [];
+          const sentences = rows.filter((row) => Number(row.pool_version_id) === poolVersionId).map((row) => row.sentence);
+          const validations = sentences.map((sentence) => validatePoolCandidate(sentence, spec));
+          return [{
+            scope: { subject: spec.subject, unit: spec.unit, domain: spec.domain, level: spec.level },
+            poolVersionId,
+            quality: commentPoolQuality(sentences, spec.canonicalSentence),
+            grounding: {
+              passing: validations.filter((result) => result.issues.length === 0).length,
+              failing: validations.filter((result) => result.issues.length > 0).length,
+              issues: [...new Set(validations.flatMap((result) => result.issues))],
+            },
+            sentences: validations.map((result) => ({ text: result.text, length: Array.from(result.text).length, issues: result.issues })),
+          }];
+        });
+        return Response.json({ job: publicJob(job), audit }, { headers: { "Cache-Control": "private, no-store" } });
+      }
       return Response.json({ job: publicJob(job) }, { headers: { "Cache-Control": "private, no-store" } });
     }
     const specs = await currentSpecs(user.id, classId);
