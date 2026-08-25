@@ -12,6 +12,7 @@ export const COMMENT_POOL_REUSE_MINIMUM_OPENING_RATIO = 0.5;
 export const COMMENT_POOL_REUSE_MAX_CLUSTER_RATIO = 0.2;
 export const COMMENT_POOL_REUSE_MAX_NEAREST_SIMILARITY = 0.82;
 export const COMMENT_POOL_GENERATOR_VERSION = "pool-v2-quality-gated";
+export const COMMENT_POOL_SHORT_CRITERION_LENGTH = 38;
 export type PoolLevel = "상" | "중" | "하";
 
 export type PoolPlanItem = {
@@ -177,14 +178,29 @@ export function validatePoolCandidate(candidate: string, spec: CommentPoolSpec) 
 export function poolCandidateQualityScore(candidate: string, spec: CommentPoolSpec) {
   const text = repairSafeNominalEnding(candidate);
   const length = Array.from(normalizedPoolSentence(text)).length;
-  const lengthScore = length >= 50 && length <= 80
+  const referenceLength = Array.from(normalizedPoolSentence(spec.canonicalSentence)).length;
+  const shortCriterion = referenceLength < COMMENT_POOL_SHORT_CRITERION_LENGTH;
+  const minimumLength = shortCriterion ? Math.max(18, referenceLength - 2) : 50;
+  const maximumLength = shortCriterion ? Math.min(45, Math.max(32, referenceLength + 18)) : 80;
+  const lengthScore = length >= minimumLength && length <= maximumLength
     ? 30
-    : Math.max(0, 30 - Math.min(Math.abs(length - 50), Math.abs(length - 80)) * 2);
+    : Math.max(0, 30 - Math.min(Math.abs(length - minimumLength), Math.abs(length - maximumLength)) * (shortCriterion ? 1.5 : 2));
   const evidenceText = `${spec.goal} ${spec.perspective} ${spec.caution ?? ""}`.normalize("NFKC");
   const groundedActivityWords = ["관찰", "조사", "토의", "발표", "역할", "그림", "실험", "만들", "표현", "설명", "정리", "비교", "분류"]
     .filter((word) => evidenceText.includes(word) && text.includes(word)).length;
   const connectiveVariety = new Set(text.match(/(?:하며|하여|하고|뒤|후|통해|바탕으로|살펴|활용해)/g) ?? []).size;
-  return lengthScore + Math.min(30, groundedActivityWords * 10) + Math.min(10, connectiveVariety * 5);
+  const activityScore = shortCriterion
+    ? Math.min(54, groundedActivityWords * 18)
+    : Math.min(30, groundedActivityWords * 10);
+  const connectiveScore = Math.min(shortCriterion ? 5 : 10, connectiveVariety * 5);
+  const canonicalBonus = normalizedPoolSentence(text) === normalizedPoolSentence(spec.canonicalSentence) ? 10 : 0;
+  return lengthScore + activityScore + connectiveScore + canonicalBonus;
+}
+
+export function commentPoolSelectionTarget(spec: CommentPoolSpec) {
+  return Array.from(normalizedPoolSentence(spec.canonicalSentence)).length < COMMENT_POOL_SHORT_CRITERION_LENGTH
+    ? COMMENT_POOL_MINIMUM
+    : COMMENT_POOL_TARGET;
 }
 
 export function repairLegacyPoolCandidate(candidate: string, spec: CommentPoolSpec) {
@@ -204,6 +220,7 @@ export function repairLegacyPoolCandidate(candidate: string, spec: CommentPoolSp
 }
 
 export function approvePoolCandidates(candidates: string[], spec: CommentPoolSpec, existing: string[] = []) {
+  const selectionTarget = commentPoolSelectionTarget(spec);
   const seen = new Set(existing.map(normalizedPoolSentence));
   const validated: Array<{ text: string; index: number }> = [];
   const rejectedIssues = new Set<string>();
@@ -227,7 +244,7 @@ export function approvePoolCandidates(candidates: string[], spec: CommentPoolSpe
     openingCounts.set(opening, (openingCounts.get(opening) ?? 0) + 1);
   });
   const remaining = [...validated];
-  while (remaining.length && existing.length + approved.length < COMMENT_POOL_TARGET) {
+  while (remaining.length && existing.length + approved.length < selectionTarget) {
     const ranked = remaining.map((candidate) => ({
       ...candidate,
       opening: poolSentenceOpening(candidate.text),

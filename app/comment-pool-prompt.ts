@@ -24,6 +24,7 @@ export const commentPoolSystemPrompt = `# 역할
 - 같은 첫 15글자와 같은 주어·목적어·서술어 배열을 반복하지 않는다.
 - 문장마다 시작 표현과 문장 골격을 달리하되 핵심 성취와 수준은 동일하게 유지한다.
 - 구체적인 기준은 핵심 수행 요소를 생략해 짧게 줄이지 말고, 실제 관찰 장면과 수행 결과가 함께 드러나는 50~80자 내외로 작성한다.
+- 짧고 단순한 기준은 길이를 늘리기 위해 일반적인 관찰·완료 문구를 덧붙이지 말고, 기준의 수행을 직접 서술한 간결한 문장으로 작성한다.
 - 평가기준에 여러 수행 요소가 있으면 각 후보에도 그 요소를 빠짐없이 자연스럽게 연결한다.
 - 이미 승인된 문장과 사실상 같은 문장은 작성하지 않는다.
 - 다양성을 위해 어색한 문장이나 새로운 사실을 만들지 않는다.
@@ -33,6 +34,7 @@ export const commentPoolSystemPrompt = `# 역할
 
 export function buildCommentPoolCandidatePrompt(spec: CommentPoolSpec, existing: string[], count: number) {
   const evidence = compileCommentPoolEvidence(spec);
+  const shortCriterion = Array.from(spec.canonicalSentence.replace(/[.!?。！？]+$/g, "")).length < 38;
   return `# 이번 문장 풀
 과목: ${spec.subject}
 단원: ${spec.unit}
@@ -59,6 +61,7 @@ ${evidence.combinationTarget === 2 ? "서로 다른 역할의 근거가 있으�
 조사·연결어만 바꾸는 변형을 만들지 않는다.
 후보별로 실제 사용한 근거 ID를 evidenceIds에 기록하고 ${evidence.requiredId}을 반드시 포함한다. 존재하지 않는 근거 ID를 만들지 않는다.
 평가기준에 쉼표나 가운뎃점으로 나열된 핵심 대상·표현 요소는 하나도 생략하지 않는다.
+${shortCriterion ? "이 기준은 짧고 단순하므로 20~40자 안팎의 직접 수행 문장을 우선한다. 길이를 늘리기 위한 일반적인 관찰 장면·과제 완료·성공 문구를 덧붙이지 않는다." : "기준의 정보량을 충분히 보존하되 근거가 있는 활동과 결과만 구체화한다."}
 후보 전체의 첫 15글자, 관찰 장면, 절의 순서와 서술어 배열을 서로 비교하여 유사한 후보는 출력 전에 다시 작성한다.
 이미 승인된 문장: ${JSON.stringify(existing)}
 최종 출력에는 JSON 후보만 포함한다.`;
