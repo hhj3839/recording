@@ -12,7 +12,7 @@ import { commentAreaOverlapReasons } from "../app/comment-area-diversity.ts";
 import { assignApprovedCommentPools, assignUniquePoolCandidates, buildApprovedCommentPool, buildCanonicalBaselinePart, buildCommentPoolGroups, buildPublicCommentPoolRequests, commentPoolCandidateCount, spreadCandidatesByOpening } from "../app/comment-pool-generation.ts";
 import { assembleRotatedComment } from "../app/comment-assembly.ts";
 import { readApiJson } from "../app/api-response.ts";
-import { approvePoolCandidates, buildCommentPoolSpecs, commentPoolQuality, COMMENT_POOL_CLUSTER_LIMIT, COMMENT_POOL_CLUSTER_THRESHOLD, COMMENT_POOL_MINIMUM, COMMENT_POOL_OPENING_LIMIT, COMMENT_POOL_SIMILARITY_LIMIT, COMMENT_POOL_TARGET, poolCandidateQualityScore, poolSentenceOpening, poolSentenceSimilarity, repairLegacyPoolCandidate, validatePoolCandidate } from "../app/comment-pool-library.ts";
+import { approvePoolCandidates, buildCommentPoolSpecs, commentPoolQuality, commentPoolSelectionTarget, COMMENT_POOL_CLUSTER_LIMIT, COMMENT_POOL_CLUSTER_THRESHOLD, COMMENT_POOL_MINIMUM, COMMENT_POOL_OPENING_LIMIT, COMMENT_POOL_SIMILARITY_LIMIT, COMMENT_POOL_TARGET, poolCandidateQualityScore, poolSentenceOpening, poolSentenceSimilarity, repairLegacyPoolCandidate, validatePoolCandidate } from "../app/comment-pool-library.ts";
 import { buildCommentPoolCandidatePrompt, commentPoolSystemPrompt } from "../app/comment-pool-prompt.ts";
 import { compileCommentPoolEvidence, validCommentPoolEvidenceIds } from "../app/comment-pool-evidence.ts";
 import { openAiOutputText, parseFirstJsonObject } from "../app/openai-response.ts";
@@ -138,6 +138,22 @@ test("keeps safe concise candidates and ranks grounded detailed candidates highe
   assert.deepEqual(validatePoolCandidate(concise, spec).issues, []);
   assert.deepEqual(validatePoolCandidate(concise, spec).qualityWarnings, ["권장 길이 50~80자 이탈"]);
   assert.equal(poolCandidateQualityScore(detailed, spec) > poolCandidateQualityScore(concise, spec), true);
+});
+
+test("keeps short criteria concise and stops at the natural minimum pool size", () => {
+  const spec = buildCommentPoolSpecs([poolPlan({
+    subject: "수학", unit: "평면도형", domain: "도형",
+    goal: "여러 가지 선을 구별하고 자로 그어 본다.",
+    perspective: "선분, 반직선, 직선을 구별하고 긋는가?",
+    middle: "선분, 반직선, 직선을 구별하고 긋는다.",
+  })]).find((item) => item.level === "중")!;
+  const concise = "선분, 반직선, 직선을 구별하고 긋음.";
+  const padded = "선분, 반직선, 직선을 구별한 뒤 자를 이용해 그어 내며 주어진 과제를 성공적으로 마무리함.";
+  const prompt = buildCommentPoolCandidatePrompt(spec, [], 15);
+  assert.equal(commentPoolSelectionTarget(spec), COMMENT_POOL_MINIMUM);
+  assert.equal(poolCandidateQualityScore(concise, spec) > poolCandidateQualityScore(padded, spec), true);
+  assert.match(prompt, /20~40자 안팎의 직접 수행 문장/);
+  assert.match(prompt, /과제 완료·성공 문구를 덧붙이지 않는다/);
 });
 
 test("creates three reusable pool identities without student data", () => {
