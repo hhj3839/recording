@@ -21,8 +21,17 @@ const get = async (route: string) => {
   return data;
 };
 const [planData, poolData] = await Promise.all([get("/api/assessment-plan"), get("/api/comment-pools")]);
-const specs = buildCommentPoolSpecs(planData.plan as PoolPlanItem[]);
+const plan = (planData.plan as Array<PoolPlanItem & { type?: string; sortOrder?: number }>).map((item) => ({
+  ...item,
+  assessment_type: item.assessment_type ?? item.type ?? "",
+  sort_order: item.sort_order ?? item.sortOrder ?? 0,
+}));
+const specs = buildCommentPoolSpecs(plan);
 const specByFingerprint = new Map(specs.map((spec) => [spec.fingerprint, spec]));
+const specByScope = new Map(specs.map((spec) => [
+  `${spec.subject}|${spec.unit}|${spec.domain}|${spec.level}`,
+  spec,
+]));
 type PoolDetail = { sentences: Array<{ id: number; sentence: string }> };
 const details: PoolDetail[] = [];
 for (let index = 0; index < poolData.groups.length; index += 10) {
@@ -31,9 +40,14 @@ for (let index = 0; index < poolData.groups.length; index += 10) {
     get(`/api/comment-pools?fingerprint=${encodeURIComponent(group.fingerprint)}`))));
 }
 const issueCounts: Record<string, number> = {};
+const unmatchedGroups: Array<{ fingerprint: string; subject: string; unit: string; domain: string; level: string }> = [];
 const rows = poolData.groups.flatMap((group: { fingerprint: string; subject: string; unit: string; domain: string; level: string }, groupIndex: number) => {
-  const spec = specByFingerprint.get(group.fingerprint);
-  if (!spec) throw new Error("Current pool fingerprint does not match the assessment plan");
+  const spec = specByFingerprint.get(group.fingerprint)
+    ?? specByScope.get(`${group.subject}|${group.unit}|${group.domain}|${group.level}`);
+  if (!spec) {
+    unmatchedGroups.push(group);
+    return [];
+  }
   return details[groupIndex].sentences.map((row: { id: number; sentence: string }) => {
     const issues = validatePoolCandidate(row.sentence, spec).issues;
     issues.forEach((issue) => { issueCounts[issue] = (issueCounts[issue] ?? 0) + 1; });
@@ -63,7 +77,9 @@ const affectedCriteria = [...new Map(rows.filter((row: { issues: string[] }) => 
 })).values()];
 process.stdout.write(`${JSON.stringify({
   mode: "approved-comment-pool-audit", readOnly: true,
-  pools: poolData.groups.length, approved: rows.length, passing, failing: rows.length - passing,
+  pools: poolData.groups.length, currentPools: poolData.groups.length - unmatchedGroups.length,
+  unmatchedPools: unmatchedGroups.length, unmatchedGroups,
+  approved: rows.length, passing, failing: rows.length - passing,
   passRate: rows.length ? Math.round(passing / rows.length * 10000) / 100 : 0,
   repairable: rows.filter((row: { repairable: boolean }) => row.repairable).length,
   bySubject, issueCounts, affectedCriteria,

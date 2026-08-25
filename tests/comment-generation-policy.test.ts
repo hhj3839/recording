@@ -15,11 +15,24 @@ import { readApiJson } from "../app/api-response.ts";
 import { approvePoolCandidates, buildCommentPoolSpecs, commentPoolQuality, COMMENT_POOL_CLUSTER_LIMIT, COMMENT_POOL_CLUSTER_THRESHOLD, COMMENT_POOL_MINIMUM, COMMENT_POOL_OPENING_LIMIT, COMMENT_POOL_SIMILARITY_LIMIT, COMMENT_POOL_TARGET, poolCandidateQualityScore, poolSentenceOpening, poolSentenceSimilarity, repairLegacyPoolCandidate, validatePoolCandidate } from "../app/comment-pool-library.ts";
 import { buildCommentPoolCandidatePrompt, commentPoolSystemPrompt } from "../app/comment-pool-prompt.ts";
 import { compileCommentPoolEvidence, validCommentPoolEvidenceIds } from "../app/comment-pool-evidence.ts";
+import { openAiOutputText, parseFirstJsonObject } from "../app/openai-response.ts";
 
 const poolPlan = (overrides: Partial<{ id: number; subject: string; unit: string; goal: string; domain: string; perspective: string; high: string; middle: string; low: string }> = {}) => ({
   id: 1, subject: "사회", unit: "우리 고장", goal: "지역의 모습을 이해한다.", domain: "지리 인식",
   perspective: "지역 자료를 조사하고 정리하는가?", high: "지역 자료를 다양한 방법으로 조사하여 체계적으로 정리함.",
   middle: "지역 자료를 조사하여 정리함.", low: "교사의 도움을 받아 지역 자료를 조사하여 정리함.", ...overrides,
+});
+
+test("recovers the first structured OpenAI object without losing usage on trailing output", () => {
+  const raw = openAiOutputText({ output: [{ content: [
+    { type: "output_text", text: '{"candidates":[{"text":"평가 문장임.","evidenceIds":["e1"]}]}' },
+    { type: "output_text", text: '{"ignored":true}' },
+  ] }] });
+  assert.deepEqual(parseFirstJsonObject(raw), {
+    candidates: [{ text: "평가 문장임.", evidenceIds: ["e1"] }],
+  });
+  assert.deepEqual(parseFirstJsonObject('```json\n{"candidates":[]}\n```'), { candidates: [] });
+  assert.equal(parseFirstJsonObject("not json"), null);
 });
 
 test("structures every pool prompt around at least two grounded observation elements", () => {

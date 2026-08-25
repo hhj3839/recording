@@ -6,6 +6,7 @@ import { primaryAiModel } from "../../../ai-model-policy";
 import { recordAiUsage } from "../../../ai-usage";
 import { buildCommentPoolCandidatePrompt, commentPoolSystemPrompt } from "../../../comment-pool-prompt";
 import { compileCommentPoolEvidence, validCommentPoolEvidenceIds } from "../../../comment-pool-evidence";
+import { openAiOutputText, parseFirstJsonObject } from "../../../openai-response";
 
 export const maxDuration = 300;
 type PoolBatch = {
@@ -19,15 +20,6 @@ type JobRow = {
 };
 
 const inValues = (values: Array<string | number>) => `in.(${values.join(",")})`;
-
-function outputText(payload: unknown) {
-  if (!payload || typeof payload !== "object") return "";
-  const value = payload as { output_text?: unknown; output?: Array<{ content?: Array<{ type?: string; text?: string }> }> };
-  if (typeof value.output_text === "string") return value.output_text;
-  return (value.output ?? []).flatMap((item) => item.content ?? [])
-    .filter((item) => item.type === "output_text" && typeof item.text === "string")
-    .map((item) => item.text).join("");
-}
 
 function queueNext(request: Request, jobId: string) {
   const url = new URL("/api/comment-pools/run", request.url);
@@ -64,7 +56,7 @@ async function generateCandidates(spec: CommentPoolSpec, existing: string[], cou
   });
   const payload = await response.json() as { usage?: { input_tokens?: number; output_tokens?: number; total_tokens?: number; input_tokens_details?: { cached_tokens?: number } } };
   if (!response.ok) throw new Error(`AI 평어 후보 제작 실패 (HTTP ${response.status})`);
-  const decoded = JSON.parse(outputText(payload).replace(/^```json\s*/i, "").replace(/\s*```$/, "")) as { candidates?: unknown };
+  const decoded = parseFirstJsonObject<{ candidates?: unknown }>(openAiOutputText(payload)) ?? {};
   const candidates = Array.isArray(decoded.candidates) ? decoded.candidates.flatMap((item) => {
     if (!item || typeof item !== "object") return [];
     const value = item as { text?: unknown; evidenceIds?: unknown };
