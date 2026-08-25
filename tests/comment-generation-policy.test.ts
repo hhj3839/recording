@@ -14,6 +14,7 @@ import { assembleRotatedComment } from "../app/comment-assembly.ts";
 import { readApiJson } from "../app/api-response.ts";
 import { approvePoolCandidates, buildCommentPoolSpecs, commentPoolQuality, COMMENT_POOL_CLUSTER_LIMIT, COMMENT_POOL_CLUSTER_THRESHOLD, COMMENT_POOL_MINIMUM, COMMENT_POOL_OPENING_LIMIT, COMMENT_POOL_SIMILARITY_LIMIT, COMMENT_POOL_TARGET, poolCandidateQualityScore, poolSentenceOpening, poolSentenceSimilarity, repairLegacyPoolCandidate, validatePoolCandidate } from "../app/comment-pool-library.ts";
 import { buildCommentPoolCandidatePrompt, commentPoolSystemPrompt } from "../app/comment-pool-prompt.ts";
+import { compileCommentPoolEvidence, validCommentPoolEvidenceIds } from "../app/comment-pool-evidence.ts";
 
 const poolPlan = (overrides: Partial<{ id: number; subject: string; unit: string; goal: string; domain: string; perspective: string; high: string; middle: string; low: string }> = {}) => ({
   id: 1, subject: "사회", unit: "우리 고장", goal: "지역의 모습을 이해한다.", domain: "지리 인식",
@@ -26,15 +27,38 @@ test("structures every pool prompt around at least two grounded observation elem
     perspective: "지역 자료를 조사하는가? / 조사 결과를 기준에 따라 정리하는가?",
   })]);
   const prompt = buildCommentPoolCandidatePrompt(spec, ["기존 승인 문장임."], 15);
-  assert.match(commentPoolSystemPrompt, /서로 다른 근거 요소를 문장마다 최소 2개 결합/);
+  assert.match(commentPoolSystemPrompt, /독립된 관찰 근거가 2개 이상일 때만/);
   assert.match(commentPoolSystemPrompt, /근거 요소가 실제로 하나뿐이면 새 사실을 만들지 말고/);
   assert.match(prompt, /# 관찰 근거 구성표/);
-  assert.match(prompt, /평가관점: 지역 자료를 조사하는가/);
-  assert.match(prompt, /평가관점: 조사 결과를 기준에 따라 정리하는가/);
-  assert.match(prompt, /서로 다른 요소를 최소 2개 반영/);
+  assert.match(prompt, /\[평가관점\] 지역 자료를 조사하는가/);
+  assert.match(prompt, /\[평가관점\] 조사 결과를 기준에 따라 정리하는가/);
+  assert.match(prompt, /근거를 최소 2개 반영/);
+  assert.match(prompt, /evidenceIds/);
   assert.match(prompt, /무엇을 어떻게 수행하여 어떤 결과를 보였는지/);
   assert.match(prompt, /자연스러운 후보 15개/);
   assert.match(prompt, /기존 승인 문장임/);
+});
+
+test("compiles one shared evidence ledger with dynamic combination targets", () => {
+  const rich = compileCommentPoolEvidence({
+    criterion: "지역 자료를 조사하여 정리함.",
+    goal: "지역 자료를 조사하여 정리한다.",
+    perspective: "조사 결과를 발표하는가?",
+    assessmentType: "발표 평가",
+    caution: "모둠에서 조사 결과를 공유한다.",
+  });
+  assert.equal(rich.requiredId, "E1");
+  assert.equal(rich.combinationTarget, 2);
+  assert.equal(rich.items.some((item) => item.role === "goal" && item.text.includes("지역 자료")), false);
+  assert.equal(rich.items.some((item) => item.role === "method"), true);
+  const perspectiveId = rich.items.find((item) => item.role === "perspective")?.id ?? "";
+  assert.equal(validCommentPoolEvidenceIds("지역 자료를 조사하여 정리하고 조사 결과를 발표함.", [rich.requiredId, perspectiveId], rich), true);
+  assert.equal(validCommentPoolEvidenceIds("지역 자료를 조사하여 정리함.", [rich.requiredId, perspectiveId], rich), false);
+  assert.equal(validCommentPoolEvidenceIds("지역 자료를 조사하여 정리함.", [rich.requiredId, rich.requiredId], rich), false);
+  assert.equal(validCommentPoolEvidenceIds("지역 자료를 조사하여 정리함.", [rich.requiredId, "E999"], rich), false);
+  const sparse = compileCommentPoolEvidence({ criterion: "알파벳을 씀.", goal: "", perspective: "", assessmentType: "", caution: "" });
+  assert.equal(sparse.items.length, 1);
+  assert.equal(sparse.combinationTarget, 1);
 });
 
 test("accepts rich activities grounded anywhere in the assessment plan without weakening the selected level", () => {

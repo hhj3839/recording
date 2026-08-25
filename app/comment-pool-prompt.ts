@@ -1,4 +1,5 @@
 import type { CommentPoolSpec } from "./comment-pool-library";
+import { compileCommentPoolEvidence } from "./comment-pool-evidence.ts";
 
 export const commentPoolSystemPrompt = `# 역할
 당신은 초등학교 담임교사의 학생평가 작성 전문가이다.
@@ -6,15 +7,15 @@ export const commentPoolSystemPrompt = `# 역할
 
 # 작성 절차
 1. 선택 수준 평가기준에서 반드시 보존할 수행 대상·행동·수준을 먼저 찾는다.
-2. 평가목표·평가관점·평가유형·유의점에서 실제 관찰 가능한 활동 근거를 찾는다.
-3. 선택 수준과 모순하지 않는 서로 다른 근거 요소를 문장마다 최소 2개 결합한다.
+2. 평가관점·유의점에서 실제 관찰 가능한 활동 근거를 찾고, 평가목표·평가유형은 뜻과 장면을 이해하는 문맥으로만 사용한다.
+3. 독립된 관찰 근거가 2개 이상일 때만 서로 다른 역할의 근거 2개를 결합하고, 하나뿐이면 새 사실을 추가하지 않는다.
 4. 활동 장면과 수행 결과가 자연스럽게 이어지는 한 문장으로 작성한다.
 5. 출력 전에 사실성·수준·문장 호응·길이·중복을 다시 검수한다.
 
 # 작성 원칙
 - 선택된 평가기준의 의미와 수행 수준을 정확하게 유지한다.
 - 입력되지 않은 행동, 태도, 방법이나 성과를 추가하지 않는다.
-- 평가목표·평가관점·평가유형·유의점을 함께 분석하되, 실제 활동이 명시된 경우에만 관찰 장면으로 활용한다.
+- 평가목표·평가관점·평가유형·유의점을 함께 분석하되, 학생 수행 근거는 선택 수준 기준·평가관점·유의점에서 실제 활동이 명시된 경우에만 활용한다.
 - 근거 요소가 실제로 하나뿐이면 새 사실을 만들지 말고 그 요소의 대상·과정·결과 중 확인 가능한 두 측면을 구체화한다.
 - 평가기준을 그대로 복사하거나 단어 몇 개만 치환하지 말고 관찰 가능한 학생의 수행으로 자연스럽게 표현한다.
 - 긍정적인 학교생활기록부 문체로 작성한다.
@@ -30,19 +31,8 @@ export const commentPoolSystemPrompt = `# 역할
 # 출력
 지정된 JSON 스키마만 출력한다. 제목·번호·설명은 출력하지 않는다.`;
 
-function evidenceItems(spec: CommentPoolSpec) {
-  const split = (value: string) => value
-    .split(/(?:\s*\/\s*|[?？]\s*|\r?\n+|\s*[·ㆍ•]\s*)/)
-    .map((item) => item.replace(/^[-–—]\s*/, "").trim())
-    .filter((item) => item.length >= 4 && item !== "미입력");
-  return [...new Set([
-    `선택 수준 수행: ${spec.criterion}`,
-    ...split(spec.perspective).map((item) => `평가관점: ${item}`),
-    ...split(spec.caution ?? "").map((item) => `수업·평가 활동: ${item}`),
-  ])];
-}
-
 export function buildCommentPoolCandidatePrompt(spec: CommentPoolSpec, existing: string[], count: number) {
+  const evidence = compileCommentPoolEvidence(spec);
   return `# 이번 문장 풀
 과목: ${spec.subject}
 단원: ${spec.unit}
@@ -54,16 +44,20 @@ export function buildCommentPoolCandidatePrompt(spec: CommentPoolSpec, existing:
 의미 보존용 기준 문장: ${spec.canonicalSentence}
 
 # 관찰 근거 구성표
-${evidenceItems(spec).map((item, index) => `${index + 1}. ${item}`).join("\n")}
+${evidence.items.filter((item) => item.usable).map((item) => `${item.id}. [${item.label}] ${item.text}`).join("\n")}
+
+# 해석 문맥
+${evidence.items.filter((item) => !item.usable).map((item) => `- [${item.label}] ${item.text}`).join("\n") || "- 없음"}
+해석 문맥은 평가계획의 뜻과 장면을 이해하는 참고 자료이며 학생이 실제 수행한 근거로 사용하거나 evidenceIds에 기록하지 않는다.
 
 # 요청
 이미 승인된 문장을 반복하지 말고 자연스러운 후보 ${count}개를 작성한다.
-각 후보는 선택 수준 수행을 반드시 보존하고, 관찰 근거 구성표에서 선택 수준과 모순하지 않는 서로 다른 요소를 최소 2개 반영한다.
+각 후보는 ${evidence.requiredId} 선택 수준 수행을 반드시 보존한다.
+${evidence.combinationTarget === 2 ? "서로 다른 역할의 근거가 있으므로 선택 수준과 모순하지 않는 근거를 최소 2개 반영한다." : "독립된 근거가 하나뿐이므로 새 활동을 만들지 않고 그 근거만 자연스럽게 표현한다."}
 두 요소를 나열하지 말고 ‘무엇을 어떻게 수행하여 어떤 결과를 보였는지’가 한 흐름으로 읽히게 연결한다.
-근거 구성표에 독립된 요소가 하나뿐이면 새 활동을 만들지 말고 그 수행의 대상과 과정 또는 과정과 결과를 구체적으로 연결한다.
 의미 보존용 기준 문장은 사실성과 수준을 확인하는 기준이지 문장 틀이 아니다.
 조사·연결어만 바꾸는 변형을 만들지 않는다.
-후보별로 사용한 근거를 내부적으로 확인하되 그 번호나 설명은 출력하지 않는다.
+후보별로 실제 사용한 근거 ID를 evidenceIds에 기록하고 ${evidence.requiredId}을 반드시 포함한다. 존재하지 않는 근거 ID를 만들지 않는다.
 후보 전체의 첫 15글자, 관찰 장면, 절의 순서와 서술어 배열을 서로 비교하여 유사한 후보는 출력 전에 다시 작성한다.
 이미 승인된 문장: ${JSON.stringify(existing)}
 최종 출력에는 JSON 후보만 포함한다.`;
