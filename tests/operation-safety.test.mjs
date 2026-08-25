@@ -296,6 +296,19 @@ test("keeps isolated pool refresh safe without exposing a teacher-facing selecti
   assert.doesNotMatch(page, /targetFingerprints: \[selected\.fingerprint\], maxGroups: 1, refresh: true/);
 });
 
+test("limits failed pool sentence audits to the owning lab account and terminal jobs", () => {
+  const route = readFileSync("app/api/comment-pools/route.ts", "utf8");
+  const runner = readFileSync("scripts/run-approved-single-pool-quality-gate.ts", "utf8");
+  assert.match(route, /id: eq\(jobId\), owner_id: eq\(user\.id\), job_type: eq\("comment-pools"\)/);
+  assert.match(route, /params\.get\("audit"\) === "1"/);
+  assert.match(route, /user\.email\.toLowerCase\(\)\.endsWith\("@giroksam\.test"\)/);
+  assert.match(route, /제작이 끝난 뒤 품질 감사를 확인해 주세요/);
+  assert.match(route, /pool_version_id: inValues\(versionIds\), status: eq\("approved"\)/);
+  assert.match(route, /scope: \{ subject: spec\.subject, unit: spec\.unit, domain: spec\.domain, level: spec\.level \}/);
+  assert.doesNotMatch(route.slice(route.indexOf('params.get("audit") === "1"'), route.indexOf("return Response.json({ job: publicJob(job) }")), /student_id|studentId/);
+  assert.match(runner, /jobId=.*&audit=1/);
+});
+
 test("shows resumable pool production progress beside the ready count", () => {
   const page = readFileSync("app/page.tsx", "utf8");
   const route = readFileSync("app/api/comment-pools/route.ts", "utf8");

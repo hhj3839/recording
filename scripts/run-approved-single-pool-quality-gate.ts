@@ -84,7 +84,11 @@ for (let attempt = 0; attempt < 120; attempt += 1) {
   await new Promise((resolve) => setTimeout(resolve, 2000));
 }
 
-const [poolsAfter, usageAfter] = await Promise.all([request("/api/comment-pools"), request("/api/usage")]);
+const [poolsAfter, usageAfter, generatedVersionAudit] = await Promise.all([
+  request("/api/comment-pools"),
+  request("/api/usage"),
+  request(`/api/comment-pools?jobId=${encodeURIComponent(started.jobId)}&audit=1`),
+]);
 const currentGroup = poolsAfter.groups.find((group: { fingerprint: string }) => group.fingerprint === target.fingerprint);
 const detail = currentGroup
   ? await request(`/api/comment-pools?fingerprint=${encodeURIComponent(target.fingerprint)}`)
@@ -113,6 +117,7 @@ process.stdout.write(`${JSON.stringify({
     estimatedCostUsd: Math.round((Number(usageAfter.estimatedCostUsd) - Number(usageBefore.estimatedCostUsd)) * 1_000_000) / 1_000_000,
   },
   activePoolSource: activated ? "newly_generated" : "retained_previous",
+  generatedVersionAudit: generatedVersionAudit.audit ?? [],
   activePoolQuality: commentPoolQuality(sentences, target.canonicalSentence),
   activePoolGrounding: {
     passing: validations.filter((result: { issues: string[] }) => result.issues.length === 0).length,
