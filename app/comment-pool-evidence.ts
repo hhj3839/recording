@@ -25,7 +25,7 @@ const semanticKey = (value: string) => value.normalize("NFKC")
 
 export function compileCommentPoolEvidence(input: CommentPoolEvidenceInput) {
   const candidates: Array<Omit<CommentPoolEvidenceItem, "id">> = [
-    { role: "required", label: "선택 수준 수행", text: input.criterion.trim(), usable: true },
+    { role: "required" as const, label: "선택 수준 수행", text: input.criterion.trim(), usable: true },
     ...splitEvidence(input.perspective).map((text) => ({ role: "perspective" as const, label: "평가관점", text, usable: true })),
     ...splitEvidence(input.caution ?? "").map((text) => ({ role: "activity" as const, label: "수업·평가 활동", text, usable: true })),
     ...splitEvidence(input.goal).map((text) => ({ role: "goal" as const, label: "평가목표", text, usable: false })),
