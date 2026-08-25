@@ -5,6 +5,7 @@ import { signCommentJob, verifyCommentJob } from "../../../comment-generation";
 import { primaryAiModel } from "../../../ai-model-policy";
 import { recordAiUsage } from "../../../ai-usage";
 import { buildCommentPoolCandidatePrompt, commentPoolSystemPrompt } from "../../../comment-pool-prompt";
+import { compileCommentPoolEvidence, validCommentPoolEvidenceIds } from "../../../comment-pool-evidence";
 
 export const maxDuration = 300;
 type PoolBatch = {
@@ -40,6 +41,7 @@ async function generateCandidates(spec: CommentPoolSpec, existing: string[], cou
   const apiKey = process.env.OPENAI_API_KEY;
   if (!apiKey) throw new Error("AI 생성 설정이 아직 완료되지 않았습니다.");
   const model = primaryAiModel();
+  const compiledEvidence = compileCommentPoolEvidence(spec);
   const response = await fetch("https://api.openai.com/v1/responses", {
     method: "POST",
     headers: { Authorization: `Bearer ${apiKey}`, "Content-Type": "application/json" },
@@ -50,7 +52,12 @@ async function generateCandidates(spec: CommentPoolSpec, existing: string[], cou
       }],
       text: { verbosity: "medium", format: { type: "json_schema", name: "comment_pool_candidates", strict: true, schema: {
         type: "object", additionalProperties: false, required: ["candidates"], properties: {
-          candidates: { type: "array", minItems: count, maxItems: count, items: { type: "string" } },
+          candidates: { type: "array", minItems: count, maxItems: count, items: {
+            type: "object", additionalProperties: false, required: ["text", "evidenceIds"], properties: {
+              text: { type: "string" },
+              evidenceIds: { type: "array", minItems: compiledEvidence.combinationTarget, items: { type: "string" } },
+            },
+          } },
         },
       } } },
     }),
@@ -58,8 +65,16 @@ async function generateCandidates(spec: CommentPoolSpec, existing: string[], cou
   const payload = await response.json() as { usage?: { input_tokens?: number; output_tokens?: number; total_tokens?: number; input_tokens_details?: { cached_tokens?: number } } };
   if (!response.ok) throw new Error(`AI 평어 후보 제작 실패 (HTTP ${response.status})`);
   const decoded = JSON.parse(outputText(payload).replace(/^```json\s*/i, "").replace(/\s*```$/, "")) as { candidates?: unknown };
+  const candidates = Array.isArray(decoded.candidates) ? decoded.candidates.flatMap((item) => {
+    if (!item || typeof item !== "object") return [];
+    const value = item as { text?: unknown; evidenceIds?: unknown };
+    if (typeof value.text !== "string" || !Array.isArray(value.evidenceIds)) return [];
+    const evidenceIds = value.evidenceIds.filter((id): id is string => typeof id === "string");
+    if (!validCommentPoolEvidenceIds(value.text, evidenceIds, compiledEvidence)) return [];
+    return [value.text];
+  }) : [];
   return {
-    candidates: Array.isArray(decoded.candidates) ? decoded.candidates.filter((item): item is string => typeof item === "string") : [],
+    candidates,
     usage: { model, inputTokens: Number(payload.usage?.input_tokens) || 0, cachedInputTokens: Number(payload.usage?.input_tokens_details?.cached_tokens) || 0, outputTokens: Number(payload.usage?.output_tokens) || 0, totalTokens: Number(payload.usage?.total_tokens) || 0 },
   };
 }

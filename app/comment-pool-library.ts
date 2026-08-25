@@ -1,5 +1,6 @@
 import { createHash } from "node:crypto";
 import { buildCanonicalCommentSentence, criterionSemanticIssues, evidenceBlockingIssues, evidenceGroundingWarnings, levelAppropriatenessIssues, positiveGrowthCriterion, repairSafeNominalEnding, validateGeneratedCommentPart } from "./comment-generation-policy.ts";
+import { compileCommentPoolEvidence } from "./comment-pool-evidence.ts";
 
 export const COMMENT_POOL_TARGET = 12;
 export const COMMENT_POOL_MINIMUM = 8;
@@ -156,24 +157,15 @@ export function validatePoolCandidate(candidate: string, spec: CommentPoolSpec) 
   const text = repairSafeNominalEnding(candidate);
   // 활동·관찰 장면은 평가계획 전체에서 근거를 찾되, 수행 수준과 필수
   // 성취는 선택 수준 평가기준에만 묶어 다른 수준의 의미 유입을 막는다.
-  const planEvidence = [
-    `단원: ${spec.unit}`,
-    `영역: ${spec.domain}`,
-    `평가목표: ${spec.goal}`,
-    `평가관점: ${spec.perspective}`,
-    `평가유형: ${spec.assessmentType ?? ""}`,
-    `평가상의 유의점: ${spec.caution ?? ""}`,
-    `선택 수준 기준: ${spec.criterion}`,
-  ].filter(Boolean).join(" | ");
-  const allowedActivityEvidence = [spec.perspective, spec.caution ?? ""].filter(Boolean).join(" | ");
+  const compiledEvidence = compileCommentPoolEvidence(spec);
   const format = validateGeneratedCommentPart(text, spec.criterion);
   const structuralFormatValid = format.sentenceCountOk && format.endingsOk && format.naturalEndingsOk
     && format.predicateIssues.length === 0 && format.forbidden.length === 0;
   const issues = [
     ...(!structuralFormatValid ? ["문장 형식 또는 명사형 종결 검수 미통과"] : []),
     ...levelAppropriatenessIssues(text, spec.level, spec.criterion),
-    ...evidenceBlockingIssues(text, planEvidence, spec.criterion, allowedActivityEvidence),
-    ...evidenceGroundingWarnings(text, planEvidence).map((issue) => issue.replace(/ 확인 필요$/, "")),
+    ...evidenceBlockingIssues(text, compiledEvidence.planEvidence, spec.criterion, compiledEvidence.allowedActivityEvidence),
+    ...evidenceGroundingWarnings(text, compiledEvidence.planEvidence).map((issue) => issue.replace(/ 확인 필요$/, "")),
     ...criterionSemanticIssues(text, spec.criterion, spec.levelCriteria),
   ];
   const qualityWarnings = [
