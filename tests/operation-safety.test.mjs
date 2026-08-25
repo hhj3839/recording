@@ -315,6 +315,21 @@ test("limits failed pool sentence audits to the owning lab account and terminal 
   assert.doesNotMatch(poolRequest, /method: "(?:POST|PUT|PATCH|DELETE)"/);
 });
 
+test("keeps the bounded single-pool gate exact and lab-only across approved subjects", () => {
+  const runner = readFileSync("scripts/run-approved-single-pool-quality-gate.ts", "utf8");
+  assert.match(runner, /RUN_APPROVED_SINGLE_POOL_QUALITY_GATE/);
+  assert.match(runner, /APPROVED_POOL_SUBJECT/);
+  assert.match(runner, /APPROVED_POOL_UNIT/);
+  assert.match(runner, /APPROVED_POOL_DOMAIN/);
+  assert.match(runner, /APPROVED_POOL_LEVEL/);
+  assert.match(runner, /new Set\(\["국어", "수학"\]\)/);
+  assert.match(runner, /targets\.length !== 1/);
+  assert.match(runner, /maxGroups: 1/);
+  assert.match(runner, /labOnly: true/);
+  assert.match(runner, /Number\(started\.maxAiCalls\) > 2/);
+  assert.match(runner, /APPROVED_POOL_PREFLIGHT_ONLY/);
+});
+
 test("shows resumable pool production progress beside the ready count", () => {
   const page = readFileSync("app/page.tsx", "utf8");
   const route = readFileSync("app/api/comment-pools/route.ts", "utf8");
