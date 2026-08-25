@@ -13,6 +13,14 @@ if (process.env.RUN_APPROVED_SINGLE_POOL_QUALITY_GATE !== "YES") {
 }
 
 const baseUrl = (process.env.LOAD_TEST_BASE_URL || "https://giroksam-recording.vercel.app").replace(/\/$/, "");
+const approvedSubject = (process.env.APPROVED_POOL_SUBJECT || "국어").trim();
+const approvedUnit = (process.env.APPROVED_POOL_UNIT || "").trim();
+const approvedDomain = (process.env.APPROVED_POOL_DOMAIN || "").trim();
+const approvedLevel = (process.env.APPROVED_POOL_LEVEL || "").trim();
+const preflightOnly = process.env.APPROVED_POOL_PREFLIGHT_ONLY === "YES";
+if (!new Set(["국어", "수학"]).has(approvedSubject)) {
+  throw new Error("Only an explicitly approved Korean or mathematics pool may be tested");
+}
 const directory = path.resolve(".local-secrets");
 const files = (await readdir(directory)).filter((name) => /^lab-account-.*\.txt$/.test(name)).sort();
 const content = files.length ? await readFile(path.join(directory, files.at(-1)!), "utf8") : "";
@@ -50,11 +58,31 @@ const plan = (planData.plan as Array<PoolPlanItem & { type?: string; sortOrder?:
   sort_order: item.sort_order ?? item.sortOrder ?? 0,
 }));
 const specs = buildCommentPoolSpecs(plan);
-const target = specs.find((spec) => spec.subject === "국어"
-  && spec.unit === "1. 생생하게 표현해요"
-  && spec.domain === "듣기·말하기"
-  && spec.level === "상");
-if (!target) throw new Error("The approved Korean listening/speaking high-level scope was not found");
+const subjectSpecs = specs.filter((spec) => spec.subject === approvedSubject);
+if (preflightOnly) {
+  process.stdout.write(`${JSON.stringify({
+    mode: "approved-single-pool-quality-preflight",
+    labOnly: true,
+    subject: approvedSubject,
+    scopes: subjectSpecs.map((spec) => ({
+      unit: spec.unit,
+      domain: spec.domain,
+      level: spec.level,
+      criterion: spec.criterion,
+      existingPool: poolsBefore.groups.some((group: { fingerprint: string; poolVersionId?: number | null }) =>
+        group.fingerprint === spec.fingerprint && group.poolVersionId != null && Number.isInteger(Number(group.poolVersionId))),
+    })),
+  }, null, 2)}\n`);
+  process.exit(0);
+}
+if (!approvedUnit || !approvedDomain || !approvedLevel) {
+  throw new Error("APPROVED_POOL_UNIT, APPROVED_POOL_DOMAIN, and APPROVED_POOL_LEVEL are required");
+}
+const targets = subjectSpecs.filter((spec) => spec.unit === approvedUnit
+  && spec.domain === approvedDomain
+  && spec.level === approvedLevel);
+if (targets.length !== 1) throw new Error(`The exact approved pool scope was not found uniquely (${targets.length})`);
+const target = targets[0];
 
 const scopeMatches = (group: { subject: string; unit: string; domain: string; level: string }) =>
   group.subject === target.subject && group.unit === target.unit && group.domain === target.domain && group.level === target.level;
