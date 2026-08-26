@@ -61,10 +61,14 @@ function evidenceKeywords(value: string) {
 }
 
 export function commentReflectsPoolEvidence(comment: string, item: CommentPoolEvidenceItem) {
-  if (item.role === "required") return true;
   const normalizedComment = comment.normalize("NFKC").replace(/[^가-힣A-Za-z0-9]/g, "");
   const keywords = evidenceKeywords(item.text);
-  const requiredMatches = Math.min(2, keywords.length);
+  // evidenceIds는 AI의 자기 신고값이므로 필수 기준도 실제 문장 표면에서
+  // 확인한다. 짧은 기준은 핵심어 하나, 나머지는 서로 다른 핵심어 두 개를
+  // 요구해 ID만 붙이고 다른 사실을 쓰는 후보를 승인하지 않는다.
+  const requiredMatches = item.role === "required" && keywords.length <= 2
+    ? Math.min(1, keywords.length)
+    : Math.min(2, keywords.length);
   return requiredMatches > 0 && keywords.filter((keyword) => normalizedComment.includes(keyword)).length >= requiredMatches;
 }
 

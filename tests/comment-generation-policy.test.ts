@@ -104,6 +104,28 @@ test("compiles one shared evidence ledger with dynamic combination targets", () 
   const sparse = compileCommentPoolEvidence({ criterion: "알파벳을 씀.", goal: "", perspective: "", assessmentType: "", caution: "" });
   assert.equal(sparse.items.length, 1);
   assert.equal(sparse.combinationTarget, 1);
+  assert.equal(validCommentPoolEvidenceIds("노래를 부르며 즐겁게 참여함.", [sparse.requiredId], sparse), false);
+});
+
+test("blocks inferred tools, sequence, inspection, selection, and organization across subjects", () => {
+  const [spec] = buildCommentPoolSpecs([poolPlan({
+    goal: "",
+    perspective: "",
+    high: "선분, 반직선, 직선을 정확하게 구별하고 알맞게 긋는다.",
+    middle: "선분, 반직선, 직선을 구별하고 긋는다.",
+    low: "교사의 도움을 받아 선분, 반직선, 직선을 구별한다.",
+  })]).filter((item) => item.level === "중");
+  for (const candidate of [
+    "자를 사용해 선분, 반직선, 직선을 구별하고 그음.",
+    "선분, 반직선, 직선을 차례로 구별하고 그음.",
+    "선을 살피며 선분, 반직선, 직선을 구별하고 그음.",
+    "문제에 맞게 선분, 반직선, 직선을 구별하고 그음.",
+    "필요한 선을 골라 선분, 반직선, 직선을 구별하고 그음.",
+    "선분, 반직선, 직선을 구별하고 그은 내용을 정리함.",
+  ]) {
+    assert.equal(validatePoolCandidate(candidate, spec).issues.some((issue) => issue.includes("평가 근거에 없는")), true, candidate);
+  }
+  assert.deepEqual(validatePoolCandidate("선분, 반직선, 직선을 구별하고 긋음.", spec).issues, []);
 });
 
 test("accepts rich activities grounded anywhere in the assessment plan without weakening the selected level", () => {
@@ -1264,7 +1286,10 @@ test("blocks invented stock openings and required assistance omissions", () => {
       "자료를 관찰하고 분석하며 작품 속 인물의 대화를 알맞게 표현함.",
       "인물의 상황에 맞는 표정과 몸짓으로 대화를 표현할 수 있다.",
     ),
-    ["평가 근거에 없는 ‘자료 관찰·탐색·분석’ 표현"],
+    [
+      "평가 근거에 없는 ‘자료 관찰·탐색·분석’ 표현",
+      "평가 근거에 없는 ‘입력에 없는 관찰·확인 과정’ 표현",
+    ],
   );
   assert.deepEqual(
     evidenceBlockingIssues(
@@ -1355,7 +1380,10 @@ test("blocks an invented learning process when the criterion already states the 
   );
   assert.deepEqual(
     evidenceBlockingIssues("마음을 전하는 글을 쓰는 방법을 살피며 글을 쓰기 위해 힘씀.", evidence),
-    ["평가 기준의 필수 조건 ‘방법을 알고 있음’ 누락"],
+    [
+      "평가 근거에 없는 ‘입력에 없는 관찰·확인 과정’ 표현",
+      "평가 기준의 필수 조건 ‘방법을 알고 있음’ 누락",
+    ],
   );
 });
 
