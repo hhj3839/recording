@@ -991,6 +991,34 @@ test("allows a manner modifier in a reusable pool when the selected criterion co
   assert.deepEqual(validatePoolCandidate(criterion, spec).issues, []);
 });
 
+test("blocks unsupported performance manner across subjects without rejecting grounded modifiers", () => {
+  const ungrounded = [
+    ["선분, 반직선, 직선을 구별하고 곧게 그림.", "선분, 반직선, 직선을 구별하고 긋는다."],
+    ["자료를 체계적으로 정리함.", "자료를 정리한다."],
+    ["관찰 결과를 꼼꼼하게 기록함.", "관찰 결과를 기록한다."],
+    ["계산 원리를 이해하고 능숙하게 계산함.", "계산 원리를 이해하고 계산한다."],
+  ];
+  for (const [comment, evidence] of ungrounded) {
+    assert.equal(
+      evidenceBlockingIssues(comment, evidence).some((issue) => issue.includes("입력에 없는 수행 방식·정도")),
+      true,
+      comment,
+    );
+  }
+
+  assert.deepEqual(
+    evidenceBlockingIssues("선을 곧게 그음.", "선을 곧게 긋는다."),
+    [],
+  );
+  assert.equal(
+    evidenceBlockingIssues(
+      "상황에 알맞은 표정과 몸짓을 알고 대화를 표현함.",
+      "상황에 알맞은 표정과 몸짓을 알고 대화를 표현한다.",
+    ).some((issue) => issue.includes("입력에 없는 수행 방식·정도")),
+    false,
+  );
+});
+
 test("normalizes Korean declarative endings without subject-specific verb rules", () => {
   assert.equal(criterionToSafeNominalSentence("마음을 전하는 글을 쓴다."), "마음을 전하는 글을 씀.");
   assert.equal(criterionToSafeNominalSentence("소개 자료를 만든다."), "소개 자료를 만듦.");
