@@ -388,6 +388,7 @@ const unsupportedGroundingConcepts: Array<{
   evidencePattern?: RegExp;
   exclude?: RegExp;
   blocking: boolean;
+  warning?: boolean;
 }> = [
   { label: "자신 있게", pattern: /자신(?:감)?있|자신감을?(?:가지|보이)/, blocking: false },
   { label: "적극적으로", pattern: /적극적/, blocking: false },
@@ -432,6 +433,48 @@ const unsupportedGroundingConcepts: Array<{
   { label: "입력보다 강한 자세한 수행", pattern: /자세히/, evidencePattern: /자세히|구체적/, blocking: true },
   { label: "입력보다 강한 잘 수행", pattern: /잘(?:표현|정리|설명|파악|활용|수행)/, evidencePattern: /잘(?:표현|정리|설명|파악|활용|수행)|능숙|우수/, blocking: true },
   { label: "수행을 능력 보유로 변경", pattern: /할줄알/, evidencePattern: /할줄알/, blocking: true },
+  {
+    label: "입력에 없는 도구·재료 사용",
+    pattern: /(?:자를|컴퍼스|각도기|도구|기구|재료).{0,10}(?:사용|활용|이용)/,
+    evidencePattern: /(?:자를|컴퍼스|각도기|도구|기구|재료).{0,10}(?:사용|활용|이용)/,
+    blocking: true,
+    warning: false,
+  },
+  {
+    label: "입력에 없는 수행 순서·단계",
+    pattern: /(?:차례로|순서대로|단계별로|하나씩|차근차근)/,
+    evidencePattern: /(?:차례로|순서대로|단계별로|하나씩|차근차근)/,
+    blocking: true,
+    warning: false,
+  },
+  {
+    label: "입력에 없는 관찰·확인 과정",
+    pattern: /(?:살피|확인|점검|관찰)/,
+    evidencePattern: /(?:살피|확인|점검|관찰)/,
+    blocking: true,
+    warning: false,
+  },
+  {
+    label: "입력에 없는 문제·상황 적합성",
+    pattern: /(?:문제|상황).{0,10}(?:맞게|알맞|적합)/,
+    evidencePattern: /(?:문제|상황).{0,10}(?:맞게|알맞|적합)/,
+    blocking: true,
+    warning: false,
+  },
+  {
+    label: "입력에 없는 선택·필요성 판단",
+    pattern: /(?:필요한|필요에따라).{0,10}(?:선|자료|방법|내용|도구|정보)|(?:선|자료|방법|내용|도구|정보).{0,10}(?:고르|선택)/,
+    evidencePattern: /(?:필요한|필요에따라).{0,10}(?:선|자료|방법|내용|도구|정보)|(?:선|자료|방법|내용|도구|정보).{0,10}(?:고르|선택)/,
+    blocking: true,
+    warning: false,
+  },
+  {
+    label: "입력에 없는 정리·기록 과정",
+    pattern: /(?:정리|기록|메모)/,
+    evidencePattern: /(?:정리|기록|메모|간추|요약)/,
+    blocking: true,
+    warning: false,
+  },
 ];
 
 function normalizeGroundingText(text: string) {
@@ -442,8 +485,9 @@ export function evidenceGroundingWarnings(comment: string, evidence: string) {
   const normalizedComment = normalizeGroundingText(comment);
   const normalizedEvidence = normalizeGroundingText(evidence);
   return unsupportedGroundingConcepts
-    .filter(({ pattern, evidencePattern, exclude }) =>
-      pattern.test(normalizedComment)
+    .filter(({ pattern, evidencePattern, exclude, warning }) =>
+      warning !== false
+      && pattern.test(normalizedComment)
       && !(exclude?.test(normalizedComment))
       && !(evidencePattern ?? pattern).test(normalizedEvidence))
     .map(({ label }) => `평가 근거에 없는 ‘${label}’ 표현 확인 필요`);
