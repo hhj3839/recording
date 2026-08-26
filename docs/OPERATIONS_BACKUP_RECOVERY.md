@@ -76,6 +76,15 @@
 - 최신 운영 백업용 PostgreSQL 접속 문자열과 DB 비밀번호는 로컬에 보관되어 있지 않음. 운영자가 Supabase Dashboard에서 새 Session pooler 접속정보를 확인해 입력하기 전에는 덤프를 실행하지 않음.
 - 새 백업은 기존 파일을 덮어쓰지 않고 UTC 시각을 포함한 새 이름으로 생성하며, 목차·행 수·SHA-256 검증과 암호화 사본 생성까지 완료한 뒤 성공으로 판정함.
 
+## 2026-08-26 최신 운영 논리 백업 완료
+
+- PostgreSQL 17.10으로 `recording-20260826T101929Z.dump`를 새로 생성했으며 기존 백업은 덮어쓰지 않음.
+- `pg_restore --list` 복원 목차 547개와 운영 `public` 21개 테이블·11,056행을 확인함.
+- 원본 덤프 SHA-256은 `c1d6a6c42a3865bf373aac172d83a348d3edde4b1e92f160f4bb0e1f7d3c9b0b`임.
+- 덤프·복원 목차·행 수·원본 해시를 `recording-backup-20260826T101929Z.7z`로 AES-256 및 헤더 암호화하고 암호를 사용한 `7z test`를 통과함.
+- 암호화 보관본 SHA-256은 `727bf44f4ea871e95769439a5f6413fcfc3795e635e2e8b68cfefbd6d48228b3`이며 평문 덤프와 검증 파일은 암호화 검증 후 삭제함.
+- 백업 파일: `C:\Users\LEOPARDCAT\Documents\recording-backups\recording-backup-20260826T101929Z.7z`
+
 ### 파일럿 전 1회 준비
 
 1. PostgreSQL 공식 클라이언트를 설치하고 `pg_dump --version`과 `pg_restore --version`을 기록함.
