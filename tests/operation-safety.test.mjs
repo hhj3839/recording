@@ -65,13 +65,13 @@ test("comment jobs assign prepared approved pools without a paid AI call", () =>
   assert.match(producer, /api\.openai\.com\/v1\/responses/);
   assert.match(producer, /source: "canonical"/);
   assert.match(producer, /buildValidatedMinimumPoolFallbacks/);
-  assert.match(producer, /source: "deterministic_fallback"/);
+  assert.match(producer, /buildValidatedMinimumPoolFallbacks[\s\S]*source: "canonical"/);
   assert.match(producer, /existing\.length > 0[\s\S]*await saveFreeFallbacks\(\)[\s\S]*for \(let attempt/);
   const poolRoute = readFileSync("app/api/comment-pools/route.ts", "utf8");
   const page = readFileSync("app/page.tsx", "utf8");
   assert.match(poolRoute, /freeFallbackOnly/);
   assert.match(poolRoute, /buildValidatedMinimumPoolFallbacks/);
-  assert.match(poolRoute, /source: "deterministic_fallback"/);
+  assert.match(poolRoute, /buildValidatedMinimumPoolFallbacks[\s\S]*source: "canonical"/);
   assert.match(poolRoute, /if \(freeFallbackOnly\)[\s\S]*needsAi: pending\.length/);
   assert.match(page, /freeFallbackOnly: true/);
   assert.match(page, /검증된 기준 문장으로 부족한 AI 평어를 무료 보완했습니다/);

@@ -331,7 +331,7 @@ export async function POST(request: Request) {
       if (!fallbacks.length) continue;
       await upsertRows("comment_pool_sentences", fallbacks.map((sentence) => ({
         pool_version_id: versionId, sentence, normalized_sentence: normalizedPoolSentence(sentence),
-        status: "approved", source: "deterministic_fallback", updated_at: new Date().toISOString(),
+        status: "approved", source: "canonical", updated_at: new Date().toISOString(),
       })), "pool_version_id,normalized_sentence");
       const completedSentences = [...existing, ...fallbacks].slice(0, COMMENT_POOL_TARGET);
       sentencesByVersion.set(versionId, completedSentences);
