@@ -465,6 +465,19 @@ test("limits a full pool refresh to the exact 75-group lab scope and 150 calls",
   assert.match(route, /previousPoolVersionIds/);
 });
 
+test("recovers only safe five-sentence pools from the exact completed lab job without AI", () => {
+  const route = readFileSync("app/api/comment-pools/recover-job/route.ts", "utf8");
+  const runner = readFileSync("scripts/run-approved-pool-quality-recovery.mjs", "utf8");
+  assert.match(route, /@giroksam\.test/);
+  assert.match(route, /job\.total_items\) !== 75/);
+  assert.match(route, /commentPoolQuality/);
+  assert.match(route, /quality\.reusable/);
+  assert.match(route, /expectedRecoverable !== candidates\.length/);
+  assert.doesNotMatch(route, /openai\.com|recordAiUsage|generateCandidates/);
+  assert.match(runner, /APPLY_APPROVED_POOL_RECOVERY/);
+  assert.match(runner, /EXPECTED_RECOVERABLE_POOLS/);
+});
+
 test("normalizes assessment-plan API fields before diagnosing missing pools", () => {
   const audit = readFileSync("scripts/analyze-missing-comment-pools.ts", "utf8");
   const afterLogin = audit.slice(audit.indexOf("const get ="));
