@@ -12,7 +12,7 @@ import { commentAreaOverlapReasons } from "../app/comment-area-diversity.ts";
 import { assignApprovedCommentPools, assignUniquePoolCandidates, buildApprovedCommentPool, buildCanonicalBaselinePart, buildCommentPoolGroups, buildPublicCommentPoolRequests, commentPoolCandidateCount, spreadCandidatesByOpening } from "../app/comment-pool-generation.ts";
 import { assembleRotatedComment } from "../app/comment-assembly.ts";
 import { readApiJson } from "../app/api-response.ts";
-import { approvePoolCandidates, buildCommentPoolSpecs, buildValidatedMinimumPoolFallbacks, commentPoolQuality, commentPoolSelectionTarget, COMMENT_POOL_CLUSTER_LIMIT, COMMENT_POOL_CLUSTER_THRESHOLD, COMMENT_POOL_MINIMUM, COMMENT_POOL_OPENING_LIMIT, COMMENT_POOL_SIMILARITY_LIMIT, COMMENT_POOL_TARGET, poolCandidateQualityScore, poolSentenceOpening, poolSentenceSimilarity, repairLegacyPoolCandidate, validatePoolCandidate } from "../app/comment-pool-library.ts";
+import { approvePoolCandidates, buildCommentPoolSpecs, buildValidatedMinimumPoolFallbacks, commentPoolQuality, commentPoolSelectionTarget, COMMENT_POOL_CLUSTER_LIMIT, COMMENT_POOL_CLUSTER_THRESHOLD, COMMENT_POOL_MINIMUM, COMMENT_POOL_SIMILARITY_LIMIT, COMMENT_POOL_TARGET, poolCandidateQualityScore, poolSentenceOpening, poolSentenceSimilarity, repairLegacyPoolCandidate, validatePoolCandidate } from "../app/comment-pool-library.ts";
 import { buildCommentPoolCandidatePrompt, commentPoolSystemPrompt } from "../app/comment-pool-prompt.ts";
 import { compileCommentPoolEvidence, validCommentPoolEvidenceIds } from "../app/comment-pool-evidence.ts";
 import { openAiOutputText, parseFirstJsonObject } from "../app/openai-response.ts";
@@ -179,7 +179,7 @@ test("requests the full twelve-sentence pool for both short and long criteria", 
   assert.match(prompt, /서로 다른 교과 평가 문장 후보 15개/);
 });
 
-test("keeps free fallbacks nominal, exact-distinct, and within the opening limit", () => {
+test("keeps free fallbacks nominal and exact-distinct", () => {
   const spec = buildCommentPoolSpecs([poolPlan({
     subject: "국어", unit: "마음을 전해요", domain: "쓰기", goal: "마음을 전하는 글을 쓴다.",
     perspective: "마음을 전하는 글을 쓰는 방법을 알고 글을 쓰는가?",
@@ -190,8 +190,6 @@ test("keeps free fallbacks nominal, exact-distinct, and within the opening limit
   const existing = [spec.canonicalSentence];
   const fallbacks = buildValidatedMinimumPoolFallbacks(spec, existing);
   assert.equal(new Set([...existing, ...fallbacks].map((sentence) => sentence.replace(/[.!?]+$/g, ""))).size, existing.length + fallbacks.length);
-  const openings = [...existing, ...fallbacks].map(poolSentenceOpening);
-  openings.forEach((opening) => assert.ok(openings.filter((value) => value === opening).length <= COMMENT_POOL_OPENING_LIMIT));
   fallbacks.forEach((candidate) => {
     assert.deepEqual(validatePoolCandidate(candidate, spec).issues, [], candidate);
     assert.match(candidate, /마음을 전하는 글/);
@@ -245,7 +243,7 @@ test("approves validated pool candidates up to the natural twelve sentence targe
   assert.ok(approved.approved.includes(candidate));
 });
 
-test("applies only nominal ending, exact duplicate, and first-fifteen opening checks to a pool", () => {
+test("applies only nominal ending and exact duplicate checks to a pool", () => {
   const spec = buildCommentPoolSpecs([poolPlan()])[1];
   const candidates = [
     "지역 자료를 살펴보고 관찰 결과를 기준에 따라 첫째로 정리함.",
@@ -256,7 +254,7 @@ test("applies only nominal ending, exact duplicate, and first-fifteen opening ch
     "지역의 특징을 여러 자료에서 찾고.",
   ];
   const result = approvePoolCandidates(candidates, spec);
-  assert.deepEqual(result.approved, [candidates[0], candidates[1], candidates[3]]);
+  assert.deepEqual(result.approved, [candidates[0], candidates[1], candidates[2], candidates[3]]);
   assert.deepEqual(result.rejectedIssues, ["자연스러운 명사형 종결 검수 미통과"]);
 });
 
@@ -271,7 +269,6 @@ test("measures near-identical pool sentences and groups their openings", () => {
   assert.equal(COMMENT_POOL_MINIMUM, 5);
   assert.equal(COMMENT_POOL_CLUSTER_THRESHOLD, 0.75);
   assert.equal(COMMENT_POOL_CLUSTER_LIMIT, 2);
-  assert.equal(COMMENT_POOL_OPENING_LIMIT, 2);
 });
 
 test("keeps a safe pool usable while reporting repeated template openings", () => {

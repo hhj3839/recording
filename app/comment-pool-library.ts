@@ -6,7 +6,6 @@ export const COMMENT_POOL_MINIMUM = 5;
 export const COMMENT_POOL_SIMILARITY_LIMIT = 0.9;
 export const COMMENT_POOL_CLUSTER_THRESHOLD = 0.75;
 export const COMMENT_POOL_CLUSTER_LIMIT = 2;
-export const COMMENT_POOL_OPENING_LIMIT = 2;
 export const COMMENT_POOL_REUSE_MINIMUM_OPENING_RATIO = 0.5;
 export const COMMENT_POOL_REUSE_MAX_CLUSTER_RATIO = 0.2;
 export const COMMENT_POOL_REUSE_MAX_NEAREST_SIMILARITY = 0.82;
@@ -210,11 +209,6 @@ export function approvePoolCandidates(candidates: string[], spec: CommentPoolSpe
   const seen = new Set(existing.map(normalizedPoolSentence));
   const approved: string[] = [];
   const rejectedIssues = new Set<string>();
-  const openingCounts = new Map<string, number>();
-  existing.forEach((sentence) => {
-    const opening = poolSentenceOpening(sentence);
-    openingCounts.set(opening, (openingCounts.get(opening) ?? 0) + 1);
-  });
   for (const candidate of candidates) {
     if (existing.length + approved.length >= selectionTarget) break;
     const result = validatePoolCandidate(candidate, spec);
@@ -224,10 +218,7 @@ export function approvePoolCandidates(candidates: string[], spec: CommentPoolSpe
     }
     const key = normalizedPoolSentence(result.text);
     if (!key || seen.has(key)) continue;
-    const opening = poolSentenceOpening(result.text);
-    if ((openingCounts.get(opening) ?? 0) >= COMMENT_POOL_OPENING_LIMIT) continue;
     seen.add(key);
-    openingCounts.set(opening, (openingCounts.get(opening) ?? 0) + 1);
     approved.push(result.text);
   }
   return { approved, rejectedIssues: [...rejectedIssues] };
@@ -269,20 +260,12 @@ function groundedFreeVariantCandidates(spec: CommentPoolSpec) {
 export function buildValidatedMinimumPoolFallbacks(spec: CommentPoolSpec, existing: string[] = []) {
   const seen = new Set(existing.map(normalizedPoolSentence));
   const approved: string[] = [];
-  const openingCounts = new Map<string, number>();
-  existing.forEach((sentence) => {
-    const opening = poolSentenceOpening(sentence);
-    openingCounts.set(opening, (openingCounts.get(opening) ?? 0) + 1);
-  });
   for (const candidate of groundedFreeVariantCandidates(spec)) {
     if (seen.size >= COMMENT_POOL_MINIMUM) break;
     const result = validatePoolCandidate(candidate, spec);
     const key = normalizedPoolSentence(result.text);
     if (result.issues.length || !key || seen.has(key)) continue;
-    const opening = poolSentenceOpening(result.text);
-    if ((openingCounts.get(opening) ?? 0) >= COMMENT_POOL_OPENING_LIMIT) continue;
     seen.add(key);
-    openingCounts.set(opening, (openingCounts.get(opening) ?? 0) + 1);
     approved.push(result.text);
   }
   return approved;
