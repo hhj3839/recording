@@ -77,7 +77,11 @@ const affectedCriteria = [...new Map(rows.filter((row: { issues: string[] }) => 
 })).values()];
 process.stdout.write(`${JSON.stringify({
   mode: "approved-comment-pool-audit", readOnly: true,
+  summary: poolData.summary,
   pools: poolData.groups.length, currentPools: poolData.groups.length - unmatchedGroups.length,
+  emptyPools: poolData.groups.filter((group: { approvedCount?: number }) => Number(group.approvedCount ?? 0) === 0).map((group: {
+    subject: string; unit: string; domain: string; level: string;
+  }) => ({ subject: group.subject, unit: group.unit, domain: group.domain, level: group.level })),
   unmatchedPools: unmatchedGroups.length, unmatchedGroups,
   approved: rows.length, passing, failing: rows.length - passing,
   passRate: rows.length ? Math.round(passing / rows.length * 10000) / 100 : 0,

@@ -180,7 +180,8 @@ export async function POST(request: Request) {
   try {
     const { user, classId } = await getDataScope();
     const body = await request.json().catch(() => ({})) as {
-      subject?: unknown; maxGroups?: unknown; labOnly?: unknown; targetFingerprints?: unknown; canonicalOnly?: unknown; refresh?: unknown;
+      subject?: unknown; maxGroups?: unknown; labOnly?: unknown; targetFingerprints?: unknown; canonicalOnly?: unknown;
+      refresh?: unknown; fullRefresh?: unknown;
     };
     const subject = typeof body.subject === "string" ? body.subject.trim() : "";
     if (body.labOnly === true && !user.email.toLowerCase().endsWith("@giroksam.test")) {
@@ -194,6 +195,13 @@ export async function POST(request: Request) {
       ? [...new Set(body.targetFingerprints.filter((value): value is string => typeof value === "string" && /^[a-f0-9]{64}$/.test(value)))]
       : [];
     const refresh = body.refresh === true;
+    const fullRefresh = body.fullRefresh === true;
+    if (fullRefresh && body.labOnly !== true) {
+      return Response.json({ error: "전체 새 버전 제작은 실험실 제한 검증에서만 사용할 수 있습니다." }, { status: 403 });
+    }
+    if (fullRefresh && (refresh || targetFingerprints.length || subject)) {
+      return Response.json({ error: "전체 새 버전 제작에는 과목·개별 묶음·단일 새 버전 옵션을 함께 사용할 수 없습니다." }, { status: 400 });
+    }
     if (targetFingerprints.length && body.labOnly !== true && !refresh) {
       return Response.json({ error: "개별 문장 풀 지정은 실험실 제한 검증에서만 사용할 수 있습니다." }, { status: 403 });
     }
@@ -205,6 +213,9 @@ export async function POST(request: Request) {
       ? Math.min(requestedMaxGroups, 15)
       : Number.POSITIVE_INFINITY;
     const allSpecs = await currentSpecs(user.id, classId);
+    if (fullRefresh && allSpecs.length !== 75) {
+      return Response.json({ error: `실험실 전체 새 버전 제작 범위가 75개가 아닙니다. (${allSpecs.length}개)` }, { status: 409 });
+    }
     const subjectSpecs = subject ? allSpecs.filter((spec) => spec.subject === subject) : allSpecs;
     const specs = targetFingerprints.length
       ? subjectSpecs.filter((spec) => targetFingerprints.includes(spec.fingerprint))
@@ -214,6 +225,44 @@ export async function POST(request: Request) {
       return Response.json({ error: "지정한 문장 풀 중 현재 평가계획과 일치하지 않는 항목이 있습니다." }, { status: 400 });
     }
     const currentLinked = await linkedVersions(user.id, classId, specs);
+    if (fullRefresh) {
+      const refreshNonce = Date.now();
+      const versions = await insertRows<PoolVersionRow>("comment_pool_versions", specs.map((spec, index) => ({
+        fingerprint: createHash("sha256")
+          .update(`${spec.fingerprint}|full-refresh|${user.id}|${classId}|${refreshNonce}|${index}`)
+          .digest("hex"),
+        subject: spec.subject, unit: spec.unit, domain: spec.domain,
+        level: spec.level, criterion: spec.criterion, level_criteria: spec.levelCriteria,
+        canonical_sentence: spec.canonicalSentence, target_count: COMMENT_POOL_TARGET,
+        generator_version: `${COMMENT_POOL_GENERATOR_VERSION}-full-refresh`, created_by: user.id,
+        updated_at: new Date().toISOString(),
+      })));
+      if (versions.length !== specs.length) {
+        return Response.json({ error: "새 문장 풀 버전을 모두 준비하지 못했습니다." }, { status: 500 });
+      }
+      const batches = specs.map((spec, index) => ({
+        spec,
+        poolVersionId: Number(versions[index].id),
+        maxAttempts: 2,
+        activateWhenReady: true,
+        previousPoolVersionIds: currentLinked.links
+          .filter((link) => Number(link.assessment_plan_id) === spec.assessmentPlanId)
+          .map((link) => currentLinked.versionById.get(Number(link.pool_version_id)))
+          .filter((version): version is PoolVersionRow => Boolean(version && versionMatchesSpec(version, spec)))
+          .map((version) => Number(version.id)),
+      }));
+      const jobs = await insertRows<{ id: string }>("generation_jobs", [{
+        owner_id: user.id, owner_email: user.email, class_id: classId, job_type: "comment-pools",
+        status: "queued", batches, current_batch: 0, total_batches: batches.length,
+        total_items: batches.length, completed_items: 0, failed_items: 0, error_message: "",
+        created_at: new Date().toISOString(), updated_at: new Date().toISOString(),
+      }]);
+      queueRunner(request, jobs[0].id);
+      return Response.json({
+        jobId: jobs[0].id, subject: "전체", total: batches.length,
+        maxAiCalls: batches.length * 2, reused: 0, fullRefresh: true,
+      }, { status: 202 });
+    }
     if (refresh) {
       const spec = specs[0];
       const previousPoolVersionIds = currentLinked.links
