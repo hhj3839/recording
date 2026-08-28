@@ -14,7 +14,7 @@ const approvedScope = {
   domain: "역사 일반",
   level: "상",
 };
-const approvedSentence = "오래된 물건의 조사 방법을 다양하게 알고, 그 방법으로 물건을 조사한 내용을 정리함.";
+const approvedSentence = "오래된 물건을 조사하는 다양한 방법을 알고, 물건을 조사하여 결과를 정리함.";
 
 type JobRow = {
   id: string;
