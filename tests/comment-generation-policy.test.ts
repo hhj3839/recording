@@ -12,7 +12,7 @@ import { commentAreaOverlapReasons } from "../app/comment-area-diversity.ts";
 import { assignApprovedCommentPools, assignUniquePoolCandidates, buildApprovedCommentPool, buildCanonicalBaselinePart, buildCommentPoolGroups, buildPublicCommentPoolRequests, commentPoolCandidateCount, spreadCandidatesByOpening } from "../app/comment-pool-generation.ts";
 import { assembleRotatedComment } from "../app/comment-assembly.ts";
 import { readApiJson } from "../app/api-response.ts";
-import { approvePoolCandidates, buildCommentPoolSpecs, commentPoolQuality, commentPoolSelectionTarget, COMMENT_POOL_CLUSTER_LIMIT, COMMENT_POOL_CLUSTER_THRESHOLD, COMMENT_POOL_MINIMUM, COMMENT_POOL_OPENING_LIMIT, COMMENT_POOL_SIMILARITY_LIMIT, COMMENT_POOL_TARGET, poolCandidateQualityScore, poolSentenceOpening, poolSentenceSimilarity, repairLegacyPoolCandidate, validatePoolCandidate } from "../app/comment-pool-library.ts";
+import { approvePoolCandidates, buildCommentPoolSpecs, buildValidatedMinimumPoolFallbacks, commentPoolQuality, commentPoolSelectionTarget, COMMENT_POOL_CLUSTER_LIMIT, COMMENT_POOL_CLUSTER_THRESHOLD, COMMENT_POOL_MINIMUM, COMMENT_POOL_OPENING_LIMIT, COMMENT_POOL_SIMILARITY_LIMIT, COMMENT_POOL_TARGET, poolCandidateQualityScore, poolSentenceOpening, poolSentenceSimilarity, repairLegacyPoolCandidate, validatePoolCandidate } from "../app/comment-pool-library.ts";
 import { buildCommentPoolCandidatePrompt, commentPoolSystemPrompt } from "../app/comment-pool-prompt.ts";
 import { compileCommentPoolEvidence, validCommentPoolEvidenceIds } from "../app/comment-pool-evidence.ts";
 import { openAiOutputText, parseFirstJsonObject } from "../app/openai-response.ts";
@@ -190,6 +190,24 @@ test("keeps short criteria concise and stops at the natural minimum pool size", 
   assert.equal(poolCandidateQualityScore(concise, spec) > poolCandidateQualityScore(padded, spec), true);
   assert.match(prompt, /20~40자 안팎의 직접 수행 문장/);
   assert.match(prompt, /과제 완료·성공 문구를 덧붙이지 않는다/);
+});
+
+test("fills a previously attempted pool to five with validated free criterion variants", () => {
+  const spec = buildCommentPoolSpecs([poolPlan({
+    subject: "국어", unit: "마음을 전해요", domain: "쓰기", goal: "마음을 전하는 글을 쓴다.",
+    perspective: "마음을 전하는 글을 쓰는 방법을 알고 글을 쓰는가?",
+    high: "마음을 전하는 글을 쓰는 방법을 알고, 이를 활용하여 전하고자 하는 마음이 잘 드러나도록 글을 쓴다.",
+    middle: "마음을 전하는 글을 쓰는 방법을 알고, 마음을 전하는 글을 쓰기 위해 노력한다.",
+    low: "교사의 도움을 받아 마음을 전하는 글을 쓰는 방법을 알고 글을 쓴다.",
+  })]).find((item) => item.level === "중")!;
+  const existing = [spec.canonicalSentence];
+  const fallbacks = buildValidatedMinimumPoolFallbacks(spec, existing);
+  assert.equal(new Set([...existing, ...fallbacks].map((sentence) => sentence.replace(/[.!?]+$/g, ""))).size, COMMENT_POOL_MINIMUM);
+  assert.equal(commentPoolQuality([...existing, ...fallbacks], spec.canonicalSentence).reusable, true);
+  fallbacks.forEach((candidate) => {
+    assert.deepEqual(validatePoolCandidate(candidate, spec).issues, [], candidate);
+    assert.match(candidate, /마음을 전하는 글/);
+  });
 });
 
 test("creates three reusable pool identities without student data", () => {
