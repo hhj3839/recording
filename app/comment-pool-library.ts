@@ -1,6 +1,5 @@
 import { createHash } from "node:crypto";
-import { buildCanonicalCommentSentence, criterionSemanticIssues, criterionToSafeNominalCandidates, evidenceBlockingIssues, evidenceGroundingWarnings, levelAppropriatenessIssues, positiveGrowthCriterion, repairSafeNominalEnding, validateGeneratedCommentPart } from "./comment-generation-policy.ts";
-import { compileCommentPoolEvidence } from "./comment-pool-evidence.ts";
+import { buildCanonicalCommentSentence, criterionToSafeNominalCandidates, hasNaturalNominalEnding, positiveGrowthCriterion, repairSafeNominalEnding } from "./comment-generation-policy.ts";
 
 export const COMMENT_POOL_TARGET = 12;
 export const COMMENT_POOL_MINIMUM = 5;
@@ -159,23 +158,8 @@ export function buildCommentPoolSpecs(plan: PoolPlanItem[]): CommentPoolSpec[] {
 
 export function validatePoolCandidate(candidate: string, spec: CommentPoolSpec) {
   const text = repairSafeNominalEnding(candidate);
-  // 활동·관찰 장면은 평가계획 전체에서 근거를 찾되, 수행 수준과 필수
-  // 성취는 선택 수준 평가기준에만 묶어 다른 수준의 의미 유입을 막는다.
-  const compiledEvidence = compileCommentPoolEvidence(spec);
-  const format = validateGeneratedCommentPart(text, spec.criterion);
-  const structuralFormatValid = format.sentenceCountOk && format.endingsOk && format.naturalEndingsOk
-    && format.predicateIssues.length === 0 && format.forbidden.length === 0;
-  const issues = [
-    ...(!structuralFormatValid ? ["문장 형식 또는 명사형 종결 검수 미통과"] : []),
-    ...levelAppropriatenessIssues(text, spec.level, spec.criterion),
-    ...evidenceBlockingIssues(text, compiledEvidence.planEvidence, spec.criterion, compiledEvidence.allowedActivityEvidence),
-    ...evidenceGroundingWarnings(text, compiledEvidence.planEvidence).map((issue) => issue.replace(/ 확인 필요$/, "")),
-    ...criterionSemanticIssues(text, spec.criterion, spec.levelCriteria),
-  ];
-  const qualityWarnings = [
-    ...(format.lengths[0] < 50 || format.lengths[0] > 80 ? ["권장 길이 50~80자 이탈"] : []),
-  ];
-  return { text, issues: [...new Set(issues)], qualityWarnings, qualityScore: poolCandidateQualityScore(text, spec) };
+  const issues = hasNaturalNominalEnding(text) ? [] : ["자연스러운 명사형 종결 검수 미통과"];
+  return { text, issues, qualityWarnings: [], qualityScore: poolCandidateQualityScore(text, spec) };
 }
 
 export function poolCandidateQualityScore(candidate: string, spec: CommentPoolSpec) {
@@ -201,9 +185,8 @@ export function poolCandidateQualityScore(candidate: string, spec: CommentPoolSp
 }
 
 export function commentPoolSelectionTarget(spec: CommentPoolSpec) {
-  return Array.from(normalizedPoolSentence(spec.canonicalSentence)).length < COMMENT_POOL_SHORT_CRITERION_LENGTH
-    ? COMMENT_POOL_MINIMUM
-    : COMMENT_POOL_TARGET;
+  void spec;
+  return COMMENT_POOL_TARGET;
 }
 
 export function repairLegacyPoolCandidate(candidate: string, spec: CommentPoolSpec) {
@@ -225,9 +208,15 @@ export function repairLegacyPoolCandidate(candidate: string, spec: CommentPoolSp
 export function approvePoolCandidates(candidates: string[], spec: CommentPoolSpec, existing: string[] = []) {
   const selectionTarget = commentPoolSelectionTarget(spec);
   const seen = new Set(existing.map(normalizedPoolSentence));
-  const validated: Array<{ text: string; index: number }> = [];
+  const approved: string[] = [];
   const rejectedIssues = new Set<string>();
-  for (const [index, candidate] of candidates.entries()) {
+  const openingCounts = new Map<string, number>();
+  existing.forEach((sentence) => {
+    const opening = poolSentenceOpening(sentence);
+    openingCounts.set(opening, (openingCounts.get(opening) ?? 0) + 1);
+  });
+  for (const candidate of candidates) {
+    if (existing.length + approved.length >= selectionTarget) break;
     const result = validatePoolCandidate(candidate, spec);
     if (result.issues.length) {
       result.issues.forEach((issue) => rejectedIssues.add(issue));
@@ -235,40 +224,11 @@ export function approvePoolCandidates(candidates: string[], spec: CommentPoolSpe
     }
     const key = normalizedPoolSentence(result.text);
     if (!key || seen.has(key)) continue;
+    const opening = poolSentenceOpening(result.text);
+    if ((openingCounts.get(opening) ?? 0) >= COMMENT_POOL_OPENING_LIMIT) continue;
     seen.add(key);
-    validated.push({ text: result.text, index });
-  }
-
-  const approved: string[] = [];
-  const references = [...existing];
-  const openingCounts = new Map<string, number>();
-  references.forEach((sentence) => {
-    const opening = poolSentenceOpening(sentence);
     openingCounts.set(opening, (openingCounts.get(opening) ?? 0) + 1);
-  });
-  const remaining = [...validated];
-  while (remaining.length && existing.length + approved.length < selectionTarget) {
-    const ranked = remaining.map((candidate) => ({
-      ...candidate,
-      opening: poolSentenceOpening(candidate.text),
-      qualityScore: poolCandidateQualityScore(candidate.text, spec),
-      similarity: references.reduce((highest, reference) => Math.max(highest, poolSentenceSimilarity(candidate.text, reference)), 0),
-      clusterSize: references.filter((reference) => poolSentenceSimilarity(candidate.text, reference) >= COMMENT_POOL_CLUSTER_THRESHOLD).length,
-    })).sort((left, right) =>
-      left.clusterSize - right.clusterSize
-      || (openingCounts.get(left.opening) ?? 0) - (openingCounts.get(right.opening) ?? 0)
-      || right.qualityScore - left.qualityScore
-      || left.similarity - right.similarity
-      || left.index - right.index);
-    const selected = ranked.find((candidate) =>
-      candidate.similarity < COMMENT_POOL_SIMILARITY_LIMIT
-      && candidate.clusterSize < COMMENT_POOL_CLUSTER_LIMIT
-      && (openingCounts.get(candidate.opening) ?? 0) < COMMENT_POOL_OPENING_LIMIT);
-    if (!selected) break;
-    approved.push(selected.text);
-    references.push(selected.text);
-    openingCounts.set(selected.opening, (openingCounts.get(selected.opening) ?? 0) + 1);
-    remaining.splice(remaining.findIndex((candidate) => candidate.index === selected.index), 1);
+    approved.push(result.text);
   }
   return { approved, rejectedIssues: [...rejectedIssues] };
 }
@@ -309,12 +269,20 @@ function groundedFreeVariantCandidates(spec: CommentPoolSpec) {
 export function buildValidatedMinimumPoolFallbacks(spec: CommentPoolSpec, existing: string[] = []) {
   const seen = new Set(existing.map(normalizedPoolSentence));
   const approved: string[] = [];
+  const openingCounts = new Map<string, number>();
+  existing.forEach((sentence) => {
+    const opening = poolSentenceOpening(sentence);
+    openingCounts.set(opening, (openingCounts.get(opening) ?? 0) + 1);
+  });
   for (const candidate of groundedFreeVariantCandidates(spec)) {
     if (seen.size >= COMMENT_POOL_MINIMUM) break;
     const result = validatePoolCandidate(candidate, spec);
     const key = normalizedPoolSentence(result.text);
     if (result.issues.length || !key || seen.has(key)) continue;
+    const opening = poolSentenceOpening(result.text);
+    if ((openingCounts.get(opening) ?? 0) >= COMMENT_POOL_OPENING_LIMIT) continue;
     seen.add(key);
+    openingCounts.set(opening, (openingCounts.get(opening) ?? 0) + 1);
     approved.push(result.text);
   }
   return approved;

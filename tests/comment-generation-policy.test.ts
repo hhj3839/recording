@@ -35,22 +35,18 @@ test("recovers the first structured OpenAI object without losing usage on traili
   assert.equal(parseFirstJsonObject("not json"), null);
 });
 
-test("structures every pool prompt around at least two grounded observation elements", () => {
+test("keeps the pool prompt simple and delegates only sentence writing to the model", () => {
   const [spec] = buildCommentPoolSpecs([poolPlan({
     perspective: "지역 자료를 조사하는가? / 조사 결과를 기준에 따라 정리하는가?",
   })]);
   const prompt = buildCommentPoolCandidatePrompt(spec, ["기존 승인 문장임."], 15);
-  assert.match(commentPoolSystemPrompt, /독립된 관찰 근거가 2개 이상일 때만/);
-  assert.match(commentPoolSystemPrompt, /근거 요소가 실제로 하나뿐이면 새 사실을 만들지 말고/);
-  assert.match(prompt, /# 관찰 근거 구성표/);
-  assert.match(prompt, /\[평가관점\] 지역 자료를 조사하는가/);
-  assert.match(prompt, /\[평가관점\] 조사 결과를 기준에 따라 정리하는가/);
-  assert.match(prompt, /근거를 최소 2개 반영/);
-  assert.match(prompt, /evidenceIds/);
-  assert.match(prompt, /무엇을 어떻게 수행하여 어떤 결과를 보였는지/);
-  assert.match(prompt, /자연스러운 후보 15개/);
+  assert.match(commentPoolSystemPrompt, /수준별 변별 기준/);
+  assert.match(commentPoolSystemPrompt, /관찰 가능한 학습 행동과 성취/);
+  assert.doesNotMatch(commentPoolSystemPrompt, /같은 첫 15글자/);
+  assert.doesNotMatch(prompt, /관찰 근거 구성표|evidenceIds/);
+  assert.match(prompt, /평가관점: 지역 자료를 조사하는가/);
+  assert.match(prompt, /교과 평가 문장 후보 15개/);
   assert.match(prompt, /기존 승인 문장임/);
-  assert.match(prompt, /나열된 핵심 대상·표현 요소는 하나도 생략하지 않는다/);
 });
 
 test("preserves every generally enumerated criterion element across subjects", () => {
@@ -70,7 +66,7 @@ test("preserves every generally enumerated criterion element across subjects", (
   assert.match(criterionSemanticIssues("선분과 직선을 정확하게 구별하고 알맞게 긋는 수행을 보임.", geometry).join(" "), /‘반직선’ 누락/);
 });
 
-test("blocks stronger accuracy wording that exists only in a sibling level", () => {
+test("does not make level semantics a mechanical pool rejection condition", () => {
   const spec = buildCommentPoolSpecs([poolPlan({
     subject: "수학", unit: "평면도형", domain: "도형",
     high: "선분, 반직선, 직선을 정확하게 구별하고 알맞게 긋는다.",
@@ -80,7 +76,7 @@ test("blocks stronger accuracy wording that exists only in a sibling level", () 
   assert.deepEqual(validatePoolCandidate("선분, 반직선, 직선을 구별하고 긋음.", spec).issues, []);
   for (const wording of ["알맞게", "바르게", "올바르게", "정확하게"]) {
     const result = validatePoolCandidate(`선분, 반직선, 직선을 구별하고 ${wording} 그음.`, spec);
-    assert.equal(result.issues.some((issue) => issue.includes("선택하지 않은 평가수준")), true, wording);
+    assert.deepEqual(result.issues, [], wording);
   }
 });
 
@@ -107,7 +103,7 @@ test("compiles one shared evidence ledger with dynamic combination targets", () 
   assert.equal(validCommentPoolEvidenceIds("노래를 부르며 즐겁게 참여함.", [sparse.requiredId], sparse), false);
 });
 
-test("blocks inferred tools, sequence, inspection, selection, and organization across subjects", () => {
+test("does not mechanically reject descriptive wording beyond nominal-form safety", () => {
   const [spec] = buildCommentPoolSpecs([poolPlan({
     goal: "",
     perspective: "",
@@ -123,12 +119,12 @@ test("blocks inferred tools, sequence, inspection, selection, and organization a
     "필요한 선을 골라 선분, 반직선, 직선을 구별하고 그음.",
     "선분, 반직선, 직선을 구별하고 그은 내용을 정리함.",
   ]) {
-    assert.equal(validatePoolCandidate(candidate, spec).issues.some((issue) => issue.includes("평가 근거에 없는")), true, candidate);
+    assert.deepEqual(validatePoolCandidate(candidate, spec).issues, [], candidate);
   }
   assert.deepEqual(validatePoolCandidate("선분, 반직선, 직선을 구별하고 긋음.", spec).issues, []);
 });
 
-test("accepts rich activities grounded anywhere in the assessment plan without weakening the selected level", () => {
+test("accepts natural nominal candidates without a semantic blocking gate", () => {
   const [spec] = buildCommentPoolSpecs([poolPlan({
     goal: "지역 자료를 조사하고 결과를 공유한다.",
     perspective: "지역 자료를 조사하여 정리하는가? / 조사 결과를 발표하는가?",
@@ -138,14 +134,10 @@ test("accepts rich activities grounded anywhere in the assessment plan without w
     validatePoolCandidate("지역 자료를 조사하여 정리하고 그 결과를 발표함.", spec).issues,
     [],
   );
-  assert.equal(
-    validatePoolCandidate("지역 자료를 정확하게 조사하여 정리하고 그 결과를 발표함.", spec)
-      .issues.some((issue) => issue.includes("정확")),
-    true,
-  );
+  assert.deepEqual(validatePoolCandidate("지역 자료를 정확하게 조사하여 정리하고 그 결과를 발표함.", spec).issues, []);
 });
 
-test("accepts a concrete activity from the assessment caution but not from nowhere", () => {
+test("leaves activity grounding to generation rather than mechanical rejection", () => {
   const [base] = buildCommentPoolSpecs([poolPlan({
     goal: "들은 내용을 알맞게 표현한다.",
     perspective: "들은 내용을 표현하는가?",
@@ -156,11 +148,7 @@ test("accepts a concrete activity from the assessment caution but not from nowhe
     validatePoolCandidate("상황 그림을 살펴보고 들은 내용을 알맞게 표현함.", withActivity).issues,
     [],
   );
-  assert.equal(
-    validatePoolCandidate("상황 그림을 살펴보고 들은 내용을 알맞게 표현함.", base)
-      .issues.some((issue) => issue.includes("구체적 표현 방법")),
-    true,
-  );
+  assert.deepEqual(validatePoolCandidate("상황 그림을 살펴보고 들은 내용을 알맞게 표현함.", base).issues, []);
 });
 
 test("keeps safe concise candidates and ranks grounded detailed candidates higher", () => {
@@ -172,11 +160,11 @@ test("keeps safe concise candidates and ranks grounded detailed candidates highe
   const concise = "지역 자료를 조사하여 결과를 정리함.";
   const detailed = "여러 지역 자료를 조사하고 그 결과를 기준에 따라 정리하여 친구들 앞에서 발표함.";
   assert.deepEqual(validatePoolCandidate(concise, spec).issues, []);
-  assert.deepEqual(validatePoolCandidate(concise, spec).qualityWarnings, ["권장 길이 50~80자 이탈"]);
+  assert.deepEqual(validatePoolCandidate(concise, spec).qualityWarnings, []);
   assert.equal(poolCandidateQualityScore(detailed, spec) > poolCandidateQualityScore(concise, spec), true);
 });
 
-test("keeps short criteria concise and stops at the natural minimum pool size", () => {
+test("requests the full twelve-sentence pool for both short and long criteria", () => {
   const spec = buildCommentPoolSpecs([poolPlan({
     subject: "수학", unit: "평면도형", domain: "도형",
     goal: "여러 가지 선을 구별하고 자로 그어 본다.",
@@ -186,13 +174,12 @@ test("keeps short criteria concise and stops at the natural minimum pool size", 
   const concise = "선분, 반직선, 직선을 구별하고 긋음.";
   const padded = "선분, 반직선, 직선을 구별한 뒤 자를 이용해 그어 내며 주어진 과제를 성공적으로 마무리함.";
   const prompt = buildCommentPoolCandidatePrompt(spec, [], 15);
-  assert.equal(commentPoolSelectionTarget(spec), COMMENT_POOL_MINIMUM);
+  assert.equal(commentPoolSelectionTarget(spec), COMMENT_POOL_TARGET);
   assert.equal(poolCandidateQualityScore(concise, spec) > poolCandidateQualityScore(padded, spec), true);
-  assert.match(prompt, /20~40자 안팎의 직접 수행 문장/);
-  assert.match(prompt, /과제 완료·성공 문구를 덧붙이지 않는다/);
+  assert.match(prompt, /서로 다른 교과 평가 문장 후보 15개/);
 });
 
-test("fills a previously attempted pool to five with validated free criterion variants", () => {
+test("keeps free fallbacks nominal, exact-distinct, and within the opening limit", () => {
   const spec = buildCommentPoolSpecs([poolPlan({
     subject: "국어", unit: "마음을 전해요", domain: "쓰기", goal: "마음을 전하는 글을 쓴다.",
     perspective: "마음을 전하는 글을 쓰는 방법을 알고 글을 쓰는가?",
@@ -202,8 +189,9 @@ test("fills a previously attempted pool to five with validated free criterion va
   })]).find((item) => item.level === "중")!;
   const existing = [spec.canonicalSentence];
   const fallbacks = buildValidatedMinimumPoolFallbacks(spec, existing);
-  assert.equal(new Set([...existing, ...fallbacks].map((sentence) => sentence.replace(/[.!?]+$/g, ""))).size, COMMENT_POOL_MINIMUM);
-  assert.equal(commentPoolQuality([...existing, ...fallbacks], spec.canonicalSentence).reusable, true);
+  assert.equal(new Set([...existing, ...fallbacks].map((sentence) => sentence.replace(/[.!?]+$/g, ""))).size, existing.length + fallbacks.length);
+  const openings = [...existing, ...fallbacks].map(poolSentenceOpening);
+  openings.forEach((opening) => assert.ok(openings.filter((value) => value === opening).length <= COMMENT_POOL_OPENING_LIMIT));
   fallbacks.forEach((candidate) => {
     assert.deepEqual(validatePoolCandidate(candidate, spec).issues, [], candidate);
     assert.match(candidate, /마음을 전하는 글/);
@@ -241,11 +229,11 @@ test("does not infer a broader recording duty from a criterion that only require
   assert.doesNotMatch(issues.join(" "), /기록하기/);
 });
 
-test("repairs unsupported generic modifiers only when the complete sentence revalidates", () => {
+test("does not rewrite already valid legacy candidates under the simplified validator", () => {
   const [spec] = buildCommentPoolSpecs([poolPlan()]);
   for (const modifier of ["적극적으로 ", "효과적으로 ", "꾸준히 "]) {
     const repaired = repairLegacyPoolCandidate(spec.canonicalSentence.replace("지역 자료를", `${modifier}지역 자료를`), spec);
-    assert.equal(repaired?.repaired, spec.canonicalSentence);
+    assert.equal(repaired, null);
   }
 });
 
@@ -255,6 +243,21 @@ test("approves validated pool candidates up to the natural twelve sentence targe
   const approved = approvePoolCandidates(Array.from({ length: 25 }, (_, index) => index ? `${candidate.slice(0, -1)} ${index}함.` : candidate), spec);
   assert.ok(approved.approved.length <= COMMENT_POOL_TARGET);
   assert.ok(approved.approved.includes(candidate));
+});
+
+test("applies only nominal ending, exact duplicate, and first-fifteen opening checks to a pool", () => {
+  const spec = buildCommentPoolSpecs([poolPlan()])[1];
+  const candidates = [
+    "지역 자료를 살펴보고 관찰 결과를 기준에 따라 첫째로 정리함.",
+    "지역 자료를 살펴보고 관찰 결과를 기준에 따라 둘째로 기록함.",
+    "지역 자료를 살펴보고 관찰 결과를 기준에 따라 셋째로 표현함.",
+    "서로 다른 자료를 바탕으로 지역의 특징을 설명함.",
+    "서로 다른 자료를 바탕으로 지역의 특징을 설명함.",
+    "지역의 특징을 여러 자료에서 찾고.",
+  ];
+  const result = approvePoolCandidates(candidates, spec);
+  assert.deepEqual(result.approved, [candidates[0], candidates[1], candidates[3]]);
+  assert.deepEqual(result.rejectedIssues, ["자연스러운 명사형 종결 검수 미통과"]);
 });
 
 test("measures near-identical pool sentences and groups their openings", () => {
@@ -972,7 +975,7 @@ test("warns about unsupported attitude claims without discarding the sentence", 
   );
 });
 
-test("blocks every unsupported grounding warning from reusable comment pools", async () => {
+test("accepts descriptive modifiers when nominal form is natural", async () => {
   const { validatePoolCandidate } = await import("../app/comment-pool-library.ts");
   const spec = {
     fingerprint: "grounding", assessmentPlanId: 1, assessmentIndex: 0,
@@ -992,7 +995,7 @@ test("blocks every unsupported grounding warning from reusable comment pools", a
       `작품 속 인물들의 상황에 알맞은 표정, 몸짓, 목소리, 말투를 알고 대화를 ${modifier} 표현함.`,
       spec,
     );
-    assert.equal(result.issues.some((issue) => issue.includes("평가 근거에 없는")), true, modifier);
+    assert.deepEqual(result.issues, [], modifier);
   }
 });
 
@@ -1144,16 +1147,13 @@ test("recognizes spaced nominal writing as a completed performance across subjec
   );
 });
 
-test("repairs only legacy unsupported modifiers into a fully revalidated pool sentence", () => {
+test("keeps already valid legacy modifiers unchanged", () => {
   const spec = buildCommentPoolSpecs([poolPlan({
     high: "지역 자료를 다양한 방법으로 조사하여 체계적으로 정리함.",
     middle: "지역 자료를 조사하여 정리함.",
     low: "교사의 도움을 받아 지역 자료를 조사하여 정리함.",
   })]).find((item) => item.level === "중")!;
-  assert.equal(
-    repairLegacyPoolCandidate("지역 자료를 스스로 조사하여 자연스럽게 정리함.", spec)?.repaired,
-    "지역 자료를 조사하여 정리함.",
-  );
+  assert.equal(repairLegacyPoolCandidate("지역 자료를 스스로 조사하여 자연스럽게 정리함.", spec), null);
   assert.equal(repairLegacyPoolCandidate("지역 자료를 조사하여 정리함.", spec), null);
   assert.equal(repairLegacyPoolCandidate("지역 자료를 설명함.", spec), null);
 });

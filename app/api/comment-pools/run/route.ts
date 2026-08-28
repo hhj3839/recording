@@ -5,7 +5,6 @@ import { signCommentJob, verifyCommentJob } from "../../../comment-generation";
 import { primaryAiModel } from "../../../ai-model-policy";
 import { recordAiUsage } from "../../../ai-usage";
 import { buildCommentPoolCandidatePrompt, commentPoolSystemPrompt } from "../../../comment-pool-prompt";
-import { compileCommentPoolEvidence, validCommentPoolEvidenceIds } from "../../../comment-pool-evidence";
 import { openAiOutputText, parseFirstJsonObject } from "../../../openai-response";
 
 export const maxDuration = 300;
@@ -33,7 +32,6 @@ async function generateCandidates(spec: CommentPoolSpec, existing: string[], cou
   const apiKey = process.env.OPENAI_API_KEY;
   if (!apiKey) throw new Error("AI 생성 설정이 아직 완료되지 않았습니다.");
   const model = primaryAiModel();
-  const compiledEvidence = compileCommentPoolEvidence(spec);
   const response = await fetch("https://api.openai.com/v1/responses", {
     method: "POST",
     headers: { Authorization: `Bearer ${apiKey}`, "Content-Type": "application/json" },
@@ -45,9 +43,8 @@ async function generateCandidates(spec: CommentPoolSpec, existing: string[], cou
       text: { verbosity: "medium", format: { type: "json_schema", name: "comment_pool_candidates", strict: true, schema: {
         type: "object", additionalProperties: false, required: ["candidates"], properties: {
           candidates: { type: "array", minItems: count, maxItems: count, items: {
-            type: "object", additionalProperties: false, required: ["text", "evidenceIds"], properties: {
+            type: "object", additionalProperties: false, required: ["text"], properties: {
               text: { type: "string" },
-              evidenceIds: { type: "array", minItems: compiledEvidence.combinationTarget, items: { type: "string" } },
             },
           } },
         },
@@ -59,10 +56,8 @@ async function generateCandidates(spec: CommentPoolSpec, existing: string[], cou
   const decoded = parseFirstJsonObject<{ candidates?: unknown }>(openAiOutputText(payload)) ?? {};
   const candidates = Array.isArray(decoded.candidates) ? decoded.candidates.flatMap((item) => {
     if (!item || typeof item !== "object") return [];
-    const value = item as { text?: unknown; evidenceIds?: unknown };
-    if (typeof value.text !== "string" || !Array.isArray(value.evidenceIds)) return [];
-    const evidenceIds = value.evidenceIds.filter((id): id is string => typeof id === "string");
-    if (!validCommentPoolEvidenceIds(value.text, evidenceIds, compiledEvidence)) return [];
+    const value = item as { text?: unknown };
+    if (typeof value.text !== "string") return [];
     return [value.text];
   }) : [];
   return {
@@ -119,8 +114,8 @@ export async function POST(request: Request) {
       await saveFreeFallbacks();
     }
     const maxAttempts = Number.isInteger(batch.maxAttempts) ? Math.max(0, Math.min(2, Number(batch.maxAttempts))) : 2;
-    for (let attempt = 0; attempt < maxAttempts && !commentPoolQuality(approved, batch.spec.canonicalSentence).reusable; attempt += 1) {
-      const requestCount = attempt === 0 ? 15 : 10;
+    for (let attempt = 0; attempt < maxAttempts && approved.length < COMMENT_POOL_TARGET; attempt += 1) {
+      const requestCount = COMMENT_POOL_TARGET - approved.length;
       const generated = await generateCandidates(batch.spec, approved, requestCount);
       const selected = approvePoolCandidates(generated.candidates, batch.spec, approved).approved
         .slice(0, COMMENT_POOL_TARGET - approved.length);
