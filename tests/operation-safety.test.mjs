@@ -67,6 +67,14 @@ test("comment jobs assign prepared approved pools without a paid AI call", () =>
   assert.match(producer, /buildValidatedMinimumPoolFallbacks/);
   assert.match(producer, /source: "deterministic_fallback"/);
   assert.match(producer, /existing\.length > 0[\s\S]*await saveFreeFallbacks\(\)[\s\S]*for \(let attempt/);
+  const poolRoute = readFileSync("app/api/comment-pools/route.ts", "utf8");
+  const page = readFileSync("app/page.tsx", "utf8");
+  assert.match(poolRoute, /freeFallbackOnly/);
+  assert.match(poolRoute, /buildValidatedMinimumPoolFallbacks/);
+  assert.match(poolRoute, /source: "deterministic_fallback"/);
+  assert.match(poolRoute, /if \(freeFallbackOnly\)[\s\S]*needsAi: pending\.length/);
+  assert.match(page, /freeFallbackOnly: true/);
+  assert.match(page, /검증된 기준 문장으로 부족한 AI 평어를 무료 보완했습니다/);
   const single = readFileSync("app/api/generate-comment/route.ts", "utf8");
   assert.match(single.slice(0, single.indexOf("const apiKey")), /mode === "regenerate"[\s\S]*comment_pool_sentences[\s\S]*source: "approved-pool"/);
   const pump = readFileSync("app/api/comment-jobs/pump/route.ts", "utf8");
@@ -262,7 +270,7 @@ test("continues all remaining pools while keeping bounded lab validation", () =>
   assert.match(route, /targetFingerprints\.includes\(spec\.fingerprint\)/);
   assert.match(route, /specs\.length !== targetFingerprints\.length/);
   assert.match(page, /body: JSON\.stringify\(\{\}\)/);
-  assert.match(page, /남은 모든 과목의 AI 평어를 이어서 제작합니다/);
+  assert.match(page, /무료 보완 후에도 AI 제작이 필요한 묶음/);
 });
 
 test("resets only the current assessment plan pool links", () => {
