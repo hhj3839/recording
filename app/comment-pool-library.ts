@@ -3,7 +3,7 @@ import { buildCanonicalCommentSentence, criterionSemanticIssues, evidenceBlockin
 import { compileCommentPoolEvidence } from "./comment-pool-evidence.ts";
 
 export const COMMENT_POOL_TARGET = 12;
-export const COMMENT_POOL_MINIMUM = 8;
+export const COMMENT_POOL_MINIMUM = 5;
 export const COMMENT_POOL_SIMILARITY_LIMIT = 0.9;
 export const COMMENT_POOL_CLUSTER_THRESHOLD = 0.75;
 export const COMMENT_POOL_CLUSTER_LIMIT = 2;
@@ -97,7 +97,9 @@ export function commentPoolQuality(sentences: string[], referenceSentence = "") 
   const referenceLength = normalizedPoolSentence(referenceSentence).length;
   const minimumAverageLength = referenceLength >= 50 ? Math.max(45, referenceLength * 0.8) : 0;
   const issues = [
-    ...(unique.length < COMMENT_POOL_MINIMUM ? ["승인 문장 수 부족"] : []),
+    ...(unique.length < COMMENT_POOL_MINIMUM ? ["안전 검수 통과 문장 수 부족"] : []),
+  ];
+  const warnings = [
     ...(unique.length !== normalized.length ? ["완전히 같은 승인 문장 중복"] : []),
     ...(openingRatio < COMMENT_POOL_REUSE_MINIMUM_OPENING_RATIO ? ["문장 첫머리 다양성 부족"] : []),
     ...(clusterRatio > COMMENT_POOL_REUSE_MAX_CLUSTER_RATIO ? ["유사 문장 군집 과다"] : []),
@@ -107,6 +109,7 @@ export function commentPoolQuality(sentences: string[], referenceSentence = "") 
   return {
     reusable: issues.length === 0,
     issues,
+    warnings,
     count: normalized.length,
     uniqueCount: unique.length,
     openingCount,

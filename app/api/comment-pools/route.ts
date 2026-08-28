@@ -127,6 +127,7 @@ export async function GET(request: Request) {
         assessmentIndex: spec.assessmentIndex, level: spec.level,
         status: quality.reusable ? "ready" : "needs_generation",
         approvedCount: Number(version?.approved_count ?? 0), qualityIssues: quality.issues,
+        qualityWarnings: quality.warnings,
         targetCount: COMMENT_POOL_TARGET, poolVersionId: version ? Number(version.id) : null,
       };
     });

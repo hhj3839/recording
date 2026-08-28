@@ -247,13 +247,13 @@ test("measures near-identical pool sentences and groups their openings", () => {
   assert.ok(poolSentenceSimilarity(first, distinct) < COMMENT_POOL_SIMILARITY_LIMIT);
   assert.equal(poolSentenceOpening(first), poolSentenceOpening(nearDuplicate));
   assert.equal(COMMENT_POOL_TARGET, 12);
-  assert.equal(COMMENT_POOL_MINIMUM, 8);
+  assert.equal(COMMENT_POOL_MINIMUM, 5);
   assert.equal(COMMENT_POOL_CLUSTER_THRESHOLD, 0.75);
   assert.equal(COMMENT_POOL_CLUSTER_LIMIT, 2);
   assert.equal(COMMENT_POOL_OPENING_LIMIT, 2);
 });
 
-test("does not reuse a numerically complete pool whose sentences share one template", () => {
+test("keeps a safe pool usable while reporting repeated template openings", () => {
   const repeated = [
     "작품 속 인물의 상황에 알맞은 표정과 말투로 대화를 실감 나게 표현함.",
     "작품 속 인물의 상황에 알맞은 표정과 말투로 대화를 생생하게 표현함.",
@@ -265,8 +265,8 @@ test("does not reuse a numerically complete pool whose sentences share one templ
     "작품 속 인물의 상황에 알맞은 표정과 목소리로 대화를 자연스럽게 표현함.",
   ];
   const quality = commentPoolQuality(repeated);
-  assert.equal(quality.reusable, false);
-  assert.ok(quality.issues.includes("문장 첫머리 다양성 부족"));
+  assert.equal(quality.reusable, true);
+  assert.ok(quality.warnings.includes("문장 첫머리 다양성 부족"));
 });
 
 test("reuses a validated pool with distinct observation scenes and openings", () => {
@@ -283,7 +283,7 @@ test("reuses a validated pool with distinct observation scenes and openings", ()
   assert.equal(commentPoolQuality(diverse).reusable, true);
 });
 
-test("rejects a diverse but over-compressed pool when a detailed criterion loses information", () => {
+test("keeps a safe compressed pool usable while reporting information loss", () => {
   const reference = "작품 속 인물들의 상황에 알맞은 표정, 몸짓, 목소리, 말투를 알고 작품 속 인물들의 대화를 실감 나게 표현함.";
   const compressed = [
     "인물의 처지에 맞는 목소리로 대화를 표현함.",
@@ -296,8 +296,8 @@ test("rejects a diverse but over-compressed pool when a detailed criterion loses
     "친구와 역할을 나누어 작품 속 대화를 나타냄.",
   ];
   const quality = commentPoolQuality(compressed, reference);
-  assert.equal(quality.reusable, false);
-  assert.ok(quality.issues.includes("평가기준 정보량 보존 부족"));
+  assert.equal(quality.reusable, true);
+  assert.ok(quality.warnings.includes("평가기준 정보량 보존 부족"));
 });
 
 test("uses the same low-cost model for the initial request and retry", () => {
