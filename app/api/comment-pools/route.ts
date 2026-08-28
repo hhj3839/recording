@@ -1,6 +1,6 @@
 import { waitUntil } from "@vercel/functions";
 import { createHash } from "node:crypto";
-import { eq, insertRows, selectRows, supabaseRequest, upsertRows } from "../../../db/supabase";
+import { eq, insertRows, selectRows, supabaseRequest, updateRows, upsertRows } from "../../../db/supabase";
 import { buildCommentPoolSpecs, buildValidatedMinimumPoolFallbacks, commentPoolQuality, COMMENT_POOL_GENERATOR_VERSION, COMMENT_POOL_TARGET, normalizedPoolSentence, validatePoolCandidate, type CommentPoolSpec, type PoolPlanItem } from "../../comment-pool-library";
 import { signCommentJob } from "../../comment-generation";
 import { dataError, getDataScope } from "../../data-scope";
