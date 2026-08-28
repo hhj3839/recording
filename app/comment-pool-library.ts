@@ -1,5 +1,5 @@
 import { createHash } from "node:crypto";
-import { buildCanonicalCommentSentence, criterionSemanticIssues, evidenceBlockingIssues, evidenceGroundingWarnings, levelAppropriatenessIssues, positiveGrowthCriterion, repairSafeNominalEnding, validateGeneratedCommentPart } from "./comment-generation-policy.ts";
+import { buildCanonicalCommentSentence, criterionSemanticIssues, criterionToSafeNominalCandidates, evidenceBlockingIssues, evidenceGroundingWarnings, levelAppropriatenessIssues, positiveGrowthCriterion, repairSafeNominalEnding, validateGeneratedCommentPart } from "./comment-generation-policy.ts";
 import { compileCommentPoolEvidence } from "./comment-pool-evidence.ts";
 
 export const COMMENT_POOL_TARGET = 12;
@@ -271,4 +271,51 @@ export function approvePoolCandidates(candidates: string[], spec: CommentPoolSpe
     remaining.splice(remaining.findIndex((candidate) => candidate.index === selected.index), 1);
   }
   return { approved, rejectedIssues: [...rejectedIssues] };
+}
+
+function groundedFreeVariantCandidates(spec: CommentPoolSpec) {
+  const seeds = [spec.canonicalSentence, ...criterionToSafeNominalCandidates(spec.criterion)]
+    .map((sentence) => repairSafeNominalEnding(sentence))
+    .filter(Boolean);
+  const variants = [...seeds];
+  const addSingleReplacements = (sentence: string) => {
+    const replacements: Array<[RegExp, string]> = [
+      [/하여/, "해"],
+      [/한\s+뒤/, "한 후"],
+      [/한\s+후/, "한 뒤"],
+      [/알고,\s*/, "알고 있으며, "],
+      [/알고,\s*/, "알고 이를 바탕으로 "],
+      [/알고,\s*/, "알고 있으며 이를 바탕으로 "],
+      [/하고,\s*/, "하며, "],
+      [/하며,\s*/, "하고, "],
+    ];
+    replacements.forEach(([pattern, replacement]) => {
+      if (pattern.test(sentence)) variants.push(sentence.replace(pattern, replacement));
+    });
+    // 쉼표 유무는 의미를 바꾸지 않는 최후의 무료 보완 수단이다. 의미를
+    // 새로 만들어 내는 수식어나 활동을 덧붙이지 않는다.
+    const commaIndexes = [...sentence.matchAll(/,\s*/g)].map((match) => match.index).filter((index): index is number => index !== undefined);
+    commaIndexes.forEach((index) => variants.push(`${sentence.slice(0, index)} ${sentence.slice(index + 1).trimStart()}`));
+  };
+  seeds.forEach(addSingleReplacements);
+  return [...new Set(variants.map((sentence) => sentence.replace(/\s+/g, " ").trim()).filter(Boolean))];
+}
+
+/**
+ * AI 후보가 안전 검수에서 과도하게 탈락했을 때 평가기준에서 직접 만든
+ * 문장만 보수적으로 변형한다. 새로운 사실·수준 표현은 추가하지 않으며,
+ * 전체 검수기를 다시 통과한 문장만 최소 재사용 수량까지 반환한다.
+ */
+export function buildValidatedMinimumPoolFallbacks(spec: CommentPoolSpec, existing: string[] = []) {
+  const seen = new Set(existing.map(normalizedPoolSentence));
+  const approved: string[] = [];
+  for (const candidate of groundedFreeVariantCandidates(spec)) {
+    if (seen.size >= COMMENT_POOL_MINIMUM) break;
+    const result = validatePoolCandidate(candidate, spec);
+    const key = normalizedPoolSentence(result.text);
+    if (result.issues.length || !key || seen.has(key)) continue;
+    seen.add(key);
+    approved.push(result.text);
+  }
+  return approved;
 }

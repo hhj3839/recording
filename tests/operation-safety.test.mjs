@@ -64,6 +64,9 @@ test("comment jobs assign prepared approved pools without a paid AI call", () =>
   assert.match(route, /assignApprovedCommentPools\(pending\)/);
   assert.match(producer, /api\.openai\.com\/v1\/responses/);
   assert.match(producer, /source: "canonical"/);
+  assert.match(producer, /buildValidatedMinimumPoolFallbacks/);
+  assert.match(producer, /source: "deterministic_fallback"/);
+  assert.match(producer, /existing\.length > 0[\s\S]*await saveFreeFallbacks\(\)[\s\S]*for \(let attempt/);
   const single = readFileSync("app/api/generate-comment/route.ts", "utf8");
   assert.match(single.slice(0, single.indexOf("const apiKey")), /mode === "regenerate"[\s\S]*comment_pool_sentences[\s\S]*source: "approved-pool"/);
   const pump = readFileSync("app/api/comment-jobs/pump/route.ts", "utf8");
