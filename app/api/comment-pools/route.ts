@@ -1,7 +1,7 @@
 import { waitUntil } from "@vercel/functions";
 import { createHash } from "node:crypto";
-import { eq, insertRows, selectRows, supabaseRequest, upsertRows } from "../../../db/supabase";
-import { buildCommentPoolSpecs, commentPoolQuality, COMMENT_POOL_GENERATOR_VERSION, COMMENT_POOL_TARGET, validatePoolCandidate, type CommentPoolSpec, type PoolPlanItem } from "../../comment-pool-library";
+import { eq, insertRows, selectRows, supabaseRequest, updateRows, upsertRows } from "../../../db/supabase";
+import { buildCommentPoolSpecs, buildValidatedMinimumPoolFallbacks, commentPoolQuality, COMMENT_POOL_GENERATOR_VERSION, COMMENT_POOL_TARGET, normalizedPoolSentence, validatePoolCandidate, type CommentPoolSpec, type PoolPlanItem } from "../../comment-pool-library";
 import { signCommentJob } from "../../comment-generation";
 import { dataError, getDataScope } from "../../data-scope";
 
@@ -182,7 +182,7 @@ export async function POST(request: Request) {
     const { user, classId } = await getDataScope();
     const body = await request.json().catch(() => ({})) as {
       subject?: unknown; maxGroups?: unknown; labOnly?: unknown; targetFingerprints?: unknown; canonicalOnly?: unknown;
-      refresh?: unknown; fullRefresh?: unknown;
+      refresh?: unknown; fullRefresh?: unknown; freeFallbackOnly?: unknown;
     };
     const subject = typeof body.subject === "string" ? body.subject.trim() : "";
     if (body.labOnly === true && !user.email.toLowerCase().endsWith("@giroksam.test")) {
@@ -197,6 +197,7 @@ export async function POST(request: Request) {
       : [];
     const refresh = body.refresh === true;
     const fullRefresh = body.fullRefresh === true;
+    const freeFallbackOnly = body.freeFallbackOnly === true;
     if (fullRefresh && body.labOnly !== true) {
       return Response.json({ error: "전체 새 버전 제작은 실험실 제한 검증에서만 사용할 수 있습니다." }, { status: 403 });
     }
@@ -319,6 +320,28 @@ export async function POST(request: Request) {
         assessment_plan_id: spec.assessmentPlanId, pool_version_id: Number(version.id),
       }] : [];
     }), "owner_id,class_id,assessment_plan_id,pool_version_id");
+    let freeCompleted = 0;
+    for (const spec of specsToCreate) {
+      const version = byFingerprint.get(spec.fingerprint);
+      if (!version) continue;
+      const versionId = Number(version.id);
+      const existing = sentencesByVersion.get(versionId) ?? [];
+      if (!existing.length || commentPoolQuality(existing, spec.canonicalSentence).reusable) continue;
+      const fallbacks = buildValidatedMinimumPoolFallbacks(spec, existing);
+      if (!fallbacks.length) continue;
+      await upsertRows("comment_pool_sentences", fallbacks.map((sentence) => ({
+        pool_version_id: versionId, sentence, normalized_sentence: normalizedPoolSentence(sentence),
+        status: "approved", source: "deterministic_fallback", updated_at: new Date().toISOString(),
+      })), "pool_version_id,normalized_sentence");
+      const completedSentences = [...existing, ...fallbacks].slice(0, COMMENT_POOL_TARGET);
+      sentencesByVersion.set(versionId, completedSentences);
+      const quality = commentPoolQuality(completedSentences, spec.canonicalSentence);
+      await updateRows("comment_pool_versions", { id: eq(versionId) }, {
+        status: quality.reusable ? "ready" : "usable", approved_count: completedSentences.length,
+        updated_at: new Date().toISOString(),
+      });
+      if (quality.reusable) freeCompleted += 1;
+    }
     const pending = specsToCreate.flatMap((spec) => {
       const version = byFingerprint.get(spec.fingerprint);
       const quality = commentPoolQuality(version ? (sentencesByVersion.get(Number(version.id)) ?? []) : [], spec.canonicalSentence);
@@ -327,6 +350,9 @@ export async function POST(request: Request) {
         : [];
     }).slice(0, maxGroups);
     if (!pending.length) return Response.json({ ready: true, reused: specs.length });
+    if (freeFallbackOnly) {
+      return Response.json({ ready: false, needsAi: pending.length, freeCompleted, reused: specs.length - pending.length });
+    }
     const jobs = await insertRows<{ id: string }>("generation_jobs", [{
       owner_id: user.id, owner_email: user.email, class_id: classId, job_type: "comment-pools",
       status: "queued", batches: pending, current_batch: 0, total_batches: pending.length,

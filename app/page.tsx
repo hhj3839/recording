@@ -809,11 +809,25 @@ function PlanManager({ plan, onChanged, current }: { plan: AssessmentPlan[]; onC
   }, []);
   const startPoolProduction = async () => {
     if (!plan.length || poolBusy) return;
-    const pending = poolSummary.needsGeneration;
-    if (!pending || !window.confirm(`현재 평가계획에 남은 모든 과목의 AI 평어를 이어서 제작합니다.\n제작 또는 보완이 필요한 묶음은 ${pending}개이며 최대 ${pending * 2}회 호출합니다. 완료된 문장 풀은 그대로 재사용합니다.\n\nAI API를 사용해 제작을 시작할까요?`)) return;
+    if (!poolSummary.needsGeneration) return;
     setPoolBusy(true);
     setErrors([]);
     try {
+      const freeResponse = await fetch("/api/comment-pools", {
+        method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ freeFallbackOnly: true }),
+      });
+      const freeResult = await readApiJson<{ ready?: boolean; needsAi?: number; freeCompleted?: number }>(freeResponse, "AI 평어 무료 보완을 시작하지 못했습니다.");
+      if (!freeResponse.ok) throw new Error(freeResult.error || "AI 평어 무료 보완을 시작하지 못했습니다.");
+      if (freeResult.ready) {
+        setMessage("검증된 기준 문장으로 부족한 AI 평어를 무료 보완했습니다.");
+        await loadPoolStatus();
+        return;
+      }
+      const pending = Number(freeResult.needsAi ?? poolSummary.needsGeneration);
+      if (!pending || !window.confirm(`무료 보완 후에도 AI 제작이 필요한 묶음은 ${pending}개이며 최대 ${pending * 2}회 호출합니다. 완료된 문장 풀은 그대로 재사용합니다.\n\nAI API를 사용해 제작을 계속할까요?`)) {
+        await loadPoolStatus();
+        return;
+      }
       const response = await fetch("/api/comment-pools", {
         method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({}),
       });
