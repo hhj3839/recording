@@ -355,6 +355,17 @@ test("shows resumable pool production progress beside the ready count", () => {
   assert.match(route, /const subjectSpecs = subject \? allSpecs\.filter[\s\S]*: allSpecs/);
 });
 
+test("keeps the pool summary in a loading state and exposes read-only quality review metrics", () => {
+  const page = readFileSync("app/page.tsx", "utf8");
+  const route = readFileSync("app/api/comment-pools/route.ts", "utf8");
+  assert.match(page, /poolStatusLoading[\s\S]*AI 평어 상태를 확인하고 있습니다/);
+  assert.match(page, /평균 최근접 유사도/);
+  assert.match(page, /교사 검토: \{row\.issues\.join/);
+  assert.match(route, /reviewCount: validations\.filter/);
+  assert.match(route, /averageNearestSimilarity: quality\.averageNearestSimilarity/);
+  assert.match(route, /detailValidations[\s\S]*validatePoolCandidate/);
+});
+
 test("allows only an explicitly bounded lab canonical-pool recovery", () => {
   const route = readFileSync("app/api/comment-pools/route.ts", "utf8");
   const runner = readFileSync("app/api/comment-pools/run/route.ts", "utf8");

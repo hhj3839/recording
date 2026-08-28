@@ -36,6 +36,18 @@ type CommentPoolGroupView = {
   status: string;
   approvedCount: number;
   targetCount: number;
+  reviewCount: number;
+  qualityWarnings: string[];
+  diversity: {
+    uniqueCount: number;
+    openingCount: number;
+    openingRatio: number;
+    clusteredPairs: number;
+    totalPairs: number;
+    clusterRatio: number;
+    averageNearestSimilarity: number;
+    averageLength: number;
+  };
 };
 type ClassroomInfo = {
   id?: number;
@@ -45,6 +57,7 @@ type ClassroomInfo = {
   grade: number;
   classNumber: number;
 };
+const EMPTY_POOL_SUMMARY = { total: 0, ready: 0, usable: 0, needsGeneration: 0, approved: 0, reviewCount: 0, warningPools: 0 };
 
 const behaviorReferences = [
   { category: "학습 관련", strengths: ["과제에 끈기 있게 참여함", "탐구적 태도가 돋보임", "문제 해결 능력이 우수함", "자기주도적으로 학습함"], growth: ["기초를 차근차근 다지는 중임", "학습 몰입 시간을 늘려 가고 있음", "꾸준한 학습 습관을 형성하는 중임"] },
@@ -551,9 +564,10 @@ function PlanManager({ plan, onChanged, current }: { plan: AssessmentPlan[]; onC
   const [sharedSubject, setSharedSubject] = useState("all");
   const [sharedPreview, setSharedPreview] = useState<{ name: string; items: AssessmentPlan[] } | null>(null);
   const [poolGroups, setPoolGroups] = useState<CommentPoolGroupView[]>([]);
-  const [poolSummary, setPoolSummary] = useState({ total: 0, ready: 0, usable: 0, needsGeneration: 0 });
+  const [poolSummary, setPoolSummary] = useState(EMPTY_POOL_SUMMARY);
+  const [poolStatusLoading, setPoolStatusLoading] = useState(false);
   const [selectedPoolFingerprint, setSelectedPoolFingerprint] = useState("");
-  const [poolSentences, setPoolSentences] = useState<Array<{ id: number; sentence: string }>>([]);
+  const [poolSentences, setPoolSentences] = useState<Array<{ id: number; sentence: string; issues: string[] }>>([]);
   const [poolSentencesLoading, setPoolSentencesLoading] = useState(false);
   const poolSentenceRequestRef = useRef(0);
   const [poolBusy, setPoolBusy] = useState(false);
@@ -791,20 +805,23 @@ function PlanManager({ plan, onChanged, current }: { plan: AssessmentPlan[]; onC
     if (fingerprint) {
       setPoolSentences([]);
       setPoolSentencesLoading(true);
+    } else {
+      setPoolStatusLoading(true);
     }
     try {
       const response = await fetch(`/api/comment-pools${fingerprint ? `?fingerprint=${encodeURIComponent(fingerprint)}` : ""}`, { cache: "no-store" });
-      const result = await readApiJson<{ groups?: CommentPoolGroupView[]; summary?: typeof poolSummary; activeJob?: PoolJobView | null; sentences?: Array<{ id: number; sentence: string }> }>(response, "AI 평어 상태를 불러오지 못했습니다.");
+      const result = await readApiJson<{ groups?: CommentPoolGroupView[]; summary?: typeof EMPTY_POOL_SUMMARY; activeJob?: PoolJobView | null; sentences?: Array<{ id: number; sentence: string; issues: string[] }> }>(response, "AI 평어 상태를 불러오지 못했습니다.");
       if (!response.ok) throw new Error(result.error || "AI 평어 상태를 불러오지 못했습니다.");
       if (result.groups) {
         setPoolGroups(result.groups);
-        setPoolSummary(result.summary ?? { total: 0, ready: 0, usable: 0, needsGeneration: 0 });
+        setPoolSummary(result.summary ?? EMPTY_POOL_SUMMARY);
         if (result.groups[0]) setSelectedPoolFingerprint((current) => current || result.groups![0].fingerprint);
       }
       if (result.activeJob) setPoolJob(result.activeJob);
       if (result.sentences && (!fingerprint || requestId === poolSentenceRequestRef.current)) setPoolSentences(result.sentences);
     } finally {
       if (fingerprint && requestId === poolSentenceRequestRef.current) setPoolSentencesLoading(false);
+      if (!fingerprint) setPoolStatusLoading(false);
     }
   }, []);
   const startPoolProduction = async () => {
@@ -898,6 +915,7 @@ function PlanManager({ plan, onChanged, current }: { plan: AssessmentPlan[]; onC
   const sharedYears = [...new Set(sharedPlans.map((item) => item.schoolYear))].sort((a, b) => b - a);
   const sharedSubjects = [...new Set(sharedPlans.flatMap((item) => item.subjects))].sort((a, b) => a.localeCompare(b, "ko"));
   const activePoolJob = Boolean(poolJob && ["queued", "running"].includes(poolJob.status));
+  const selectedPoolGroup = poolGroups.find((group) => group.fingerprint === selectedPoolFingerprint) ?? poolGroups[0];
   const filteredSharedPlans = sharedPlans.filter((item) => {
     const search = sharedSearch.trim().toLowerCase();
     return (!search || `${item.name} ${item.subjects.join(" ")}`.toLowerCase().includes(search))
@@ -917,16 +935,27 @@ function PlanManager({ plan, onChanged, current }: { plan: AssessmentPlan[]; onC
     {planSection === "ai" && <section className="ai-comment-pool-panel">
       <div className="section-heading"><div><p className="eyebrow">평가계획용 문장 풀</p><h2>AI 평어</h2><p>학생에게 배정하기 전, 평가영역·수준별로 자연스러운 평어 8~12개를 제작하고 검수합니다.</p></div><div className="ai-pool-heading-actions"><button className="danger-text" disabled={poolBusy || !plan.length || poolSummary.usable === 0 || activePoolJob} onClick={() => void resetPoolLinks()}>AI 평어 초기화</button></div></div>
       {!plan.length ? <p className="empty-cell">평가계획을 먼저 저장해 주세요.</p> : <>
-        <div className="ai-pool-summary">
+        {poolStatusLoading ? <div className="ai-pool-loading" role="status"><i aria-hidden="true" /><span><b>AI 평어 상태를 확인하고 있습니다.</b><small>현재 평가계획의 승인 문장과 최신 검수 결과를 읽는 중입니다.</small></span></div> : <div className="ai-pool-summary">
           <span><b>{poolSummary.total}</b>개 영역·수준</span>
           <span className="ready-count"><b>{poolSummary.ready}/{poolSummary.total}</b> 준비 완료</span>
+          <span><b>{poolSummary.approved}</b>개 승인 문장</span>
+          {poolSummary.reviewCount > 0 && <span className="review-count"><b>{poolSummary.reviewCount}</b>개 교사 검토</span>}
+          {poolSummary.warningPools > 0 && <span className="diversity-warning"><b>{poolSummary.warningPools}</b>개 풀 다양성 확인</span>}
           {activePoolJob && poolJob ? <span className="pool-progress" role="status"><i aria-hidden="true" /> <b>{poolJob.completed}/{poolJob.total}</b> {poolJob.current ? `${poolJob.current.subject} · ${poolJob.current.domain} · ${poolJob.current.level} 제작·검수 중` : "제작 대기 중"}</span>
             : poolSummary.needsGeneration > 0 ? <button className="pool-continue" disabled={poolBusy || !plan.length} onClick={() => void startPoolProduction()}>{poolSummary.ready === 0 ? "AI 평어 제작" : `${poolSummary.needsGeneration}개 이어서 제작`}</button>
               : poolSummary.needsGeneration === 0 ? <span className="all-ready">전체 준비 완료</span> : null}
-        </div>
+        </div>}
         {!!poolGroups.length && <div className="ai-pool-browser">
-          <div className="ai-pool-selection-row"><label><span>과목·영역·수준</span><select value={selectedPoolFingerprint} onChange={(event) => setSelectedPoolFingerprint(event.target.value)}>{poolGroups.map((group) => <option value={group.fingerprint} key={group.fingerprint}>{group.subject} · {group.domain} · {group.level} ({group.approvedCount}/{group.targetCount})</option>)}</select></label></div>
-          <div className="ai-pool-sentence-list">{poolSentencesLoading ? <p className="empty-cell" role="status">선택한 AI 평어를 불러오는 중입니다.</p> : poolSentences.length ? poolSentences.map((row, index) => <p key={row.id}><b>{index + 1}</b><span>{row.sentence}</span></p>) : <p className="empty-cell">아직 제작된 승인 문장이 없습니다.</p>}</div>
+          <div className="ai-pool-selection-row"><label><span>과목·영역·수준</span><select value={selectedPoolFingerprint} onChange={(event) => setSelectedPoolFingerprint(event.target.value)}>{poolGroups.map((group) => <option value={group.fingerprint} key={group.fingerprint}>{group.subject} · {group.domain} · {group.level} ({group.approvedCount}/{group.targetCount}){group.reviewCount ? ` · 검토 ${group.reviewCount}` : ""}</option>)}</select></label></div>
+          {selectedPoolGroup && <div className="ai-pool-quality" aria-label="선택 문장 풀 품질 지표">
+            <span><small>고유 문장</small><b>{selectedPoolGroup.diversity.uniqueCount}/{selectedPoolGroup.approvedCount}</b></span>
+            <span><small>서로 다른 첫머리</small><b>{selectedPoolGroup.diversity.openingCount}</b></span>
+            <span><small>평균 최근접 유사도</small><b>{Math.round(selectedPoolGroup.diversity.averageNearestSimilarity * 100)}%</b></span>
+            <span><small>유사 군집</small><b>{selectedPoolGroup.diversity.clusteredPairs}/{selectedPoolGroup.diversity.totalPairs}</b></span>
+            <span><small>평균 길이</small><b>{selectedPoolGroup.diversity.averageLength.toFixed(1)}자</b></span>
+          </div>}
+          {!!selectedPoolGroup?.qualityWarnings.length && <p className="ai-pool-quality-note">다양성 확인: {selectedPoolGroup.qualityWarnings.join(" · ")}</p>}
+          <div className="ai-pool-sentence-list">{poolSentencesLoading ? <p className="empty-cell" role="status">선택한 AI 평어를 불러오는 중입니다.</p> : poolSentences.length ? poolSentences.map((row, index) => <p className={row.issues.length ? "needs-review" : ""} key={row.id}><b>{index + 1}</b><span>{row.sentence}{row.issues.length > 0 && <small>교사 검토: {row.issues.join(" · ")}</small>}</span></p>) : <p className="empty-cell">아직 제작된 승인 문장이 없습니다.</p>}</div>
         </div>}
       </>}
     </section>}

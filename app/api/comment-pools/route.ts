@@ -24,11 +24,10 @@ function versionMatchesSpec(version: PoolVersionRow, spec: ReturnType<typeof bui
     && version.level === spec.level && version.criterion === spec.criterion;
 }
 
-async function linkedVersions(ownerId: string, classId: number, specs: ReturnType<typeof buildCommentPoolSpecs>) {
-  const assessmentPlanIds = [...new Set(specs.map((spec) => spec.assessmentPlanId))];
-  const links = assessmentPlanIds.length ? await selectRows<{ assessment_plan_id: number; pool_version_id: number }>("assessment_plan_pool_links", {
-    owner_id: eq(ownerId), class_id: eq(classId), assessment_plan_id: inValues(assessmentPlanIds), order: "id.desc",
-  }) : [];
+async function linkedVersions(ownerId: string, classId: number) {
+  const links = await selectRows<{ assessment_plan_id: number; pool_version_id: number }>("assessment_plan_pool_links", {
+    owner_id: eq(ownerId), class_id: eq(classId), order: "id.desc",
+  });
   const versionIds = [...new Set(links.map((link) => Number(link.pool_version_id)))];
   const versions = versionIds.length ? await selectRows<PoolVersionRow>("comment_pool_versions", {
     id: inValues(versionIds), order: "updated_at.desc",
@@ -112,8 +111,11 @@ export async function GET(request: Request) {
       }
       return Response.json({ job: publicJob(job) }, { headers: { "Cache-Control": "private, no-store" } });
     }
-    const specs = await currentSpecs(user.id, classId);
-    const { links, versionById } = await linkedVersions(user.id, classId, specs);
+    const [specs, linked] = await Promise.all([
+      currentSpecs(user.id, classId),
+      linkedVersions(user.id, classId),
+    ]);
+    const { links, versionById } = linked;
     const sentencesByVersion = await approvedSentencesByVersion([...versionById.keys()]);
     const linkedVersionFor = (spec: (typeof specs)[number]) => links
       .filter((link) => Number(link.assessment_plan_id) === spec.assessmentPlanId)
@@ -122,12 +124,25 @@ export async function GET(request: Request) {
     const groups = specs.map((spec) => {
       const version = linkedVersionFor(spec);
       const quality = commentPoolQuality(version ? (sentencesByVersion.get(Number(version.id)) ?? []) : [], spec.canonicalSentence);
+      const sentences = version ? (sentencesByVersion.get(Number(version.id)) ?? []) : [];
+      const validations = sentences.map((sentence) => validatePoolCandidate(sentence, spec));
       return {
         fingerprint: spec.fingerprint, subject: spec.subject, unit: spec.unit, domain: spec.domain,
         assessmentIndex: spec.assessmentIndex, level: spec.level,
         status: quality.reusable ? "ready" : "needs_generation",
         approvedCount: Number(version?.approved_count ?? 0), qualityIssues: quality.issues,
         qualityWarnings: quality.warnings,
+        reviewCount: validations.filter((result) => result.issues.length > 0).length,
+        diversity: {
+          uniqueCount: quality.uniqueCount,
+          openingCount: quality.openingCount,
+          openingRatio: quality.openingRatio,
+          clusteredPairs: quality.clusteredPairs,
+          totalPairs: quality.totalPairs,
+          clusterRatio: quality.clusterRatio,
+          averageNearestSimilarity: quality.averageNearestSimilarity,
+          averageLength: quality.averageLength,
+        },
         targetCount: COMMENT_POOL_TARGET, poolVersionId: version ? Number(version.id) : null,
       };
     });
@@ -137,6 +152,9 @@ export async function GET(request: Request) {
     const sentences = detailVersion ? await selectRows<{ id: number; sentence: string }>("comment_pool_sentences", {
       pool_version_id: eq(detailVersion.id), status: eq("approved"), order: "id.asc", limit: COMMENT_POOL_TARGET,
     }) : [];
+    const detailValidations = detailSpec
+      ? sentences.map((row) => ({ ...row, issues: validatePoolCandidate(row.sentence, detailSpec).issues }))
+      : [];
     const activeJob = (await selectRows<Record<string, unknown>>("generation_jobs", {
       owner_id: eq(user.id), class_id: eq(classId), job_type: eq("comment-pools"), status: "in.(queued,running)", order: "updated_at.desc", limit: 1,
     }))[0];
@@ -148,9 +166,12 @@ export async function GET(request: Request) {
         ready: groups.filter((group) => group.status === "ready").length,
         usable: groups.filter((group) => group.approvedCount > 0).length,
         needsGeneration: groups.filter((group) => group.status !== "ready").length,
+        approved: groups.reduce((sum, group) => sum + group.approvedCount, 0),
+        reviewCount: groups.reduce((sum, group) => sum + group.reviewCount, 0),
+        warningPools: groups.filter((group) => group.qualityWarnings.length > 0).length,
       },
       activeJob: activeJob ? publicJob(activeJob) : null,
-      sentences: sentences.map((row) => ({ id: Number(row.id), sentence: row.sentence })),
+      sentences: detailValidations.map((row) => ({ id: Number(row.id), sentence: row.sentence, issues: row.issues })),
     }, { headers: { "Cache-Control": "private, no-store" } });
   } catch (error) {
     return dataError(error, "AI 평어 준비 상태를 불러오지 못했습니다.");
@@ -226,7 +247,7 @@ export async function POST(request: Request) {
     if (targetFingerprints.length !== 0 && specs.length !== targetFingerprints.length) {
       return Response.json({ error: "지정한 문장 풀 중 현재 평가계획과 일치하지 않는 항목이 있습니다." }, { status: 400 });
     }
-    const currentLinked = await linkedVersions(user.id, classId, specs);
+    const currentLinked = await linkedVersions(user.id, classId);
     if (fullRefresh) {
       const refreshNonce = Date.now();
       const versions = await insertRows<PoolVersionRow>("comment_pool_versions", specs.map((spec, index) => ({
