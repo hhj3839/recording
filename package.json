@@ -31,6 +31,7 @@
     "audit:approved-pool-repairs": "node scripts/dry-run-approved-pool-repairs.mjs",
     "repair:approved-six-pools": "node scripts/run-approved-six-pool-repairs.mjs",
     "test:approved-full-pool-reassignment": "node scripts/run-approved-full-pool-reassignment.mjs",
+    "test:approved-full-pool-refresh": "node scripts/run-approved-full-pool-refresh.mjs",
     "test:approved-canonical-recovery": "node scripts/run-approved-canonical-pool-recovery.mjs",
     "audit:stored-classification": "node scripts/audit-stored-results.mjs",
     "audit:teacher-review": "node scripts/summarize-teacher-review.mjs",

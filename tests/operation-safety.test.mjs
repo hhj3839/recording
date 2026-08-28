@@ -455,6 +455,26 @@ test("keeps the approved-pool audit read-only and reports sentence ids instead o
   assert.match(audit, /failedIds/);
 });
 
+test("limits a full pool refresh to the exact 75-group lab scope and 150 calls", () => {
+  const route = readFileSync("app/api/comment-pools/route.ts", "utf8");
+  assert.match(route, /fullRefresh && body\.labOnly !== true/);
+  assert.match(route, /fullRefresh && allSpecs\.length !== 75/);
+  assert.match(route, /maxAttempts: 2/);
+  assert.match(route, /maxAiCalls: batches\.length \* 2/);
+  assert.match(route, /activateWhenReady: true/);
+  assert.match(route, /previousPoolVersionIds/);
+});
+
+test("normalizes assessment-plan API fields before diagnosing missing pools", () => {
+  const audit = readFileSync("scripts/analyze-missing-comment-pools.ts", "utf8");
+  const afterLogin = audit.slice(audit.indexOf("const get ="));
+  assert.doesNotMatch(afterLogin, /method:\s*["'](?:POST|PUT|PATCH|DELETE)["']/);
+  assert.match(audit, /assessment_type:\s*item\.assessment_type\s*\?\?\s*item\.type/);
+  assert.match(audit, /sort_order:\s*item\.sort_order\s*\?\?\s*item\.sortOrder/);
+  assert.match(audit, /missingCount/);
+  assert.match(audit, /unmatchedCount/);
+});
+
 test("limits the approved missing-pool gate to four exact lab pools and eight calls", () => {
   const runner = readFileSync("scripts/run-approved-missing-pools.mjs", "utf8");
   assert.match(runner, /RUN_APPROVED_MISSING_POOLS/);
