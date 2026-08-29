@@ -85,6 +85,17 @@
 - 암호화 보관본 SHA-256은 `727bf44f4ea871e95769439a5f6413fcfc3795e635e2e8b68cfefbd6d48228b3`이며 평문 덤프와 검증 파일은 암호화 검증 후 삭제함.
 - 백업 파일: `C:\Users\LEOPARDCAT\Documents\recording-backups\recording-backup-20260826T101929Z.7z`
 
+## 2026-08-29 최신 운영 백업 갱신 점검
+
+- 2026-08-28 실험실 문장 풀 75묶음 재제작 이후의 운영 자료가 2026-08-26 백업에는 포함되지 않으므로 신규 논리 백업이 필요함.
+- PostgreSQL 17.10과 7-Zip 실행 파일, 기존 AES-256 백업 암호의 Windows 보안 저장본은 이 컴퓨터에서 확인함.
+- 운영 DB 비밀번호를 재설정하고 Session pooler에 로컬 보안 입력하여 신규 덤프를 생성함. 비밀번호는 저장소·문서·백업 파일에 기록하지 않음.
+- PostgreSQL custom 덤프 생성과 `pg_restore --list` 목차 검사를 통과한 뒤 덤프·목차·원본 해시를 AES-256·헤더 암호화 보관본으로 묶음.
+- 암호화 보관본 `recording-backup-20260829T055345Z.7z`는 2,488,945바이트이며 별도 `7z test` 복호화 검사와 SHA-256 일치 검사를 통과함.
+- 암호화 보관본 SHA-256은 `9a10513ce8e414b0d2c1f89fa081d36f51297a38cd4da569c4e498b812461891`이며 평문 덤프·목차·원본 해시는 검증 후 삭제함.
+- 이전 실패에서 남은 0바이트 임시 덤프도 확인 후 삭제했으며 기존 2026-08-26 암호화 백업은 변경하지 않음.
+- 백업 파일: `C:\Users\LEOPARDCAT\Documents\recording-backups\recording-backup-20260829T055345Z.7z`
+
 ### 파일럿 전 1회 준비
 
 1. PostgreSQL 공식 클라이언트를 설치하고 `pg_dump --version`과 `pg_restore --version`을 기록함.
