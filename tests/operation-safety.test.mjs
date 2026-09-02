@@ -291,6 +291,14 @@ test("resets only the current assessment plan pool links", () => {
   assert.match(page, /fetch\("\/api\/comment-pools", \{ method: "DELETE" \}\)/);
 });
 
+test("links only complete shared AI comment pools when importing a shared assessment plan", () => {
+  const route = readFileSync("app/api/shared-assessment-plans/route.ts", "utf8");
+  assert.match(route, /buildCommentPoolSpecs\(rows\)/);
+  assert.match(route, /commentPoolIsComplete\(sentencesByVersion\.get/);
+  assert.match(route, /upsertRows\("assessment_plan_pool_links", poolLinks/);
+  assert.match(route, /linkedPools: poolLinks\.length/);
+});
+
 test("keeps isolated pool refresh safe without exposing a teacher-facing selection action", () => {
   const route = readFileSync("app/api/comment-pools/route.ts", "utf8");
   const runner = readFileSync("app/api/comment-pools/run/route.ts", "utf8");

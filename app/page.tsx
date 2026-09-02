@@ -769,12 +769,13 @@ function PlanManager({ plan, onChanged, current }: { plan: AssessmentPlan[]; onC
       const response = await fetch("/api/shared-assessment-plans", {
         method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ id: shared.id }),
       });
-      const result = await response.json() as { imported?: number; error?: string };
+      const result = await response.json() as { imported?: number; linkedPools?: number; error?: string };
       if (!response.ok) throw new Error(result.error || "공동 평가계획을 가져오지 못했습니다.");
       const planResponse = await fetch("/api/assessment-plan");
       const planResult = await planResponse.json() as { plan?: AssessmentPlan[] };
       if (planResponse.ok && planResult.plan) onChanged(planResult.plan);
-      setMessage(`공동 평가계획 ${result.imported ?? shared.itemCount}개를 현재 학급에 적용했습니다.`);
+      const linkedPools = Number(result.linkedPools ?? 0);
+      setMessage(`공동 평가계획 ${result.imported ?? shared.itemCount}개를 현재 학급에 적용했습니다.${linkedPools ? ` 완성된 AI 평어 ${linkedPools}개 영역·수준도 자동 연결했습니다.` : " 일치하는 완성 AI 평어는 AI 평어 탭에서 제작할 수 있습니다."}`);
       setSharedOpen(false);
     } catch (error) { setErrors([error instanceof Error ? error.message : "공동 평가계획을 가져오지 못했습니다."]); }
     finally { setBusy(false); }
