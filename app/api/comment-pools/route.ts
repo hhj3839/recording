@@ -159,6 +159,9 @@ export async function GET(request: Request) {
       owner_id: eq(user.id), class_id: eq(classId), job_type: eq("comment-pools"), status: "in.(queued,running)", order: "updated_at.desc", limit: 1,
     }))[0];
     if (activeJob) queueRunner(request, String(activeJob.id));
+    const latestJob = activeJob ?? (await selectRows<Record<string, unknown>>("generation_jobs", {
+      owner_id: eq(user.id), class_id: eq(classId), job_type: eq("comment-pools"), order: "updated_at.desc", limit: 1,
+    }))[0];
     return Response.json({
       groups,
       summary: {
@@ -171,6 +174,7 @@ export async function GET(request: Request) {
         warningPools: groups.filter((group) => group.qualityWarnings.length > 0).length,
       },
       activeJob: activeJob ? publicJob(activeJob) : null,
+      latestJob: latestJob ? publicJob(latestJob) : null,
       sentences: detailValidations.map((row) => ({ id: Number(row.id), sentence: row.sentence, issues: row.issues })),
     }, { headers: { "Cache-Control": "private, no-store" } });
   } catch (error) {
@@ -235,6 +239,14 @@ export async function POST(request: Request) {
     const maxGroups = Number.isInteger(requestedMaxGroups) && requestedMaxGroups > 0
       ? Math.min(requestedMaxGroups, 15)
       : Number.POSITIVE_INFINITY;
+    const existingActiveJob = (await selectRows<Record<string, unknown>>("generation_jobs", {
+      owner_id: eq(user.id), class_id: eq(classId), job_type: eq("comment-pools"), status: "in.(queued,running)", order: "updated_at.desc", limit: 1,
+    }))[0];
+    if (existingActiveJob) {
+      queueRunner(request, String(existingActiveJob.id));
+      const job = publicJob(existingActiveJob);
+      return Response.json({ jobId: job.id, total: job.total, existing: true, job }, { status: 202 });
+    }
     const allSpecs = await currentSpecs(user.id, classId);
     if (fullRefresh && allSpecs.length !== 75) {
       return Response.json({ error: `실험실 전체 새 버전 제작 범위가 75개가 아닙니다. (${allSpecs.length}개)` }, { status: 409 });
