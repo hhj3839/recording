@@ -933,7 +933,7 @@ function PlanManager({ plan, onChanged, current }: { plan: AssessmentPlan[]; onC
       <button role="tab" aria-selected={planSection === "ai"} className={planSection === "ai" ? "active" : ""} onClick={() => setPlanSection("ai")}>AI 평어{poolSummary.needsGeneration > 0 ? " · 제작 필요" : ""}</button>
     </div>
     {planSection === "ai" && <section className="ai-comment-pool-panel">
-      <div className="section-heading"><div><p className="eyebrow">평가계획용 문장 풀</p><h2>AI 평어</h2><p>학생에게 배정하기 전, 평가영역·수준별로 자연스러운 평어 8~12개를 제작하고 검수합니다.</p></div><div className="ai-pool-heading-actions"><button className="danger-text" disabled={poolBusy || !plan.length || poolSummary.usable === 0 || activePoolJob} onClick={() => void resetPoolLinks()}>AI 평어 초기화</button></div></div>
+      <div className="section-heading"><div><p className="eyebrow">평가계획용 문장 풀</p><h2>AI 평어</h2><p>학생에게 배정하기 전, 평가영역·수준별로 서로 다른 평어 20개를 제작하고 검수합니다.</p></div><div className="ai-pool-heading-actions"><button className="danger-text" disabled={poolBusy || !plan.length || poolSummary.usable === 0 || activePoolJob} onClick={() => void resetPoolLinks()}>AI 평어 초기화</button></div></div>
       {!plan.length ? <p className="empty-cell">평가계획을 먼저 저장해 주세요.</p> : <>
         {poolStatusLoading ? <div className="ai-pool-loading" role="status"><i aria-hidden="true" /><span><b>AI 평어 상태를 확인하고 있습니다.</b><small>현재 평가계획의 승인 문장과 최신 검수 결과를 읽는 중입니다.</small></span></div> : <div className="ai-pool-summary">
           <span><b>{poolSummary.total}</b>개 영역·수준</span>

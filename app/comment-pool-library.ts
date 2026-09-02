@@ -1,7 +1,7 @@
 import { createHash } from "node:crypto";
 import { buildCanonicalCommentSentence, criterionToSafeNominalCandidates, hasNaturalNominalEnding, positiveGrowthCriterion, repairSafeNominalEnding } from "./comment-generation-policy.ts";
 
-export const COMMENT_POOL_TARGET = 12;
+export const COMMENT_POOL_TARGET = 20;
 export const COMMENT_POOL_MINIMUM = 5;
 export const COMMENT_POOL_SIMILARITY_LIMIT = 0.9;
 export const COMMENT_POOL_CLUSTER_THRESHOLD = 0.75;
@@ -120,6 +120,11 @@ export function commentPoolQuality(sentences: string[], referenceSentence = "") 
     referenceLength,
     minimumAverageLength,
   };
+}
+
+export function commentPoolIsComplete(sentences: string[], referenceSentence = "") {
+  const quality = commentPoolQuality(sentences, referenceSentence);
+  return quality.reusable && quality.uniqueCount >= COMMENT_POOL_TARGET;
 }
 
 export function poolFingerprint(input: Omit<CommentPoolSpec, "fingerprint" | "assessmentPlanId" | "assessmentIndex" | "canonicalSentence">) {

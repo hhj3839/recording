@@ -1,6 +1,6 @@
 import { waitUntil } from "@vercel/functions";
 import { eq, selectRows, supabaseRequest, updateRows, upsertRows } from "../../../../db/supabase";
-import { approvePoolCandidates, buildValidatedMinimumPoolFallbacks, commentPoolQuality, COMMENT_POOL_TARGET, normalizedPoolSentence, type CommentPoolSpec } from "../../../comment-pool-library";
+import { approvePoolCandidates, buildValidatedMinimumPoolFallbacks, commentPoolIsComplete, commentPoolQuality, COMMENT_POOL_TARGET, normalizedPoolSentence, type CommentPoolSpec } from "../../../comment-pool-library";
 import { signCommentJob, verifyCommentJob } from "../../../comment-generation";
 import { primaryAiModel } from "../../../ai-model-policy";
 import { recordAiUsage } from "../../../ai-usage";
@@ -130,11 +130,12 @@ export async function POST(request: Request) {
     }
     if (!commentPoolQuality(approved, batch.spec.canonicalSentence).reusable) await saveFreeFallbacks();
     const quality = commentPoolQuality(approved, batch.spec.canonicalSentence);
-    const status = quality.reusable ? "ready" : approved.length ? "usable" : "failed";
+    const complete = commentPoolIsComplete(approved, batch.spec.canonicalSentence);
+    const status = complete ? "ready" : approved.length ? "usable" : "failed";
     await updateRows("comment_pool_versions", { id: eq(batch.poolVersionId) }, {
       status, approved_count: approved.length, updated_at: new Date().toISOString(),
     });
-    if (batch.activateWhenReady && quality.reusable) {
+    if (batch.activateWhenReady && complete) {
       await upsertRows("assessment_plan_pool_links", [{
         owner_id: job.owner_id, owner_email: job.owner_email, class_id: Number(job.class_id),
         assessment_plan_id: batch.spec.assessmentPlanId, pool_version_id: batch.poolVersionId,
@@ -150,7 +151,7 @@ export async function POST(request: Request) {
         }).catch(() => undefined);
       }
     }
-    failed = batch.activateWhenReady ? !quality.reusable : approved.length === 0;
+    failed = batch.activateWhenReady ? !complete : approved.length === 0;
     if (failed) errorMessage = batch.activateWhenReady
       ? `${batch.spec.subject} ${batch.spec.domain} ${batch.spec.level} 수준의 새 문장 풀이 품질 검수를 통과하지 못해 기존 문장 풀을 유지했습니다. (${quality.issues.join(" · ")})`
       : `${batch.spec.subject} ${batch.spec.domain} ${batch.spec.level} 수준의 승인 문장을 확보하지 못했습니다.`;

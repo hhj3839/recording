@@ -1,7 +1,7 @@
 import { waitUntil } from "@vercel/functions";
 import { createHash } from "node:crypto";
 import { eq, insertRows, selectRows, supabaseRequest, updateRows, upsertRows } from "../../../db/supabase";
-import { buildCommentPoolSpecs, buildValidatedMinimumPoolFallbacks, commentPoolQuality, COMMENT_POOL_GENERATOR_VERSION, COMMENT_POOL_TARGET, normalizedPoolSentence, validatePoolCandidate, type CommentPoolSpec, type PoolPlanItem } from "../../comment-pool-library";
+import { buildCommentPoolSpecs, buildValidatedMinimumPoolFallbacks, commentPoolIsComplete, commentPoolQuality, COMMENT_POOL_GENERATOR_VERSION, COMMENT_POOL_TARGET, normalizedPoolSentence, validatePoolCandidate, type CommentPoolSpec, type PoolPlanItem } from "../../comment-pool-library";
 import { signCommentJob } from "../../comment-generation";
 import { dataError, getDataScope } from "../../data-scope";
 
@@ -129,8 +129,8 @@ export async function GET(request: Request) {
       return {
         fingerprint: spec.fingerprint, subject: spec.subject, unit: spec.unit, domain: spec.domain,
         assessmentIndex: spec.assessmentIndex, level: spec.level,
-        status: quality.reusable ? "ready" : "needs_generation",
-        approvedCount: Number(version?.approved_count ?? 0), qualityIssues: quality.issues,
+        status: commentPoolIsComplete(sentences, spec.canonicalSentence) ? "ready" : "needs_generation",
+        approvedCount: quality.count, qualityIssues: quality.issues,
         qualityWarnings: quality.warnings,
         reviewCount: validations.filter((result) => result.issues.length > 0).length,
         diversity: {
@@ -322,7 +322,7 @@ export async function POST(request: Request) {
       .find((version): version is PoolVersionRow => Boolean(
         version
         && versionMatchesSpec(version, spec)
-        && commentPoolQuality(currentSentences.get(Number(version.id)) ?? [], spec.canonicalSentence).reusable,
+        && commentPoolIsComplete(currentSentences.get(Number(version.id)) ?? [], spec.canonicalSentence),
       ));
     const specsToCreate = specs.filter((spec) => !reusableVersionFor(spec));
     if (!specsToCreate.length) return Response.json({ ready: true, reused: specs.length });
@@ -356,17 +356,15 @@ export async function POST(request: Request) {
       })), "pool_version_id,normalized_sentence");
       const completedSentences = [...existing, ...fallbacks].slice(0, COMMENT_POOL_TARGET);
       sentencesByVersion.set(versionId, completedSentences);
-      const quality = commentPoolQuality(completedSentences, spec.canonicalSentence);
       await updateRows("comment_pool_versions", { id: eq(versionId) }, {
-        status: quality.reusable ? "ready" : "usable", approved_count: completedSentences.length,
+        status: commentPoolIsComplete(completedSentences, spec.canonicalSentence) ? "ready" : "usable", approved_count: completedSentences.length,
         updated_at: new Date().toISOString(),
       });
-      if (quality.reusable) freeCompleted += 1;
+      if (commentPoolIsComplete(completedSentences, spec.canonicalSentence)) freeCompleted += 1;
     }
     const pending = specsToCreate.flatMap((spec) => {
       const version = byFingerprint.get(spec.fingerprint);
-      const quality = commentPoolQuality(version ? (sentencesByVersion.get(Number(version.id)) ?? []) : [], spec.canonicalSentence);
-      return version && !quality.reusable
+      return version && !commentPoolIsComplete(sentencesByVersion.get(Number(version.id)) ?? [], spec.canonicalSentence)
         ? [{ spec, poolVersionId: Number(version.id), maxAttempts: canonicalOnly ? 0 : 2 }]
         : [];
     }).slice(0, maxGroups);

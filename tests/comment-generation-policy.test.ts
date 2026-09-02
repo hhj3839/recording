@@ -12,7 +12,7 @@ import { commentAreaOverlapReasons } from "../app/comment-area-diversity.ts";
 import { assignApprovedCommentPools, assignUniquePoolCandidates, buildApprovedCommentPool, buildCanonicalBaselinePart, buildCommentPoolGroups, buildPublicCommentPoolRequests, commentPoolCandidateCount, spreadCandidatesByOpening } from "../app/comment-pool-generation.ts";
 import { assembleRotatedComment } from "../app/comment-assembly.ts";
 import { readApiJson } from "../app/api-response.ts";
-import { approvePoolCandidates, buildCommentPoolSpecs, buildValidatedMinimumPoolFallbacks, commentPoolQuality, commentPoolSelectionTarget, COMMENT_POOL_CLUSTER_LIMIT, COMMENT_POOL_CLUSTER_THRESHOLD, COMMENT_POOL_MINIMUM, COMMENT_POOL_SIMILARITY_LIMIT, COMMENT_POOL_TARGET, poolCandidateQualityScore, poolSentenceOpening, poolSentenceSimilarity, repairLegacyPoolCandidate, validatePoolCandidate } from "../app/comment-pool-library.ts";
+import { approvePoolCandidates, buildCommentPoolSpecs, buildValidatedMinimumPoolFallbacks, commentPoolIsComplete, commentPoolQuality, commentPoolSelectionTarget, COMMENT_POOL_CLUSTER_LIMIT, COMMENT_POOL_CLUSTER_THRESHOLD, COMMENT_POOL_MINIMUM, COMMENT_POOL_SIMILARITY_LIMIT, COMMENT_POOL_TARGET, poolCandidateQualityScore, poolSentenceOpening, poolSentenceSimilarity, repairLegacyPoolCandidate, validatePoolCandidate } from "../app/comment-pool-library.ts";
 import { buildCommentPoolCandidatePrompt, commentPoolSystemPrompt } from "../app/comment-pool-prompt.ts";
 import { compileCommentPoolEvidence, validCommentPoolEvidenceIds } from "../app/comment-pool-evidence.ts";
 import { openAiOutputText, parseFirstJsonObject } from "../app/openai-response.ts";
@@ -164,7 +164,7 @@ test("keeps safe concise candidates and ranks grounded detailed candidates highe
   assert.equal(poolCandidateQualityScore(detailed, spec) > poolCandidateQualityScore(concise, spec), true);
 });
 
-test("requests the full twelve-sentence pool for both short and long criteria", () => {
+test("requests the configured sentence pool for both short and long criteria", () => {
   const spec = buildCommentPoolSpecs([poolPlan({
     subject: "수학", unit: "평면도형", domain: "도형",
     goal: "여러 가지 선을 구별하고 자로 그어 본다.",
@@ -235,7 +235,7 @@ test("does not rewrite already valid legacy candidates under the simplified vali
   }
 });
 
-test("approves validated pool candidates up to the natural twelve sentence target", () => {
+test("approves validated pool candidates up to the twenty sentence target", () => {
   const spec = buildCommentPoolSpecs([poolPlan()])[1];
   const candidate = spec.canonicalSentence;
   const approved = approvePoolCandidates(Array.from({ length: 25 }, (_, index) => index ? `${candidate.slice(0, -1)} ${index}함.` : candidate), spec);
@@ -265,10 +265,16 @@ test("measures near-identical pool sentences and groups their openings", () => {
   assert.ok(poolSentenceSimilarity(first, nearDuplicate) >= COMMENT_POOL_SIMILARITY_LIMIT);
   assert.ok(poolSentenceSimilarity(first, distinct) < COMMENT_POOL_SIMILARITY_LIMIT);
   assert.equal(poolSentenceOpening(first), poolSentenceOpening(nearDuplicate));
-  assert.equal(COMMENT_POOL_TARGET, 12);
+  assert.equal(COMMENT_POOL_TARGET, 20);
   assert.equal(COMMENT_POOL_MINIMUM, 5);
   assert.equal(COMMENT_POOL_CLUSTER_THRESHOLD, 0.75);
   assert.equal(COMMENT_POOL_CLUSTER_LIMIT, 2);
+});
+
+test("requires twenty unique safe sentences before a pool is complete", () => {
+  const sentences = Array.from({ length: COMMENT_POOL_TARGET }, (_, index) => `평가기준에 따라 학습 과제를 수행하는 ${index + 1}번째 모습을 구체적으로 설명함.`);
+  assert.equal(commentPoolIsComplete(sentences.slice(0, COMMENT_POOL_TARGET - 1)), false);
+  assert.equal(commentPoolIsComplete(sentences), true);
 });
 
 test("keeps a safe pool usable while reporting repeated template openings", () => {
