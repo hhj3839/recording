@@ -1,5 +1,6 @@
 import { eq, insertRows, selectRows, supabaseRequest, upsertRows } from "../../../db/supabase";
 import { snapshotAssessmentPlan } from "../../assessment-plan-versions";
+import { buildCommentPoolSpecs, commentPoolIsComplete, type PoolPlanItem } from "../../comment-pool-library";
 import { dataError, getDataScope } from "../../data-scope";
 
 type SharedPlan = {
@@ -7,7 +8,9 @@ type SharedPlan = {
   plan: Array<Record<string, unknown>>; item_count: number; created_by: string; created_by_email: string; updated_at: string;
 };
 type SharedPlanOrganization = { id: string; name: string; owner_id: string };
+type PoolVersion = { id: number; fingerprint: string };
 const GLOBAL_LIBRARY_NAME = "기록샘 공동계획";
+const inValues = (values: Array<string | number>) => `in.(${values.join(",")})`;
 
 async function globalLibrary(userId: string) {
   const existing = (await selectRows<SharedPlanOrganization>("school_organizations", {
@@ -99,11 +102,37 @@ export async function PUT(request: Request) {
     if (levels.length) return Response.json({ error: "현재 학급에 평가수준이 입력되어 있어 공동 계획으로 교체할 수 없습니다." }, { status: 409 });
     await snapshotAssessmentPlan({ ownerId: user.id, ownerEmail: user.email, classId, source: "shared-import", label: `공동 계획 ‘${shared.name}’ 가져오기 전` });
     await supabaseRequest("assessment_plans", { method: "DELETE", query: { owner_id: eq(user.id), class_id: eq(classId) } });
-    const rows = await insertRows<Record<string, unknown>>("assessment_plans", shared.plan.map((item, index) => ({
+    const rows = await insertRows<PoolPlanItem>("assessment_plans", shared.plan.map((item, index) => ({
       ...item, sort_order: Number(item.sort_order ?? index), owner_id: user.id, owner_email: user.email, class_id: classId,
     })));
+    const specs = buildCommentPoolSpecs(rows);
+    const fingerprints = [...new Set(specs.map((spec) => spec.fingerprint))];
+    const versions = fingerprints.length ? await selectRows<PoolVersion>("comment_pool_versions", {
+      fingerprint: inValues(fingerprints),
+    }) : [];
+    const versionByFingerprint = new Map(versions.map((version) => [version.fingerprint, version]));
+    const versionIds = versions.map((version) => Number(version.id));
+    const sentenceRows = versionIds.length ? await selectRows<{ pool_version_id: number; sentence: string }>("comment_pool_sentences", {
+      pool_version_id: inValues(versionIds), status: eq("approved"), order: "id.asc",
+    }) : [];
+    const sentencesByVersion = new Map<number, string[]>();
+    sentenceRows.forEach((row) => {
+      const versionId = Number(row.pool_version_id);
+      sentencesByVersion.set(versionId, [...(sentencesByVersion.get(versionId) ?? []), row.sentence]);
+    });
+    const poolLinks = specs.flatMap((spec) => {
+      const version = versionByFingerprint.get(spec.fingerprint);
+      if (!version || !commentPoolIsComplete(sentencesByVersion.get(Number(version.id)) ?? [], spec.canonicalSentence)) return [];
+      return [{
+        owner_id: user.id, owner_email: user.email, class_id: classId,
+        assessment_plan_id: spec.assessmentPlanId, pool_version_id: Number(version.id),
+      }];
+    });
+    if (poolLinks.length) {
+      await upsertRows("assessment_plan_pool_links", poolLinks, "owner_id,class_id,assessment_plan_id,pool_version_id");
+    }
     await snapshotAssessmentPlan({ ownerId: user.id, ownerEmail: user.email, classId, source: "shared-import", label: `공동 계획 ‘${shared.name}’ 적용` });
-    return Response.json({ ok: true, imported: rows.length });
+    return Response.json({ ok: true, imported: rows.length, linkedPools: poolLinks.length });
   } catch (error) {
     return dataError(error, "공동 평가계획을 현재 학급에 적용하지 못했습니다.");
   }

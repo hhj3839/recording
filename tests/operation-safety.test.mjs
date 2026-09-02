@@ -291,6 +291,14 @@ test("resets only the current assessment plan pool links", () => {
   assert.match(page, /fetch\("\/api\/comment-pools", \{ method: "DELETE" \}\)/);
 });
 
+test("links only complete shared AI comment pools when importing a shared assessment plan", () => {
+  const route = readFileSync("app/api/shared-assessment-plans/route.ts", "utf8");
+  assert.match(route, /buildCommentPoolSpecs\(rows\)/);
+  assert.match(route, /commentPoolIsComplete\(sentencesByVersion\.get/);
+  assert.match(route, /upsertRows\("assessment_plan_pool_links", poolLinks/);
+  assert.match(route, /linkedPools: poolLinks\.length/);
+});
+
 test("keeps isolated pool refresh safe without exposing a teacher-facing selection action", () => {
   const route = readFileSync("app/api/comment-pools/route.ts", "utf8");
   const runner = readFileSync("app/api/comment-pools/run/route.ts", "utf8");
@@ -299,10 +307,10 @@ test("keeps isolated pool refresh safe without exposing a teacher-facing selecti
   assert.match(route, /insertRows<PoolVersionRow>\("comment_pool_versions"/);
   assert.match(route, /activateWhenReady: true/);
   assert.match(route, /previousPoolVersionIds/);
-  assert.match(runner, /batch\.activateWhenReady && quality\.reusable/);
+  assert.match(runner, /batch\.activateWhenReady && complete/);
   assert.match(runner, /upsertRows\("assessment_plan_pool_links"/);
   assert.match(runner, /method: "DELETE"[\s\S]*previousPoolVersionIds/);
-  assert.match(runner, /batch\.activateWhenReady \? !quality\.reusable/);
+  assert.match(runner, /batch\.activateWhenReady \? !complete/);
   assert.doesNotMatch(page, /선택 풀 새로 제작/);
   assert.doesNotMatch(page, /targetFingerprints: \[selected\.fingerprint\], maxGroups: 1, refresh: true/);
 });
