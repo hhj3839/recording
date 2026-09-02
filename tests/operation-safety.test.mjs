@@ -270,7 +270,7 @@ test("continues all remaining pools while keeping bounded lab validation", () =>
   assert.match(route, /targetFingerprints\.includes\(spec\.fingerprint\)/);
   assert.match(route, /specs\.length !== targetFingerprints\.length/);
   assert.match(page, /body: JSON\.stringify\(\{\}\)/);
-  assert.match(page, /무료 보완 후에도 AI 제작이 필요한 묶음/);
+  assert.match(page, /무료 보완 후에도 <b>\{poolProductionConfirmation\.pending\}개 영역·수준<\/b>의 제작이 필요합니다/);
 });
 
 test("resets only the current assessment plan pool links", () => {
@@ -357,8 +357,13 @@ test("shows resumable pool production progress beside the ready count", () => {
   assert.match(page, /poolSummary\.ready === 0 \? "AI 평어 제작"/);
   assert.match(page, /body: JSON\.stringify\(\{\}\)/);
   assert.match(page, /제작·검수 중/);
+  assert.match(page, /poolProductionConfirmation[\s\S]*AI 평어 제작을 계속할까요/);
+  assert.match(page, /AI 제작 시작/);
+  assert.doesNotMatch(page, /window\.confirm\(`무료 보완 후에도 AI 제작이 필요한 묶음/);
   assert.doesNotMatch(page, /개 제작·보완 필요/);
   assert.match(route, /activeJob: activeJob \? publicJob\(activeJob\) : null/);
+  assert.match(route, /latestJob: latestJob \? publicJob\(latestJob\) : null/);
+  assert.match(route, /existingActiveJob[\s\S]*existing: true/);
   assert.match(route, /current: current \? \{ subject:/);
   assert.match(route, /const subjectSpecs = subject \? allSpecs\.filter[\s\S]*: allSpecs/);
 });
