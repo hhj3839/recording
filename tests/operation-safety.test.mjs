@@ -64,17 +64,11 @@ test("comment jobs assign prepared approved pools without a paid AI call", () =>
   assert.match(route, /assignApprovedCommentPools\(pending\)/);
   assert.match(producer, /api\.openai\.com\/v1\/responses/);
   assert.match(producer, /source: "canonical"/);
-  assert.match(producer, /buildValidatedMinimumPoolFallbacks/);
-  assert.match(producer, /buildValidatedMinimumPoolFallbacks[\s\S]*source: "canonical"/);
-  assert.match(producer, /existing\.length > 0[\s\S]*await saveFreeFallbacks\(\)[\s\S]*for \(let attempt/);
+  assert.doesNotMatch(producer, /buildValidatedMinimumPoolFallbacks|saveFreeFallbacks/);
   const poolRoute = readFileSync("app/api/comment-pools/route.ts", "utf8");
   const page = readFileSync("app/page.tsx", "utf8");
-  assert.match(poolRoute, /freeFallbackOnly/);
-  assert.match(poolRoute, /buildValidatedMinimumPoolFallbacks/);
-  assert.match(poolRoute, /buildValidatedMinimumPoolFallbacks[\s\S]*source: "canonical"/);
-  assert.match(poolRoute, /if \(freeFallbackOnly\)[\s\S]*needsAi: pending\.length/);
-  assert.match(page, /freeFallbackOnly: true/);
-  assert.match(page, /검증된 기준 문장으로 부족한 AI 평어를 무료 보완했습니다/);
+  assert.doesNotMatch(poolRoute, /freeFallbackOnly|buildValidatedMinimumPoolFallbacks/);
+  assert.match(page, /body: JSON\.stringify\(\{\}\)/);
   const single = readFileSync("app/api/generate-comment/route.ts", "utf8");
   assert.match(single.slice(0, single.indexOf("const apiKey")), /mode === "regenerate"[\s\S]*comment_pool_sentences[\s\S]*source: "approved-pool"/);
   const pump = readFileSync("app/api/comment-jobs/pump/route.ts", "utf8");
@@ -270,7 +264,7 @@ test("continues all remaining pools while keeping bounded lab validation", () =>
   assert.match(route, /targetFingerprints\.includes\(spec\.fingerprint\)/);
   assert.match(route, /specs\.length !== targetFingerprints\.length/);
   assert.match(page, /body: JSON\.stringify\(\{\}\)/);
-  assert.match(page, /무료 보완 후에도 <b>\{poolProductionConfirmation\.pending\}개 영역·수준<\/b>의 제작이 필요합니다/);
+  assert.doesNotMatch(page, /무료 보완|poolProductionConfirmation/);
 });
 
 test("resets only the current assessment plan pool links", () => {
@@ -357,9 +351,7 @@ test("shows resumable pool production progress beside the ready count", () => {
   assert.match(page, /poolSummary\.ready === 0 \? "AI 평어 제작"/);
   assert.match(page, /body: JSON\.stringify\(\{\}\)/);
   assert.match(page, /제작·검수 중/);
-  assert.match(page, /poolProductionConfirmation[\s\S]*AI 평어 제작을 계속할까요/);
-  assert.match(page, /AI 제작 시작/);
-  assert.doesNotMatch(page, /window\.confirm\(`무료 보완 후에도 AI 제작이 필요한 묶음/);
+  assert.doesNotMatch(page, /poolProductionConfirmation|AI 평어 제작을 계속할까요|AI 제작 시작|무료 보완/);
   assert.doesNotMatch(page, /개 제작·보완 필요/);
   assert.match(route, /activeJob: activeJob \? publicJob\(activeJob\) : null/);
   assert.match(route, /latestJob: latestJob \? publicJob\(latestJob\) : null/);
