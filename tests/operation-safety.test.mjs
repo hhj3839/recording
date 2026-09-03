@@ -360,6 +360,15 @@ test("shows resumable pool production progress beside the ready count", () => {
   assert.match(route, /const subjectSpecs = subject \? allSpecs\.filter[\s\S]*: allSpecs/);
 });
 
+test("starts continuation jobs from already linked partial pools without rewriting every pool", () => {
+  const route = readFileSync("app/api/comment-pools/route.ts", "utf8");
+  assert.match(route, /const linkedVersionFor =/);
+  assert.match(route, /const missingSpecs = specsToCreate\.filter/);
+  assert.match(route, /upsertRows<PoolVersionRow>\("comment_pool_versions", missingSpecs\.map/);
+  assert.match(route, /upsertRows\("assessment_plan_pool_links", missingSpecs\.flatMap/);
+  assert.match(route, /const sentencesByVersion = new Map\(currentSentences\)/);
+});
+
 test("keeps the pool summary in a loading state and exposes read-only quality review metrics", () => {
   const page = readFileSync("app/page.tsx", "utf8");
   const route = readFileSync("app/api/comment-pools/route.ts", "utf8");
