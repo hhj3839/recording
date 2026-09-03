@@ -905,6 +905,31 @@ function PlanManager({ plan, onChanged, current }: { plan: AssessmentPlan[]; onC
       setErrors([error instanceof Error ? error.message : "문장 후보를 제외하지 못했습니다."]);
     } finally { setPoolBusy(false); }
   };
+  const excludeWarningPoolSentences = async () => {
+    const warningRows = poolSentences.filter((row) => row.issues.length > 0 || (row.warnings?.length ?? 0) > 0);
+    if (poolBusy || !warningRows.length) return;
+    if (!window.confirm(`선택한 AI 평어의 경고 문장 ${warningRows.length}개를 제거할까요?\n\n이 문장들은 현재 문장 풀 버전의 배정 후보에서 빠지며, 기존 학생 평어는 유지됩니다.`)) return;
+    setPoolBusy(true);
+    setErrors([]);
+    try {
+      const requestExclude = (allowShared: boolean) => fetch("/api/comment-pools/exclude", {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ sentenceIds: warningRows.map((row) => row.id), allowShared }),
+      });
+      let response = await requestExclude(false);
+      let result = await readApiJson<{ excluded?: boolean; excludedCount?: number; shared?: boolean }>(response, "경고 문장을 제거하지 못했습니다.");
+      if (response.status === 409 && result.shared) {
+        if (!window.confirm("공동으로 사용하는 문장 풀입니다. 이 버전의 경고 문장을 제거하면 같은 풀을 사용하는 학급에도 더 이상 배정되지 않습니다. 계속할까요?")) return;
+        response = await requestExclude(true);
+        result = await readApiJson(response, "경고 문장을 제거하지 못했습니다.");
+      }
+      if (!response.ok) throw new Error(result.error || "경고 문장을 제거하지 못했습니다.");
+      await Promise.all([loadPoolStatus(), loadPoolStatus(selectedPoolFingerprint)]);
+      setMessage(`경고 문장 ${Number(result.excludedCount ?? warningRows.length)}개를 제거했습니다. 부족한 문장은 이어서 제작할 수 있습니다.`);
+    } catch (error) {
+      setErrors([error instanceof Error ? error.message : "경고 문장을 제거하지 못했습니다."]);
+    } finally { setPoolBusy(false); }
+  };
   useEffect(() => {
     if (planSection !== "ai") return;
     const timer = window.setTimeout(() => {
@@ -976,6 +1001,7 @@ function PlanManager({ plan, onChanged, current }: { plan: AssessmentPlan[]; onC
           {activePoolJob && poolJob ? <span className="pool-progress" role="status"><i aria-hidden="true" /> <b>{poolJob.completed}/{poolJob.total}</b> {poolJob.current ? `${poolJob.current.subject} · ${poolJob.current.domain} · ${poolJob.current.level} 제작·검수 중` : "제작 대기 중"}</span>
             : poolSummary.needsGeneration > 0 ? <button className="pool-continue" disabled={poolBusy || !plan.length} onClick={() => void startPoolProduction()}>{poolBusy ? "제작 준비 중…" : poolSummary.ready === 0 ? "AI 평어 제작" : `${poolSummary.needsGeneration}개 이어서 제작`}</button>
               : poolSummary.needsGeneration === 0 ? <span className="all-ready">전체 준비 완료</span> : null}
+          {selectedPoolWarningSentenceCount > 0 && !activePoolJob && <button className="pool-remove-warnings" type="button" disabled={poolBusy || poolSentencesLoading} onClick={() => void excludeWarningPoolSentences()}>경고 문장 제거</button>}
         </div>}
         {!activePoolJob && poolJob && ["failed", "completed_with_errors"].includes(poolJob.status) && <div className="ai-pool-job-error" role="alert"><b>최근 제작 작업에서 {poolJob.failed}개 항목을 완료하지 못했습니다.</b><span>{poolJob.error || "남은 항목은 이어서 제작할 수 있습니다."}</span></div>}
         {!!poolGroups.length && <div className="ai-pool-browser">
