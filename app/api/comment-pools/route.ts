@@ -188,7 +188,9 @@ export async function GET(request: Request) {
       },
       activeJob: activeJob ? publicJob(activeJob) : null,
       latestJob: latestJob ? publicJob(latestJob) : null,
-      sentences: detailValidations.map((row) => ({ id: Number(row.id), sentence: row.sentence, issues: row.issues })),
+      sentences: detailValidations.map((row) => ({
+        id: Number(row.id), sentence: row.sentence, issues: row.issues, warnings: row.warnings,
+      })),
     }, { headers: { "Cache-Control": "private, no-store" } });
   } catch (error) {
     return dataError(error, "AI 평어 준비 상태를 불러오지 못했습니다.");

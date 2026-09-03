@@ -821,7 +821,7 @@ function PlanManager({ plan, onChanged, current }: { plan: AssessmentPlan[]; onC
     }
     try {
       const response = await fetch(`/api/comment-pools${fingerprint ? `?fingerprint=${encodeURIComponent(fingerprint)}` : ""}`, { cache: "no-store" });
-      const result = await readApiJson<{ groups?: CommentPoolGroupView[]; summary?: typeof EMPTY_POOL_SUMMARY; activeJob?: PoolJobView | null; latestJob?: PoolJobView | null; sentences?: Array<{ id: number; sentence: string; issues: string[] }> }>(response, "AI 평어 상태를 불러오지 못했습니다.");
+      const result = await readApiJson<{ groups?: CommentPoolGroupView[]; summary?: typeof EMPTY_POOL_SUMMARY; activeJob?: PoolJobView | null; latestJob?: PoolJobView | null; sentences?: Array<{ id: number; sentence: string; issues: string[]; warnings?: string[] }> }>(response, "AI 평어 상태를 불러오지 못했습니다.");
       if (!response.ok) throw new Error(result.error || "AI 평어 상태를 불러오지 못했습니다.");
       if (result.groups) {
         setPoolGroups(result.groups);

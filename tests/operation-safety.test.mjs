@@ -396,6 +396,7 @@ test("keeps the pool summary in a loading state and exposes read-only quality re
   assert.match(route, /averageNearestSimilarity: quality\.averageNearestSimilarity/);
   assert.match(route, /detailValidations[\s\S]*validatePoolCandidate/);
   assert.match(route, /commentPoolSentenceWarnings/);
+  assert.match(route, /warnings: row\.warnings/);
 });
 
 test("allows only an explicitly bounded lab canonical-pool recovery", () => {
