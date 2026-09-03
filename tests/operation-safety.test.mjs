@@ -388,12 +388,16 @@ test("keeps the pool summary in a loading state and exposes read-only quality re
   assert.match(page, /firstPoolWarningRef\.current\?\.scrollIntoView/);
   assert.match(page, /첫머리가 다른 문장과 반복됨/);
   assert.match(page, /× 문장 후보 제외/);
+  assert.match(page, /문장 수정/);
+  assert.match(page, /diversity-warning">확인 필요/);
   assert.match(page, /경고 문장 제거/);
   assert.match(page, /sentenceIds: warningRows\.map/);
   assert.match(page, /공동으로 사용하는 문장 풀입니다/);
   const excludeRoute = readFileSync("app/api/comment-pools/exclude/route.ts", "utf8");
   assert.match(excludeRoute, /status: "retired"/);
   assert.match(excludeRoute, /excludedCount: sentenceIds\.length/);
+  assert.match(excludeRoute, /export async function PATCH/);
+  assert.match(excludeRoute, /source: "teacher_edited"/);
   assert.match(page, /이미 저장된 학생 평어/);
   assert.match(route, /reviewCount: validations\.filter/);
   assert.match(route, /averageNearestSimilarity: quality\.averageNearestSimilarity/);
