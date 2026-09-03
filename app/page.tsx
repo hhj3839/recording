@@ -54,6 +54,7 @@ const poolGroupWarningSentenceCount = (group: CommentPoolGroupView | undefined, 
   return sentences.filter((row) => row.issues.length > 0 || (row.warnings?.length ?? 0) > 0).length;
 };
 const poolSentenceReviewLabel = (reason: string) => ({
+  "괄호 또는 특수기호 포함": "괄호 또는 특수기호가 포함됨",
   "첫머리 반복": "첫머리가 다른 문장과 반복됨",
   "유사 문장 확인": "다른 문장과 표현이 매우 비슷함",
 }[reason] ?? reason);
