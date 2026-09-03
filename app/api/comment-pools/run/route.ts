@@ -1,6 +1,6 @@
 import { waitUntil } from "@vercel/functions";
 import { eq, selectRows, supabaseRequest, updateRows, upsertRows } from "../../../../db/supabase";
-import { approvePoolCandidates, buildValidatedMinimumPoolFallbacks, commentPoolIsComplete, commentPoolQuality, COMMENT_POOL_TARGET, normalizedPoolSentence, type CommentPoolSpec } from "../../../comment-pool-library";
+import { approvePoolCandidates, commentPoolIsComplete, commentPoolQuality, COMMENT_POOL_TARGET, normalizedPoolSentence, type CommentPoolSpec } from "../../../comment-pool-library";
 import { signCommentJob, verifyCommentJob } from "../../../comment-generation";
 import { primaryAiModel } from "../../../ai-model-policy";
 import { recordAiUsage } from "../../../ai-usage";
@@ -99,20 +99,6 @@ export async function POST(request: Request) {
       })), "pool_version_id,normalized_sentence");
       approved.push(...canonical);
     }
-    const saveFreeFallbacks = async () => {
-      const fallbacks = buildValidatedMinimumPoolFallbacks(batch.spec, approved);
-      if (!fallbacks.length) return;
-      await upsertRows("comment_pool_sentences", fallbacks.map((sentence) => ({
-        pool_version_id: batch.poolVersionId, sentence, normalized_sentence: normalizedPoolSentence(sentence),
-        status: "approved", source: "canonical", updated_at: new Date().toISOString(),
-      })), "pool_version_id,normalized_sentence");
-      approved = [...approved, ...fallbacks].slice(0, COMMENT_POOL_TARGET);
-    };
-    // 이미 일부 후보가 저장된 중단·보완 작업은 유료 재호출보다 무료
-    // 기준 문장 변형을 먼저 사용한다. 완전히 새 풀은 AI 품질을 우선한다.
-    if (existing.length > 0 && !commentPoolQuality(approved, batch.spec.canonicalSentence).reusable) {
-      await saveFreeFallbacks();
-    }
     const maxAttempts = Number.isInteger(batch.maxAttempts) ? Math.max(0, Math.min(2, Number(batch.maxAttempts))) : 2;
     for (let attempt = 0; attempt < maxAttempts && approved.length < COMMENT_POOL_TARGET; attempt += 1) {
       const requestCount = COMMENT_POOL_TARGET - approved.length;
@@ -128,7 +114,6 @@ export async function POST(request: Request) {
       }
       await recordAiUsage({ ownerId: job.owner_id, ownerEmail: job.owner_email, classId: Number(job.class_id), feature: `comment-pool-attempt-${attempt + 1}`, ...generated.usage });
     }
-    if (!commentPoolQuality(approved, batch.spec.canonicalSentence).reusable) await saveFreeFallbacks();
     const quality = commentPoolQuality(approved, batch.spec.canonicalSentence);
     const complete = commentPoolIsComplete(approved, batch.spec.canonicalSentence);
     const status = complete ? "ready" : approved.length ? "usable" : "failed";

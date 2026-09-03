@@ -573,7 +573,6 @@ function PlanManager({ plan, onChanged, current }: { plan: AssessmentPlan[]; onC
   const [poolBusy, setPoolBusy] = useState(false);
   type PoolJobView = { id: string; status: string; completed: number; total: number; failed: number; error: string; current: { subject: string; domain: string; level: string } | null };
   const [poolJob, setPoolJob] = useState<PoolJobView | null>(null);
-  const [poolProductionConfirmation, setPoolProductionConfirmation] = useState<{ pending: number; maxAiCalls: number; freeCompleted: number } | null>(null);
   const columns: Array<[keyof AssessmentPlan, string]> = [
     ["subject", "과목"], ["unit", "단원"], ["goal", "평가목표"], ["domain", "영역"],
     ["type", "평가 유형"], ["perspective", "평가 관점"], ["high", "상"], ["middle", "중"],
@@ -809,7 +808,6 @@ function PlanManager({ plan, onChanged, current }: { plan: AssessmentPlan[]; onC
       setPoolSentencesLoading(true);
     } else {
       setPoolStatusLoading(true);
-      setPoolProductionConfirmation(null);
     }
     try {
       const response = await fetch(`/api/comment-pools${fingerprint ? `?fingerprint=${encodeURIComponent(fingerprint)}` : ""}`, { cache: "no-store" });
@@ -827,42 +825,9 @@ function PlanManager({ plan, onChanged, current }: { plan: AssessmentPlan[]; onC
       if (!fingerprint) setPoolStatusLoading(false);
     }
   }, []);
-  const preparePoolProduction = async () => {
+  const startPoolProduction = async () => {
     if (!plan.length || poolBusy) return;
     if (!poolSummary.needsGeneration) return;
-    setPoolBusy(true);
-    setErrors([]);
-    setPoolProductionConfirmation(null);
-    try {
-      const freeResponse = await fetch("/api/comment-pools", {
-        method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ freeFallbackOnly: true }),
-      });
-      const freeResult = await readApiJson<{ ready?: boolean; needsAi?: number; freeCompleted?: number; jobId?: string; total?: number; job?: PoolJobView }>(freeResponse, "AI 평어 무료 보완을 시작하지 못했습니다.");
-      if (!freeResponse.ok) throw new Error(freeResult.error || "AI 평어 무료 보완을 시작하지 못했습니다.");
-      if (freeResult.jobId) {
-        setPoolJob(freeResult.job ?? { id: freeResult.jobId, status: "queued", completed: 0, total: Number(freeResult.total), failed: 0, error: "", current: null });
-        setMessage("이미 진행 중인 AI 평어 제작 작업을 다시 연결했습니다.");
-        return;
-      }
-      if (freeResult.ready) {
-        setMessage("검증된 기준 문장으로 부족한 AI 평어를 무료 보완했습니다.");
-        await loadPoolStatus();
-        return;
-      }
-      const pending = Number(freeResult.needsAi ?? poolSummary.needsGeneration);
-      if (!pending) {
-        await loadPoolStatus();
-        return;
-      }
-      await loadPoolStatus();
-      setPoolProductionConfirmation({ pending, maxAiCalls: pending * 2, freeCompleted: Number(freeResult.freeCompleted ?? 0) });
-      setMessage("무료 보완 검사가 끝났습니다. 아래에서 AI 제작 범위를 확인해 주세요.");
-    } catch (error) {
-      setErrors([error instanceof Error ? error.message : "AI 평어 무료 보완을 시작하지 못했습니다."]);
-    } finally { setPoolBusy(false); }
-  };
-  const confirmPoolProduction = async () => {
-    if (!poolProductionConfirmation || poolBusy) return;
     setPoolBusy(true);
     setErrors([]);
     try {
@@ -872,13 +837,15 @@ function PlanManager({ plan, onChanged, current }: { plan: AssessmentPlan[]; onC
       const result = await readApiJson<{ ready?: boolean; jobId?: string; total?: number; job?: PoolJobView }>(response, "AI 평어 제작을 시작하지 못했습니다.");
       if (!response.ok) throw new Error(result.error || "AI 평어 제작을 시작하지 못했습니다.");
       if (result.ready) {
-        setPoolProductionConfirmation(null);
         setMessage("현재 평가계획의 AI 평어가 모두 준비되어 있습니다.");
         await loadPoolStatus();
       } else if (result.jobId) {
-        setPoolProductionConfirmation(null);
         setPoolJob(result.job ?? { id: result.jobId, status: "queued", completed: 0, total: Number(result.total), failed: 0, error: "", current: null });
-        setMessage(`AI 평어 제작을 시작했습니다. 작업번호 ${result.jobId.slice(0, 8)} · 다른 화면으로 이동해도 계속 진행합니다.`);
+        if (result.job) {
+          setMessage("이미 진행 중인 AI 평어 제작 작업을 다시 연결했습니다.");
+        } else {
+          setMessage(`AI 평어 제작을 시작했습니다. 작업번호 ${result.jobId.slice(0, 8)} · 다른 화면으로 이동해도 계속 진행합니다.`);
+        }
       } else {
         throw new Error("AI 평어 제작 작업번호를 발급받지 못했습니다. 잠시 후 다시 시도해 주세요.");
       }
@@ -967,16 +934,9 @@ function PlanManager({ plan, onChanged, current }: { plan: AssessmentPlan[]; onC
           {poolSummary.reviewCount > 0 && <span className="review-count"><b>{poolSummary.reviewCount}</b>개 교사 검토</span>}
           {poolSummary.warningPools > 0 && <span className="diversity-warning"><b>{poolSummary.warningPools}</b>개 풀 다양성 확인</span>}
           {activePoolJob && poolJob ? <span className="pool-progress" role="status"><i aria-hidden="true" /> <b>{poolJob.completed}/{poolJob.total}</b> {poolJob.current ? `${poolJob.current.subject} · ${poolJob.current.domain} · ${poolJob.current.level} 제작·검수 중` : "제작 대기 중"}</span>
-            : poolSummary.needsGeneration > 0 ? <button className="pool-continue" disabled={poolBusy || !plan.length || Boolean(poolProductionConfirmation)} onClick={() => void preparePoolProduction()}>{poolProductionConfirmation ? "제작 범위 확인 필요" : poolSummary.ready === 0 ? "AI 평어 제작" : `${poolSummary.needsGeneration}개 이어서 제작`}</button>
+            : poolSummary.needsGeneration > 0 ? <button className="pool-continue" disabled={poolBusy || !plan.length} onClick={() => void startPoolProduction()}>{poolBusy ? "제작 준비 중…" : poolSummary.ready === 0 ? "AI 평어 제작" : `${poolSummary.needsGeneration}개 이어서 제작`}</button>
               : poolSummary.needsGeneration === 0 ? <span className="all-ready">전체 준비 완료</span> : null}
         </div>}
-        {poolProductionConfirmation && !activePoolJob && <section className="ai-pool-confirmation" role="dialog" aria-labelledby="ai-pool-confirmation-title">
-          <div><p className="eyebrow">AI 사용 확인</p><h3 id="ai-pool-confirmation-title">AI 평어 제작을 계속할까요?</h3></div>
-          <p>무료 보완 후에도 <b>{poolProductionConfirmation.pending}개 영역·수준</b>의 제작이 필요합니다. 완료된 문장 풀은 그대로 재사용합니다.</p>
-          {poolProductionConfirmation.freeCompleted > 0 && <p>이번 검사에서 <b>{poolProductionConfirmation.freeCompleted}개 영역·수준</b>은 AI 호출 없이 준비했습니다.</p>}
-          <p className="ai-pool-call-notice">최대 <b>{poolProductionConfirmation.maxAiCalls}회</b> AI 요청이 발생할 수 있으며, 시작 후에는 다른 화면으로 이동해도 백그라운드에서 계속됩니다.</p>
-          <div className="ai-pool-confirmation-actions"><button className="secondary" disabled={poolBusy} onClick={() => setPoolProductionConfirmation(null)}>취소</button><button disabled={poolBusy} onClick={() => void confirmPoolProduction()}>{poolBusy ? "작업 준비 중…" : "AI 제작 시작"}</button></div>
-        </section>}
         {!activePoolJob && poolJob && ["failed", "completed_with_errors"].includes(poolJob.status) && <div className="ai-pool-job-error" role="alert"><b>최근 제작 작업에서 {poolJob.failed}개 항목을 완료하지 못했습니다.</b><span>{poolJob.error || "남은 항목은 이어서 제작할 수 있습니다."}</span></div>}
         {!!poolGroups.length && <div className="ai-pool-browser">
           <div className="ai-pool-selection-row"><label><span>과목·영역·수준</span><select value={selectedPoolFingerprint} onChange={(event) => setSelectedPoolFingerprint(event.target.value)}>{poolGroups.map((group) => <option value={group.fingerprint} key={group.fingerprint}>{group.subject} · {group.domain} · {group.level} ({group.approvedCount}/{group.targetCount}){group.reviewCount ? ` · 검토 ${group.reviewCount}` : ""}</option>)}</select></label></div>
