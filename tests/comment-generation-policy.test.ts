@@ -312,7 +312,7 @@ test("reuses a validated pool with distinct observation scenes and openings", ()
   assert.equal(commentPoolQuality(diverse).reusable, true);
 });
 
-test("keeps a safe compressed pool usable while reporting information loss", () => {
+test("keeps a safe compressed pool usable without a subjective information-loss warning", () => {
   const reference = "작품 속 인물들의 상황에 알맞은 표정, 몸짓, 목소리, 말투를 알고 작품 속 인물들의 대화를 실감 나게 표현함.";
   const compressed = [
     "인물의 처지에 맞는 목소리로 대화를 표현함.",
@@ -326,9 +326,9 @@ test("keeps a safe compressed pool usable while reporting information loss", () 
   ];
   const quality = commentPoolQuality(compressed, reference);
   assert.equal(quality.reusable, true);
-  assert.ok(quality.warnings.includes("평가기준 정보량 보존 부족"));
+  assert.ok(!quality.warnings.includes("평가기준 정보량 보존 부족"));
   assert.ok(commentPoolSentenceWarnings(compressed, reference)
-    .some((items) => items.includes("평가기준 정보량 확인")));
+    .every((items) => !items.includes("평가기준 정보량 확인")));
 });
 
 test("uses the same low-cost model for the initial request and retry", () => {
