@@ -369,6 +369,13 @@ test("starts continuation jobs from already linked partial pools without rewriti
   assert.match(route, /const sentencesByVersion = new Map\(currentSentences\)/);
 });
 
+test("reads every approved pool sentence beyond the Supabase one-thousand-row limit", () => {
+  const route = readFileSync("app/api/comment-pools/route.ts", "utf8");
+  assert.match(route, /const uniqueVersionIds = \[\.\.\.new Set\(versionIds\)\]/);
+  assert.match(route, /uniqueVersionIds\.slice\(index \* 25, index \* 25 \+ 25\)/);
+  assert.match(route, /Promise\.all\(chunks\.map/);
+});
+
 test("keeps the pool summary in a loading state and exposes read-only quality review metrics", () => {
   const page = readFileSync("app/page.tsx", "utf8");
   const route = readFileSync("app/api/comment-pools/route.ts", "utf8");

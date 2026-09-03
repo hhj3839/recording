@@ -37,9 +37,15 @@ async function linkedVersions(ownerId: string, classId: number) {
 }
 
 async function approvedSentencesByVersion(versionIds: number[]) {
-  const rows = versionIds.length ? await selectRows<{ pool_version_id: number; sentence: string }>("comment_pool_sentences", {
-    pool_version_id: inValues(versionIds), status: eq("approved"), order: "id.asc",
-  }) : [];
+  // Supabase Free/PostgREST는 한 요청에서 기본 1,000행까지만 반환한다.
+  // 풀당 최대 20문장이므로 버전 ID를 25개씩 나누면 각 요청이 500행 이하에 머문다.
+  const uniqueVersionIds = [...new Set(versionIds)];
+  const chunks = Array.from({ length: Math.ceil(uniqueVersionIds.length / 25) }, (_, index) =>
+    uniqueVersionIds.slice(index * 25, index * 25 + 25));
+  const rows = (await Promise.all(chunks.map((chunk) =>
+    selectRows<{ pool_version_id: number; sentence: string }>("comment_pool_sentences", {
+      pool_version_id: inValues(chunk), status: eq("approved"), order: "id.asc",
+    })))).flat();
   const byVersion = new Map<number, string[]>();
   rows.forEach((row) => {
     const versionId = Number(row.pool_version_id);
