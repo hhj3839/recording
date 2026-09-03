@@ -122,6 +122,41 @@ export function commentPoolQuality(sentences: string[], referenceSentence = "") 
   };
 }
 
+export function commentPoolSentenceWarnings(sentences: string[], referenceSentence = "") {
+  const normalized = sentences.map(normalizedPoolSentence);
+  const quality = commentPoolQuality(sentences, referenceSentence);
+  const openingCounts = new Map<string, number>();
+  normalized.forEach((sentence) => {
+    const opening = poolSentenceOpening(sentence);
+    openingCounts.set(opening, (openingCounts.get(opening) ?? 0) + 1);
+  });
+
+  return normalized.map((sentence, index) => {
+    const warnings: string[] = [];
+    const opening = poolSentenceOpening(sentence);
+    const earlierSameOpening = normalized.slice(0, index)
+      .some((other) => poolSentenceOpening(other) === opening);
+    if (quality.warnings.includes("문장 첫머리 다양성 부족")
+      && (openingCounts.get(opening) ?? 0) > 1 && earlierSameOpening) {
+      warnings.push("첫머리 반복");
+    }
+
+    const hasSimilarSentence = normalized.some((other, otherIndex) => (
+      otherIndex !== index && poolSentenceSimilarity(sentence, other) >= COMMENT_POOL_CLUSTER_THRESHOLD
+    ));
+    if ((quality.warnings.includes("유사 문장 군집 과다") || quality.warnings.includes("문장 구조 다양성 부족"))
+      && hasSimilarSentence) {
+      warnings.push("유사 문장 확인");
+    }
+
+    if (quality.warnings.includes("평가기준 정보량 보존 부족")
+      && quality.minimumAverageLength > 0 && sentence.length < quality.minimumAverageLength) {
+      warnings.push("평가기준 정보량 확인");
+    }
+    return warnings;
+  });
+}
+
 export function commentPoolIsComplete(sentences: string[], referenceSentence = "") {
   const quality = commentPoolQuality(sentences, referenceSentence);
   return quality.reusable && quality.uniqueCount >= COMMENT_POOL_TARGET;

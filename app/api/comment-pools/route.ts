@@ -1,7 +1,7 @@
 import { waitUntil } from "@vercel/functions";
 import { createHash } from "node:crypto";
 import { eq, insertRows, selectRows, supabaseRequest, upsertRows } from "../../../db/supabase";
-import { buildCommentPoolSpecs, commentPoolIsComplete, commentPoolQuality, COMMENT_POOL_GENERATOR_VERSION, COMMENT_POOL_TARGET, validatePoolCandidate, type CommentPoolSpec, type PoolPlanItem } from "../../comment-pool-library";
+import { buildCommentPoolSpecs, commentPoolIsComplete, commentPoolQuality, commentPoolSentenceWarnings, COMMENT_POOL_GENERATOR_VERSION, COMMENT_POOL_TARGET, validatePoolCandidate, type CommentPoolSpec, type PoolPlanItem } from "../../comment-pool-library";
 import { signCommentJob } from "../../comment-generation";
 import { dataError, getDataScope } from "../../data-scope";
 
@@ -158,8 +158,15 @@ export async function GET(request: Request) {
     const sentences = detailVersion ? await selectRows<{ id: number; sentence: string }>("comment_pool_sentences", {
       pool_version_id: eq(detailVersion.id), status: eq("approved"), order: "id.asc", limit: COMMENT_POOL_TARGET,
     }) : [];
+    const detailWarnings = detailSpec
+      ? commentPoolSentenceWarnings(sentences.map((row) => row.sentence), detailSpec.canonicalSentence)
+      : [];
     const detailValidations = detailSpec
-      ? sentences.map((row) => ({ ...row, issues: validatePoolCandidate(row.sentence, detailSpec).issues }))
+      ? sentences.map((row, index) => ({
+        ...row,
+        issues: validatePoolCandidate(row.sentence, detailSpec).issues,
+        warnings: detailWarnings[index] ?? [],
+      }))
       : [];
     const activeJob = (await selectRows<Record<string, unknown>>("generation_jobs", {
       owner_id: eq(user.id), class_id: eq(classId), job_type: eq("comment-pools"), status: "in.(queued,running)", order: "updated_at.desc", limit: 1,

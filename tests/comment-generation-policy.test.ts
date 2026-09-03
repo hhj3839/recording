@@ -12,7 +12,7 @@ import { commentAreaOverlapReasons } from "../app/comment-area-diversity.ts";
 import { assignApprovedCommentPools, assignUniquePoolCandidates, buildApprovedCommentPool, buildCanonicalBaselinePart, buildCommentPoolGroups, buildPublicCommentPoolRequests, commentPoolCandidateCount, spreadCandidatesByOpening } from "../app/comment-pool-generation.ts";
 import { assembleRotatedComment } from "../app/comment-assembly.ts";
 import { readApiJson } from "../app/api-response.ts";
-import { approvePoolCandidates, buildCommentPoolSpecs, buildValidatedMinimumPoolFallbacks, commentPoolIsComplete, commentPoolQuality, commentPoolSelectionTarget, COMMENT_POOL_CLUSTER_LIMIT, COMMENT_POOL_CLUSTER_THRESHOLD, COMMENT_POOL_MINIMUM, COMMENT_POOL_SIMILARITY_LIMIT, COMMENT_POOL_TARGET, poolCandidateQualityScore, poolSentenceOpening, poolSentenceSimilarity, repairLegacyPoolCandidate, validatePoolCandidate } from "../app/comment-pool-library.ts";
+import { approvePoolCandidates, buildCommentPoolSpecs, buildValidatedMinimumPoolFallbacks, commentPoolIsComplete, commentPoolQuality, commentPoolSelectionTarget, commentPoolSentenceWarnings, COMMENT_POOL_CLUSTER_LIMIT, COMMENT_POOL_CLUSTER_THRESHOLD, COMMENT_POOL_MINIMUM, COMMENT_POOL_SIMILARITY_LIMIT, COMMENT_POOL_TARGET, poolCandidateQualityScore, poolSentenceOpening, poolSentenceSimilarity, repairLegacyPoolCandidate, validatePoolCandidate } from "../app/comment-pool-library.ts";
 import { buildCommentPoolCandidatePrompt, commentPoolSystemPrompt } from "../app/comment-pool-prompt.ts";
 import { compileCommentPoolEvidence, validCommentPoolEvidenceIds } from "../app/comment-pool-evidence.ts";
 import { openAiOutputText, parseFirstJsonObject } from "../app/openai-response.ts";
@@ -291,6 +291,9 @@ test("keeps a safe pool usable while reporting repeated template openings", () =
   const quality = commentPoolQuality(repeated);
   assert.equal(quality.reusable, true);
   assert.ok(quality.warnings.includes("문장 첫머리 다양성 부족"));
+  const warnings = commentPoolSentenceWarnings(repeated);
+  assert.equal(warnings[0].length, 0);
+  assert.ok(warnings.slice(1).some((items) => items.includes("첫머리 반복")));
 });
 
 test("reuses a validated pool with distinct observation scenes and openings", () => {
@@ -322,6 +325,8 @@ test("keeps a safe compressed pool usable while reporting information loss", () 
   const quality = commentPoolQuality(compressed, reference);
   assert.equal(quality.reusable, true);
   assert.ok(quality.warnings.includes("평가기준 정보량 보존 부족"));
+  assert.ok(commentPoolSentenceWarnings(compressed, reference)
+    .some((items) => items.includes("평가기준 정보량 확인")));
 });
 
 test("uses the same low-cost model for the initial request and retry", () => {
