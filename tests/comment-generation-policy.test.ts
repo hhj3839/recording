@@ -44,6 +44,8 @@ test("keeps the pool prompt simple and delegates only sentence writing to the mo
   assert.match(commentPoolSystemPrompt, /관찰 가능한 학습 행동과 성취/);
   assert.match(commentPoolSystemPrompt, /자연스럽게 다른 요소로 시작/);
   assert.match(commentPoolSystemPrompt, /바로 앞에서 작성한 문장과 같은 시작 표현을 반복하지 않는다/);
+  assert.match(commentPoolSystemPrompt, /서로 다른 첫 낱말로 시작/);
+  assert.match(commentPoolSystemPrompt, /기존 승인 문장의 첫 낱말도 가급적 반복하지 않는다/);
   assert.doesNotMatch(commentPoolSystemPrompt, /같은 첫 15글자/);
   assert.doesNotMatch(prompt, /관찰 근거 구성표|evidenceIds/);
   assert.match(prompt, /평가관점: 지역 자료를 조사하는가/);
