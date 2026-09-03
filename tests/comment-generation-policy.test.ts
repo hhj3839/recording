@@ -12,7 +12,7 @@ import { commentAreaOverlapReasons } from "../app/comment-area-diversity.ts";
 import { assignApprovedCommentPools, assignUniquePoolCandidates, buildApprovedCommentPool, buildCanonicalBaselinePart, buildCommentPoolGroups, buildPublicCommentPoolRequests, commentPoolCandidateCount, spreadCandidatesByOpening } from "../app/comment-pool-generation.ts";
 import { assembleRotatedComment } from "../app/comment-assembly.ts";
 import { readApiJson } from "../app/api-response.ts";
-import { approvePoolCandidates, buildCommentPoolSpecs, buildValidatedMinimumPoolFallbacks, commentPoolIsComplete, commentPoolQuality, commentPoolSelectionTarget, commentPoolSentenceWarnings, COMMENT_POOL_CLUSTER_LIMIT, COMMENT_POOL_CLUSTER_THRESHOLD, COMMENT_POOL_MINIMUM, COMMENT_POOL_SIMILARITY_LIMIT, COMMENT_POOL_TARGET, poolCandidateQualityScore, poolSentenceOpening, poolSentenceSimilarity, repairLegacyPoolCandidate, validatePoolCandidate } from "../app/comment-pool-library.ts";
+import { approvePoolCandidates, buildCommentPoolSpecs, buildValidatedMinimumPoolFallbacks, commentPoolIsComplete, commentPoolQuality, commentPoolSelectionTarget, commentPoolSentenceWarnings, COMMENT_POOL_CLUSTER_LIMIT, COMMENT_POOL_CLUSTER_THRESHOLD, COMMENT_POOL_MINIMUM, COMMENT_POOL_SIMILARITY_LIMIT, COMMENT_POOL_TARGET, hasDiscouragedPoolFormatting, poolCandidateQualityScore, poolSentenceOpening, poolSentenceSimilarity, repairLegacyPoolCandidate, validatePoolCandidate } from "../app/comment-pool-library.ts";
 import { buildCommentPoolCandidatePrompt, commentPoolSystemPrompt } from "../app/comment-pool-prompt.ts";
 import { compileCommentPoolEvidence, validCommentPoolEvidenceIds } from "../app/comment-pool-evidence.ts";
 import { openAiOutputText, parseFirstJsonObject } from "../app/openai-response.ts";
@@ -333,6 +333,23 @@ test("keeps a safe compressed pool usable without a subjective information-loss 
   assert.ok(!quality.warnings.includes("평가기준 정보량 보존 부족"));
   assert.ok(commentPoolSentenceWarnings(compressed, reference)
     .every((items) => !items.includes("평가기준 정보량 확인")));
+});
+
+test("reports discouraged brackets and formatting symbols without blocking storage", () => {
+  for (const sentence of [
+    "몇십몇 곱하기 몇의 계산 원리를 이해함.",
+    "효와 우애의 의미를 이해함.",
+  ]) assert.equal(hasDiscouragedPoolFormatting(sentence), false);
+  for (const sentence of [
+    "받아올림이 있는 (몇십몇)×(몇)을 계산함.",
+    "효·우애의 의미를 이해함.",
+    "- 지역의 특징을 조사함.",
+    "1. 지역의 특징을 조사함.",
+    "**지역의 특징**을 조사함.",
+  ]) assert.equal(hasDiscouragedPoolFormatting(sentence), true, sentence);
+  const sentences = ["지역의 특징을 조사함.", "지역의 특징을 《자료》로 정리함."];
+  assert.ok(commentPoolQuality(sentences).warnings.includes("괄호 또는 특수기호 포함"));
+  assert.ok(commentPoolSentenceWarnings(sentences)[1].includes("괄호 또는 특수기호 포함"));
 });
 
 test("uses the same low-cost model for the initial request and retry", () => {

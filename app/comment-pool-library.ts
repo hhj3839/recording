@@ -67,6 +67,12 @@ export function poolSentenceOpening(value: string) {
   return compactPoolSentence(value).slice(0, 15);
 }
 
+export function hasDiscouragedPoolFormatting(value: string) {
+  const text = value.normalize("NFKC").trim();
+  return /[()<>\[\]《》『』·•●○◆◇★☆※▶▷■□`*_#~]/.test(text)
+    || /^(?:\d+[.)]|[-+])\s*/.test(text);
+}
+
 export function commentPoolQuality(sentences: string[], referenceSentence = "") {
   const normalized = sentences.map(normalizedPoolSentence).filter(Boolean);
   const unique = [...new Set(normalized)];
@@ -99,6 +105,7 @@ export function commentPoolQuality(sentences: string[], referenceSentence = "") 
   ];
   const warnings = [
     ...(unique.length !== normalized.length ? ["완전히 같은 승인 문장 중복"] : []),
+    ...(sentences.some(hasDiscouragedPoolFormatting) ? ["괄호 또는 특수기호 포함"] : []),
     ...(openingRatio < COMMENT_POOL_REUSE_MINIMUM_OPENING_RATIO ? ["문장 첫머리 다양성 부족"] : []),
     ...(clusterRatio > COMMENT_POOL_REUSE_MAX_CLUSTER_RATIO ? ["유사 문장 군집 과다"] : []),
     ...(averageNearestSimilarity > COMMENT_POOL_REUSE_MAX_NEAREST_SIMILARITY ? ["문장 구조 다양성 부족"] : []),
@@ -132,6 +139,7 @@ export function commentPoolSentenceWarnings(sentences: string[], referenceSenten
 
   return normalized.map((sentence, index) => {
     const warnings: string[] = [];
+    if (hasDiscouragedPoolFormatting(sentences[index] ?? sentence)) warnings.push("괄호 또는 특수기호 포함");
     const opening = poolSentenceOpening(sentence);
     const earlierSameOpening = normalized.slice(0, index)
       .some((other) => poolSentenceOpening(other) === opening);
