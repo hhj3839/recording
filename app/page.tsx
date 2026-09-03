@@ -56,7 +56,6 @@ const poolGroupWarningSentenceCount = (group: CommentPoolGroupView | undefined, 
 const poolSentenceReviewLabel = (reason: string) => ({
   "첫머리 반복": "첫머리가 다른 문장과 반복됨",
   "유사 문장 확인": "다른 문장과 표현이 매우 비슷함",
-  "평가기준 정보량 확인": "평가기준의 주요 내용이 충분히 담기지 않음",
 }[reason] ?? reason);
 type ClassroomInfo = {
   id?: number;

@@ -102,7 +102,6 @@ export function commentPoolQuality(sentences: string[], referenceSentence = "") 
     ...(openingRatio < COMMENT_POOL_REUSE_MINIMUM_OPENING_RATIO ? ["문장 첫머리 다양성 부족"] : []),
     ...(clusterRatio > COMMENT_POOL_REUSE_MAX_CLUSTER_RATIO ? ["유사 문장 군집 과다"] : []),
     ...(averageNearestSimilarity > COMMENT_POOL_REUSE_MAX_NEAREST_SIMILARITY ? ["문장 구조 다양성 부족"] : []),
-    ...(minimumAverageLength > 0 && averageLength < minimumAverageLength ? ["평가기준 정보량 보존 부족"] : []),
   ];
   return {
     reusable: issues.length === 0,
@@ -149,10 +148,6 @@ export function commentPoolSentenceWarnings(sentences: string[], referenceSenten
       warnings.push("유사 문장 확인");
     }
 
-    if (quality.warnings.includes("평가기준 정보량 보존 부족")
-      && quality.minimumAverageLength > 0 && sentence.length < quality.minimumAverageLength) {
-      warnings.push("평가기준 정보량 확인");
-    }
     return warnings;
   });
 }
