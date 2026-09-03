@@ -53,6 +53,11 @@ const poolGroupWarningSentenceCount = (group: CommentPoolGroupView | undefined, 
   if (!group?.qualityWarnings.length) return 0;
   return sentences.filter((row) => row.issues.length > 0 || (row.warnings?.length ?? 0) > 0).length;
 };
+const poolSentenceReviewLabel = (reason: string) => ({
+  "첫머리 반복": "첫머리가 다른 문장과 반복됨",
+  "유사 문장 확인": "다른 문장과 표현이 매우 비슷함",
+  "평가기준 정보량 확인": "평가기준의 주요 내용이 충분히 담기지 않음",
+}[reason] ?? reason);
 type ClassroomInfo = {
   id?: number;
   schoolName: string;
@@ -574,6 +579,7 @@ function PlanManager({ plan, onChanged, current }: { plan: AssessmentPlan[]; onC
   const [poolSentences, setPoolSentences] = useState<Array<{ id: number; sentence: string; issues: string[]; warnings?: string[] }>>([]);
   const [poolSentencesLoading, setPoolSentencesLoading] = useState(false);
   const poolSentenceRequestRef = useRef(0);
+  const firstPoolWarningRef = useRef<HTMLParagraphElement>(null);
   const [poolBusy, setPoolBusy] = useState(false);
   type PoolJobView = { id: string; status: string; completed: number; total: number; failed: number; error: string; current: { subject: string; domain: string; level: string } | null };
   const [poolJob, setPoolJob] = useState<PoolJobView | null>(null);
@@ -973,7 +979,7 @@ function PlanManager({ plan, onChanged, current }: { plan: AssessmentPlan[]; onC
         </div>}
         {!activePoolJob && poolJob && ["failed", "completed_with_errors"].includes(poolJob.status) && <div className="ai-pool-job-error" role="alert"><b>최근 제작 작업에서 {poolJob.failed}개 항목을 완료하지 못했습니다.</b><span>{poolJob.error || "남은 항목은 이어서 제작할 수 있습니다."}</span></div>}
         {!!poolGroups.length && <div className="ai-pool-browser">
-          <div className="ai-pool-selection-row"><label><span>과목·영역·수준</span><span className={`ai-pool-select-box${selectedPoolGroup?.qualityWarnings.length ? " has-warning" : ""}`}><select value={selectedPoolFingerprint} onChange={(event) => setSelectedPoolFingerprint(event.target.value)}>{poolGroups.map((group) => <option value={group.fingerprint} key={group.fingerprint}>{group.subject} · {group.domain} · {group.level} ({group.approvedCount}/{group.targetCount}){group.qualityWarnings.length ? " · 경고 문장 있음" : group.reviewCount ? ` · 검토 ${group.reviewCount}` : ""}</option>)}</select>{selectedPoolGroup?.qualityWarnings.length > 0 && <em>⚠ {selectedPoolWarningSentenceCount || "일부"}개 경고 문장</em>}</span></label></div>
+          <div className="ai-pool-selection-row"><label><span>과목·영역·수준</span><span className={`ai-pool-select-box${selectedPoolGroup?.qualityWarnings.length ? " has-warning" : ""}`}><select value={selectedPoolFingerprint} onChange={(event) => setSelectedPoolFingerprint(event.target.value)}>{poolGroups.map((group) => <option value={group.fingerprint} key={group.fingerprint}>{group.subject} · {group.domain} · {group.level} ({group.approvedCount}/{group.targetCount}){group.qualityWarnings.length ? " · 확인 필요" : group.reviewCount ? ` · 검토 ${group.reviewCount}` : ""}</option>)}</select>{selectedPoolGroup?.qualityWarnings.length > 0 && <button className="pool-warning-jump" type="button" disabled={poolSentencesLoading} onClick={() => firstPoolWarningRef.current?.scrollIntoView({ behavior: "smooth", block: "center" })}>⚠ {selectedPoolWarningSentenceCount > 0 ? `확인 필요 ${selectedPoolWarningSentenceCount}개` : "확인 필요 문장 있음"}</button>}</span></label></div>
           {selectedPoolGroup && <div className="ai-pool-quality" aria-label="선택 문장 풀 품질 지표">
             <span><small>고유 문장</small><b>{selectedPoolGroup.diversity.uniqueCount}/{selectedPoolGroup.approvedCount}</b></span>
             <span><small>서로 다른 첫머리</small><b>{selectedPoolGroup.diversity.openingCount}</b></span>
@@ -984,7 +990,7 @@ function PlanManager({ plan, onChanged, current }: { plan: AssessmentPlan[]; onC
           {!!selectedPoolGroup?.qualityWarnings.length && <p className="ai-pool-quality-note">다양성 확인: {selectedPoolGroup.qualityWarnings.join(" · ")}</p>}
           <div className="ai-pool-sentence-list">{poolSentencesLoading ? <p className="empty-cell" role="status">선택한 AI 평어를 불러오는 중입니다.</p> : orderedPoolSentences.length ? orderedPoolSentences.map((row, index) => {
             const reviewReasons = [...row.issues, ...(row.warnings ?? [])];
-            return <p className={reviewReasons.length ? "needs-review" : ""} key={row.id}><b>{index + 1}</b><span>{row.sentence}{reviewReasons.length > 0 && <small>확인 필요: {reviewReasons.join(" · ")}</small>}</span>{reviewReasons.length > 0 && <button className="exclude-pool-sentence" type="button" disabled={poolBusy} onClick={() => void excludePoolSentence(row)} aria-label={`${index + 1}번 문장 후보 제외`}>× 문장 후보 제외</button>}</p>;
+            return <p ref={reviewReasons.length > 0 && index === 0 ? firstPoolWarningRef : undefined} className={reviewReasons.length ? "needs-review" : ""} key={row.id}><b>{index + 1}{reviewReasons.length > 0 && <i aria-label="확인 필요">⚠</i>}</b><span>{row.sentence}{reviewReasons.length > 0 && <small>확인 필요: {reviewReasons.map(poolSentenceReviewLabel).join(" · ")}</small>}</span>{reviewReasons.length > 0 && <button className="exclude-pool-sentence" type="button" disabled={poolBusy} onClick={() => void excludePoolSentence(row)} aria-label={`${index + 1}번 문장 후보 제외`}>× 문장 후보 제외</button>}</p>;
           }) : <p className="empty-cell">아직 제작된 승인 문장이 없습니다.</p>}</div>
         </div>}
       </>}
