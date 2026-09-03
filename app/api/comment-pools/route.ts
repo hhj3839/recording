@@ -327,25 +327,35 @@ export async function POST(request: Request) {
       return Response.json({ jobId: jobs[0].id, subject: subject || "전체", total: 1, maxAiCalls: 2, reused: 0, refresh: true }, { status: 202 });
     }
     const currentSentences = await approvedSentencesByVersion([...currentLinked.versionById.keys()]);
-    const reusableVersionFor = (spec: (typeof specs)[number]) => currentLinked.links
+    const linkedVersionFor = (spec: (typeof specs)[number]) => currentLinked.links
       .filter((link) => Number(link.assessment_plan_id) === spec.assessmentPlanId)
       .map((link) => currentLinked.versionById.get(Number(link.pool_version_id)))
-      .find((version): version is PoolVersionRow => Boolean(
-        version
-        && versionMatchesSpec(version, spec)
-        && commentPoolIsComplete(currentSentences.get(Number(version.id)) ?? [], spec.canonicalSentence),
-      ));
-    const specsToCreate = specs.filter((spec) => !reusableVersionFor(spec));
+      .filter((version): version is PoolVersionRow => Boolean(version && versionMatchesSpec(version, spec)))
+      .sort((left, right) =>
+        (currentSentences.get(Number(right.id))?.length ?? 0) - (currentSentences.get(Number(left.id))?.length ?? 0))[0];
+    const specsToCreate = specs.filter((spec) => {
+      const version = linkedVersionFor(spec);
+      return !version || !commentPoolIsComplete(currentSentences.get(Number(version.id)) ?? [], spec.canonicalSentence);
+    });
     if (!specsToCreate.length) return Response.json({ ready: true, reused: specs.length });
-    const versions = await upsertRows<PoolVersionRow>("comment_pool_versions", specsToCreate.map((spec) => ({
+    const byFingerprint = new Map(specsToCreate.flatMap((spec) => {
+      const version = linkedVersionFor(spec);
+      return version ? [[spec.fingerprint, version] as const] : [];
+    }));
+    const missingSpecs = specsToCreate.filter((spec) => !byFingerprint.has(spec.fingerprint));
+    const versions = await upsertRows<PoolVersionRow>("comment_pool_versions", missingSpecs.map((spec) => ({
       fingerprint: spec.fingerprint, subject: spec.subject, unit: spec.unit, domain: spec.domain,
       level: spec.level, criterion: spec.criterion, level_criteria: spec.levelCriteria,
       canonical_sentence: spec.canonicalSentence, target_count: COMMENT_POOL_TARGET,
       generator_version: COMMENT_POOL_GENERATOR_VERSION, created_by: user.id, updated_at: new Date().toISOString(),
     })), "fingerprint");
-    const byFingerprint = new Map(versions.map((row) => [row.fingerprint, row]));
-    const sentencesByVersion = await approvedSentencesByVersion(versions.map((version) => Number(version.id)));
-    await upsertRows("assessment_plan_pool_links", specsToCreate.flatMap((spec) => {
+    versions.forEach((version) => byFingerprint.set(version.fingerprint, version));
+    const unknownVersionIds = versions.map((version) => Number(version.id))
+      .filter((versionId) => !currentSentences.has(versionId));
+    const sentencesByVersion = new Map(currentSentences);
+    const additionalSentences = await approvedSentencesByVersion(unknownVersionIds);
+    additionalSentences.forEach((sentences, versionId) => sentencesByVersion.set(versionId, sentences));
+    await upsertRows("assessment_plan_pool_links", missingSpecs.flatMap((spec) => {
       const version = byFingerprint.get(spec.fingerprint);
       return version ? [{
         owner_id: user.id, owner_email: user.email, class_id: classId,
