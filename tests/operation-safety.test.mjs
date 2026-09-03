@@ -381,10 +381,12 @@ test("keeps the pool summary in a loading state and exposes read-only quality re
   const route = readFileSync("app/api/comment-pools/route.ts", "utf8");
   assert.match(page, /poolStatusLoading[\s\S]*AI 평어 상태를 확인하고 있습니다/);
   assert.match(page, /평균 최근접 유사도/);
-  assert.match(page, /확인 필요: \{reviewReasons\.join/);
+  assert.match(page, /확인 필요: \{reviewReasons\.map\(poolSentenceReviewLabel\)\.join/);
   assert.match(page, /orderedPoolSentences[\s\S]*rightNeedsReview/);
-  assert.match(page, /경고 문장 있음/);
+  assert.match(page, /확인 필요 문장 있음/);
   assert.match(page, /selectedPoolWarningSentenceCount/);
+  assert.match(page, /firstPoolWarningRef\.current\?\.scrollIntoView/);
+  assert.match(page, /첫머리가 다른 문장과 반복됨/);
   assert.match(page, /× 문장 후보 제외/);
   assert.match(page, /공동으로 사용하는 문장 풀입니다/);
   const excludeRoute = readFileSync("app/api/comment-pools/exclude/route.ts", "utf8");
