@@ -2,6 +2,7 @@ import { eq, insertRows, selectRows, supabaseRequest, upsertRows } from "../../.
 import { snapshotAssessmentPlan } from "../../assessment-plan-versions";
 import { buildCommentPoolSpecs, commentPoolIsComplete, type PoolPlanItem } from "../../comment-pool-library";
 import { dataError, getDataScope } from "../../data-scope";
+import { approvedPoolRows } from "../../comment-pool-rows";
 
 type SharedPlan = {
   id: number; organization_id: string; name: string; school_year: number; semester: number; grade: number;
@@ -112,9 +113,7 @@ export async function PUT(request: Request) {
     }) : [];
     const versionByFingerprint = new Map(versions.map((version) => [version.fingerprint, version]));
     const versionIds = versions.map((version) => Number(version.id));
-    const sentenceRows = versionIds.length ? await selectRows<{ pool_version_id: number; sentence: string }>("comment_pool_sentences", {
-      pool_version_id: inValues(versionIds), status: eq("approved"), order: "id.asc",
-    }) : [];
+    const sentenceRows = await approvedPoolRows(versionIds);
     const sentencesByVersion = new Map<number, string[]>();
     sentenceRows.forEach((row) => {
       const versionId = Number(row.pool_version_id);

@@ -4,6 +4,7 @@ import { eq, insertRows, selectRows, supabaseRequest, upsertRows } from "../../.
 import { buildCommentPoolSpecs, commentPoolIsComplete, commentPoolQuality, commentPoolSentenceWarnings, COMMENT_POOL_GENERATOR_VERSION, COMMENT_POOL_TARGET, validatePoolCandidate, type CommentPoolSpec, type PoolPlanItem } from "../../comment-pool-library";
 import { signCommentJob } from "../../comment-generation";
 import { dataError, getDataScope } from "../../data-scope";
+import { approvedPoolRows } from "../../comment-pool-rows";
 
 type PoolVersionRow = {
   id: number; fingerprint: string; status: string; approved_count: number; target_count: number;
@@ -92,9 +93,7 @@ export async function GET(request: Request) {
         }
         const batches = Array.isArray(job.batches) ? job.batches as Array<{ spec?: CommentPoolSpec; poolVersionId?: number }> : [];
         const versionIds = batches.map((batch) => Number(batch.poolVersionId)).filter(Number.isInteger);
-        const rows = versionIds.length ? await selectRows<{ pool_version_id: number; sentence: string }>("comment_pool_sentences", {
-          pool_version_id: inValues(versionIds), status: eq("approved"), order: "id.asc",
-        }) : [];
+        const rows = await approvedPoolRows(versionIds);
         const audit = batches.flatMap((batch) => {
           const spec = batch.spec;
           const poolVersionId = Number(batch.poolVersionId);
@@ -134,7 +133,7 @@ export async function GET(request: Request) {
       const validations = sentences.map((sentence) => validatePoolCandidate(sentence, spec));
       return {
         fingerprint: spec.fingerprint, subject: spec.subject, unit: spec.unit, domain: spec.domain,
-        assessmentIndex: spec.assessmentIndex, level: spec.level,
+        assessmentIndex: spec.assessmentIndex, assessmentPlanId: spec.assessmentPlanId, level: spec.level,
         status: commentPoolIsComplete(sentences, spec.canonicalSentence) ? "ready" : "needs_generation",
         approvedCount: quality.count, qualityIssues: quality.issues,
         qualityWarnings: quality.warnings,
