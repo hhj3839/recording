@@ -10,6 +10,8 @@ The registry still provides 2.0.2. Earlier audit metadata named 2.0.3, but the c
 
 `pnpm-workspace.yaml` registers `image-size@2.0.2.patch`; pnpm records its hash in the lockfile and applies it on frozen installs. The registry package integrity is retained. Do not edit installed node_modules or suppress advisories as a substitute for applying the patch.
 
+`packageManager` pins pnpm 11.9.0, matching CI. Vercel otherwise selected pnpm 10 and rejected the v11 patch-lock format; keep package-manager versions aligned across environments.
+
 Changes cover all 20 distributed CJS/ESM bundles containing the affected routines:
 - ISO box parsing requires a complete 8-byte header and a positive advance of at least 8 bytes. Size zero means the remaining input (EOF), preserving valid zero-size boxes without looping. Undersized boxes fail closed.
 - ICNS entry headers and lengths must fit both declared file length and input length and advance at least 8 bytes before recording dimensions.
