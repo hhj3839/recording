@@ -2,6 +2,7 @@
   "name": "giroksam",
   "version": "0.1.0",
   "private": true,
+  "packageManager": "pnpm@11.9.0",
   "engines": {
     "node": ">=22.13.0"
   },
@@ -10,7 +11,7 @@
     "build": "vinext build",
     "typecheck": "tsc --noEmit",
     "start": "vinext start",
-    "test": "vinext build && node --test tests/rendered-html.test.mjs tests/operation-safety.test.mjs tests/load-test-scope.test.mjs tests/stored-quality-audit.test.mjs && node --experimental-strip-types --test tests/record-validation.test.ts tests/comment-generation-policy.test.ts tests/comment-pool-local-edit.test.ts",
+    "test": "vinext build && node --test tests/image-size-security.test.mjs tests/rendered-html.test.mjs tests/operation-safety.test.mjs tests/load-test-scope.test.mjs tests/stored-quality-audit.test.mjs && node --experimental-strip-types --test tests/record-validation.test.ts tests/comment-generation-policy.test.ts tests/comment-pool-local-edit.test.ts",
     "test:smoke": "node --test tests/production-api-smoke.mjs tests/production-security-smoke.mjs",
     "test:security": "node --test tests/production-security-smoke.mjs",
     "test:public-smoke": "node --test tests/public-production-smoke.mjs",
