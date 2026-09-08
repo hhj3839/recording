@@ -467,9 +467,10 @@ test("prepares a complete 105-area canonical baseline before optional AI replace
       text: `영역 ${assessmentIndex + 1} | 수준: 중 | 기준: ${criterion}`,
     }))).flat();
   assert.equal(baselines.length, 105);
-  assert.equal(baselines.every(Boolean), true);
-  assert.equal(new Set(baselines.filter(Boolean).map((part) => `${part.studentId}|${part.assessmentIndex}`)).size, 105);
-  assert.equal(baselines.filter(Boolean).every((part) => part.warnings.length === 0), true);
+  for (const part of baselines) assert.ok(part, "every baseline must be present");
+  const presentBaselines = baselines.filter((part) => part !== null);
+  assert.equal(new Set(presentBaselines.map((part) => `${part.studentId}|${part.assessmentIndex}`)).size, 105);
+  assert.equal(presentBaselines.every((part) => part.warnings.length === 0), true);
 });
 
 test("assigns only revalidated deterministic candidates from an approved level pool", () => {
