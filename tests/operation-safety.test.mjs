@@ -316,7 +316,7 @@ test("limits failed pool sentence audits to the owning lab account and terminal 
   assert.match(route, /params\.get\("audit"\) === "1"/);
   assert.match(route, /user\.email\.toLowerCase\(\)\.endsWith\("@giroksam\.test"\)/);
   assert.match(route, /제작이 끝난 뒤 품질 감사를 확인해 주세요/);
-  assert.match(route, /pool_version_id: inValues\(versionIds\), status: eq\("approved"\)/);
+  assert.match(route, /approvedPoolRows\(versionIds\)/);
   assert.match(route, /scope: \{ subject: spec\.subject, unit: spec\.unit, domain: spec\.domain, level: spec\.level \}/);
   assert.doesNotMatch(route.slice(route.indexOf('params.get("audit") === "1"'), route.indexOf("return Response.json({ job: publicJob(job) }")), /student_id|studentId/);
   assert.match(runner, /jobId=.*&audit=1/);
@@ -392,12 +392,15 @@ test("keeps the pool summary in a loading state and exposes read-only quality re
   assert.match(page, /diversity-warning">확인 필요/);
   assert.match(page, /경고 문장 제거/);
   assert.match(page, /sentenceIds: warningRows\.map/);
-  assert.match(page, /공동으로 사용하는 문장 풀입니다/);
+  assert.match(page, /현재 평가계획에서만/);
   const excludeRoute = readFileSync("app/api/comment-pools/exclude/route.ts", "utf8");
-  assert.match(excludeRoute, /status: "retired"/);
+  assert.match(excludeRoute, /editLocalPool/);
+  assert.doesNotMatch(excludeRoute, /allowShared/);
   assert.match(excludeRoute, /excludedCount: sentenceIds\.length/);
   assert.match(excludeRoute, /export async function PATCH/);
-  assert.match(excludeRoute, /source: "teacher_edited"/);
+  const localEdit = readFileSync("app/comment-pool-local-edit.ts", "utf8");
+  assert.match(localEdit, /source: "teacher_edited"/);
+  assert.doesNotMatch(localEdit, /updateRows[^\n]*"comment_pool_sentences"/);
   assert.match(page, /이미 저장된 학생 평어/);
   assert.match(route, /reviewCount: validations\.filter/);
   assert.match(route, /averageNearestSimilarity: quality\.averageNearestSimilarity/);

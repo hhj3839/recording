@@ -32,6 +32,7 @@ type CommentPoolGroupView = {
   unit: string;
   domain: string;
   assessmentIndex: number;
+  assessmentPlanId: number;
   level: "상" | "중" | "하";
   status: string;
   approvedCount: number;
@@ -883,21 +884,15 @@ function PlanManager({ plan, onChanged, current }: { plan: AssessmentPlan[]; onC
   };
   const excludePoolSentence = async (row: { id: number; sentence: string }) => {
     if (poolBusy) return;
-    if (!window.confirm(`이 문장 후보를 승인 풀에서 제외할까요?\n\n앞으로 새 평어에는 배정되지 않으며 이미 저장된 학생 평어는 유지됩니다.`)) return;
+    if (!window.confirm(`이 문장 후보를 현재 평가계획에서만 제외할까요?\n\n다른 학급의 문장 풀과 이미 저장된 학생 평어는 유지됩니다.`)) return;
     setPoolBusy(true);
     setErrors([]);
     try {
-      const requestExclude = (allowShared: boolean) => fetch("/api/comment-pools/exclude", {
+      const response = await fetch("/api/comment-pools/exclude", {
         method: "POST", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ sentenceId: row.id, allowShared }),
+        body: JSON.stringify({ sentenceId: row.id, assessmentPlanId: selectedPoolGroup?.assessmentPlanId }),
       });
-      let response = await requestExclude(false);
-      let result = await readApiJson<{ excluded?: boolean; shared?: boolean; approvedCount?: number }>(response, "문장 후보를 제외하지 못했습니다.");
-      if (response.status === 409 && result.shared) {
-        if (!window.confirm("공동으로 사용하는 문장 풀입니다. 제외하면 이 풀을 사용하는 다른 학급에도 더 이상 배정되지 않습니다. 그래도 제외할까요?")) return;
-        response = await requestExclude(true);
-        result = await readApiJson(response, "문장 후보를 제외하지 못했습니다.");
-      }
+      const result = await readApiJson<{ excluded?: boolean; shared?: boolean; approvedCount?: number }>(response, "문장 후보를 제외하지 못했습니다.");
       if (!response.ok) throw new Error(result.error || "문장 후보를 제외하지 못했습니다.");
       await Promise.all([loadPoolStatus(), loadPoolStatus(selectedPoolFingerprint)]);
       setMessage(`문장 후보를 제외했습니다. 승인 문장 ${Number(result.approvedCount ?? 0)}개가 남았습니다.`);
@@ -908,21 +903,15 @@ function PlanManager({ plan, onChanged, current }: { plan: AssessmentPlan[]; onC
   const excludeWarningPoolSentences = async () => {
     const warningRows = poolSentences.filter((row) => row.issues.length > 0 || (row.warnings?.length ?? 0) > 0);
     if (poolBusy || !warningRows.length) return;
-    if (!window.confirm(`선택한 AI 평어의 경고 문장 ${warningRows.length}개를 제거할까요?\n\n이 문장들은 현재 문장 풀 버전의 배정 후보에서 빠지며, 기존 학생 평어는 유지됩니다.`)) return;
+    if (!window.confirm(`선택한 AI 평어의 경고 문장 ${warningRows.length}개를 제거할까요?\n\n현재 평가계획에서만 제외되며 공용 원본과 기존 학생 평어는 유지됩니다.`)) return;
     setPoolBusy(true);
     setErrors([]);
     try {
-      const requestExclude = (allowShared: boolean) => fetch("/api/comment-pools/exclude", {
+      const response = await fetch("/api/comment-pools/exclude", {
         method: "POST", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ sentenceIds: warningRows.map((row) => row.id), allowShared }),
+        body: JSON.stringify({ sentenceIds: warningRows.map((row) => row.id), assessmentPlanId: selectedPoolGroup?.assessmentPlanId }),
       });
-      let response = await requestExclude(false);
-      let result = await readApiJson<{ excluded?: boolean; excludedCount?: number; shared?: boolean }>(response, "경고 문장을 제거하지 못했습니다.");
-      if (response.status === 409 && result.shared) {
-        if (!window.confirm("공동으로 사용하는 문장 풀입니다. 이 버전의 경고 문장을 제거하면 같은 풀을 사용하는 학급에도 더 이상 배정되지 않습니다. 계속할까요?")) return;
-        response = await requestExclude(true);
-        result = await readApiJson(response, "경고 문장을 제거하지 못했습니다.");
-      }
+      const result = await readApiJson<{ excluded?: boolean; excludedCount?: number; shared?: boolean }>(response, "경고 문장을 제거하지 못했습니다.");
       if (!response.ok) throw new Error(result.error || "경고 문장을 제거하지 못했습니다.");
       await Promise.all([loadPoolStatus(), loadPoolStatus(selectedPoolFingerprint)]);
       setMessage(`경고 문장 ${Number(result.excludedCount ?? warningRows.length)}개를 제거했습니다. 부족한 문장은 이어서 제작할 수 있습니다.`);
@@ -941,20 +930,14 @@ function PlanManager({ plan, onChanged, current }: { plan: AssessmentPlan[]; onC
     setPoolBusy(true);
     setErrors([]);
     try {
-      const requestEdit = (allowShared: boolean) => fetch("/api/comment-pools/exclude", {
+      const response = await fetch("/api/comment-pools/exclude", {
         method: "PATCH", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ sentenceId: row.id, sentence: edited, allowShared }),
+        body: JSON.stringify({ sentenceId: row.id, sentence: edited, assessmentPlanId: selectedPoolGroup?.assessmentPlanId }),
       });
-      let response = await requestEdit(false);
-      let result = await readApiJson<{ updated?: boolean; shared?: boolean }>(response, "문장을 수정하지 못했습니다.");
-      if (response.status === 409 && result.shared) {
-        if (!window.confirm("공동으로 사용하는 문장 풀입니다. 수정하면 같은 풀을 사용하는 학급에도 반영됩니다. 계속할까요?")) return;
-        response = await requestEdit(true);
-        result = await readApiJson(response, "문장을 수정하지 못했습니다.");
-      }
+      const result = await readApiJson<{ updated?: boolean; shared?: boolean }>(response, "문장을 수정하지 못했습니다.");
       if (!response.ok) throw new Error(result.error || "문장을 수정하지 못했습니다.");
       await Promise.all([loadPoolStatus(), loadPoolStatus(selectedPoolFingerprint)]);
-      setMessage("문장을 수정했습니다. 최신 검수 결과를 다시 확인했습니다.");
+      setMessage("현재 평가계획의 문장을 수정했습니다. 공용 원본과 기존 학생 평어는 유지됩니다.");
     } catch (error) {
       setErrors([error instanceof Error ? error.message : "문장을 수정하지 못했습니다."]);
     } finally { setPoolBusy(false); }
