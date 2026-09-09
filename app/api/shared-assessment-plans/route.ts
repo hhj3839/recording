@@ -91,6 +91,34 @@ export async function POST(request: Request) {
   }
 }
 
+export async function PATCH(request: Request) {
+  try {
+    const { user, classId } = await getDataScope();
+    const body = await request.json();
+    const id = Number(body.id);
+    if (!Number.isInteger(id) || id <= 0) return Response.json({ error: "공동 계획을 선택하세요." }, { status: 400 });
+    const shared = (await selectRows<SharedPlan>("shared_assessment_plans", { id: eq(id), created_by: eq(user.id), limit: 1 }))[0];
+    if (!shared) return Response.json({ error: "공동 계획 작성자만 새 풀을 연결할 수 있습니다." }, { status: 403 });
+    type FreshBatch = { freshOnly?: boolean; poolVersionId: number; spec: { fingerprint: string } };
+    const job = (await selectRows<{ batches: FreshBatch[] }>("generation_jobs", {
+      owner_id: eq(user.id), class_id: eq(classId), job_type: eq("comment-pools"), order: "created_at.desc", limit: 1,
+    }))[0];
+    const batches = job?.batches;
+    if (!batches?.length || batches.some(batch => !batch.freshOnly)) return Response.json({ error: "현재 학급의 전체 새 제작 작업이 없습니다." }, { status: 409 });
+    const specs = buildCommentPoolSpecs(shared.plan.map((item, index) => ({ ...item, id: index + 1 })) as PoolPlanItem[]);
+    const signature = (items: Array<{ fingerprint: string }>) => items.map(item => item.fingerprint).sort().join("|");
+    if (signature(specs) !== signature(batches.map(batch => batch.spec))) return Response.json({ error: "새 제작 작업과 공동 평가계획이 일치하지 않습니다." }, { status: 409 });
+    const versions = await selectRows<{ id: number }>("comment_pool_versions", { id: inValues(batches.map(batch => batch.poolVersionId)), created_by: eq(user.id) });
+    if (versions.length !== batches.length) return Response.json({ error: "새 풀 소유권을 확인하지 못했습니다." }, { status: 409 });
+    // Metadata only: no student data, classroom links, candidates or API calls change.
+    for (const batch of batches) await supabaseRequest("comment_pool_versions", {
+      method: "PATCH", query: { id: eq(batch.poolVersionId), created_by: eq(user.id) },
+      body: { generator_version: `shared-${shared.id}-${batch.spec.fingerprint}` },
+    });
+    return Response.json({ published: batches.length });
+  } catch (error) { return dataError(error, "새 문장 풀을 공동 계획에 연결하지 못했습니다."); }
+}
+
 export async function PUT(request: Request) {
   try {
     const { user, classId } = await getDataScope();
