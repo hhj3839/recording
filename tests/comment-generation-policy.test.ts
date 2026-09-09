@@ -352,9 +352,9 @@ test("reports discouraged brackets and formatting symbols without blocking stora
   assert.ok(commentPoolSentenceWarnings(sentences)[1].includes("괄호 또는 특수기호 포함"));
 });
 
-test("uses the same low-cost model for the initial request and retry", () => {
-  assert.equal(generationModel(0, 2), "gpt-5.4-mini");
-  assert.equal(generationModel(1, 2), "gpt-5.4-mini");
+test("uses Terra for the initial request and retry", () => {
+  assert.equal(generationModel(0, 2), "gpt-5.6-terra");
+  assert.equal(generationModel(1, 2), "gpt-5.6-terra");
 });
 
 test("turns an HTML gateway response into a safe Korean API error", async () => {
@@ -367,6 +367,7 @@ test("turns an HTML gateway response into a safe Korean API error", async () => 
 });
 
 test("estimates token cost with cached input pricing", () => {
+  assert.equal(estimateAiCostUsd({model:"gpt-5.6-terra",inputTokens:1087,cacheWriteTokens:1084,outputTokens:736}), 0.011548);
   const cost = estimateAiCostUsd({
     model: "gpt-5.4-mini",
     inputTokens: 1_000_000,
