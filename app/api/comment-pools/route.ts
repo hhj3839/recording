@@ -221,7 +221,7 @@ export async function POST(request: Request) {
     const { user, classId } = await getDataScope();
     const body = await request.json().catch(() => ({})) as {
       subject?: unknown; maxGroups?: unknown; labOnly?: unknown; targetFingerprints?: unknown; canonicalOnly?: unknown;
-      refresh?: unknown; fullRefresh?: unknown;
+      refresh?: unknown; fullRefresh?: unknown; sharedPlanName?: unknown;
     };
     const subject = typeof body.subject === "string" ? body.subject.trim() : "";
     if (body.labOnly === true && !user.email.toLowerCase().endsWith("@giroksam.test")) {
@@ -236,9 +236,6 @@ export async function POST(request: Request) {
       : [];
     const refresh = body.refresh === true;
     const fullRefresh = body.fullRefresh === true;
-    if (fullRefresh && body.labOnly !== true) {
-      return Response.json({ error: "전체 새 버전 제작은 실험실 제한 검증에서만 사용할 수 있습니다." }, { status: 403 });
-    }
     if (fullRefresh && (refresh || targetFingerprints.length || subject)) {
       return Response.json({ error: "전체 새 버전 제작에는 과목·개별 묶음·단일 새 버전 옵션을 함께 사용할 수 없습니다." }, { status: 400 });
     }
@@ -261,7 +258,7 @@ export async function POST(request: Request) {
       return Response.json({ jobId: job.id, total: job.total, existing: true, job }, { status: 202 });
     }
     const allSpecs = await currentSpecs(user.id, classId);
-    if (fullRefresh && allSpecs.length !== 75) {
+    if (fullRefresh && body.labOnly === true && allSpecs.length !== 75) {
       return Response.json({ error: `실험실 전체 새 버전 제작 범위가 75개가 아닙니다. (${allSpecs.length}개)` }, { status: 409 });
     }
     const subjectSpecs = subject ? allSpecs.filter((spec) => spec.subject === subject) : allSpecs;
@@ -274,6 +271,16 @@ export async function POST(request: Request) {
     }
     const currentLinked = await linkedVersions(user.id, classId);
     if (fullRefresh) {
+      const sharedName = typeof body.sharedPlanName === "string" ? body.sharedPlanName.trim() : "";
+      let publishSharedId: number | null = null;
+      if (sharedName) {
+        const matches = await selectRows<{ id: number; created_by: string; plan: PoolPlanItem[] }>("shared_assessment_plans", { name: eq(sharedName) });
+        const signature = (items: CommentPoolSpec[]) => items.map(item => item.fingerprint).sort().join("|");
+        const matching = matches.filter(row => signature(buildCommentPoolSpecs(row.plan.map((item, index) => ({ ...item, id: index + 1 })))) === signature(specs));
+        if (matching.length !== 1) return Response.json({ error: "이름과 전체 평가계획이 일치하는 공동 계획을 하나로 확인하지 못했습니다." }, { status: 409 });
+        if (matching[0].created_by !== user.id) return Response.json({ error: "공동 평가계획 작성자만 새 기본 문장 풀을 공개할 수 있습니다." }, { status: 403 });
+        publishSharedId = Number(matching[0].id);
+      }
       const refreshNonce = Date.now();
       const versions = await insertRows<PoolVersionRow>("comment_pool_versions", specs.map((spec, index) => ({
         fingerprint: createHash("sha256")
@@ -282,7 +289,7 @@ export async function POST(request: Request) {
         subject: spec.subject, unit: spec.unit, domain: spec.domain,
         level: spec.level, criterion: spec.criterion, level_criteria: spec.levelCriteria,
         canonical_sentence: spec.canonicalSentence, target_count: COMMENT_POOL_TARGET,
-        generator_version: `${COMMENT_POOL_GENERATOR_VERSION}-full-refresh`, created_by: user.id,
+        generator_version: publishSharedId ? `shared-${publishSharedId}-${spec.fingerprint}` : `${COMMENT_POOL_GENERATOR_VERSION}-full-refresh`, created_by: user.id,
         updated_at: new Date().toISOString(),
       })));
       if (versions.length !== specs.length) {
@@ -292,6 +299,7 @@ export async function POST(request: Request) {
         spec,
         poolVersionId: Number(versions[index].id),
         maxAttempts: 2,
+        freshOnly: true,
         activateWhenReady: true,
         previousPoolVersionIds: currentLinked.links
           .filter((link) => Number(link.assessment_plan_id) === spec.assessmentPlanId)
