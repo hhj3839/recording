@@ -428,12 +428,13 @@ export async function generateCommentPoolBatch(
     });
   }
   const responseUsage = payload && typeof payload === "object"
-    ? (payload as { usage?: { input_tokens?: unknown; output_tokens?: unknown; total_tokens?: unknown; input_tokens_details?: { cached_tokens?: unknown } } }).usage
+    ? (payload as { usage?: { input_tokens?: unknown; output_tokens?: unknown; total_tokens?: unknown; input_tokens_details?: { cached_tokens?: unknown; cache_write_tokens?: unknown } } }).usage
     : undefined;
   const usage: AiTokenUsage = {
     model,
     inputTokens: Number(responseUsage?.input_tokens) || 0,
-    cachedInputTokens: Number(responseUsage?.input_tokens_details?.cached_tokens) || 0,
+      cachedInputTokens: Number(responseUsage?.input_tokens_details?.cached_tokens) || 0,
+      cacheWriteTokens: Number(responseUsage?.input_tokens_details?.cache_write_tokens) || 0,
     outputTokens: Number(responseUsage?.output_tokens) || 0,
     totalTokens: Number(responseUsage?.total_tokens) || 0,
   };

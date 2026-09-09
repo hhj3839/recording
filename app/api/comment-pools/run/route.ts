@@ -51,7 +51,7 @@ async function generateCandidates(spec: CommentPoolSpec, existing: string[], cou
       } } },
     }),
   });
-  const payload = await response.json() as { usage?: { input_tokens?: number; output_tokens?: number; total_tokens?: number; input_tokens_details?: { cached_tokens?: number } } };
+  const payload = await response.json() as { usage?: { input_tokens?: number; output_tokens?: number; total_tokens?: number; input_tokens_details?: { cached_tokens?: number; cache_write_tokens?: number } } };
   if (!response.ok) throw new Error(`AI 평어 후보 제작 실패 (HTTP ${response.status})`);
   const decoded = parseFirstJsonObject<{ candidates?: unknown }>(openAiOutputText(payload)) ?? {};
   const candidates = Array.isArray(decoded.candidates) ? decoded.candidates.flatMap((item) => {
@@ -62,7 +62,7 @@ async function generateCandidates(spec: CommentPoolSpec, existing: string[], cou
   }) : [];
   return {
     candidates,
-    usage: { model, inputTokens: Number(payload.usage?.input_tokens) || 0, cachedInputTokens: Number(payload.usage?.input_tokens_details?.cached_tokens) || 0, outputTokens: Number(payload.usage?.output_tokens) || 0, totalTokens: Number(payload.usage?.total_tokens) || 0 },
+    usage: { model, inputTokens: Number(payload.usage?.input_tokens) || 0, cachedInputTokens: Number(payload.usage?.input_tokens_details?.cached_tokens) || 0, cacheWriteTokens: Number(payload.usage?.input_tokens_details?.cache_write_tokens) || 0, outputTokens: Number(payload.usage?.output_tokens) || 0, totalTokens: Number(payload.usage?.total_tokens) || 0 },
   };
 }
 
