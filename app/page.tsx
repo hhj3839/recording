@@ -847,9 +847,9 @@ function PlanManager({ plan, onChanged, current }: { plan: AssessmentPlan[]; onC
       if (!fingerprint) setPoolStatusLoading(false);
     }
   }, []);
-  const startPoolProduction = async (fullRefresh = false) => {
+  const startPoolProduction = async (fullRefresh = false, retryFailed = false) => {
     if (!plan.length || poolBusy) return;
-    if (!fullRefresh && !poolSummary.needsGeneration) return;
+    if (!fullRefresh && !retryFailed && !poolSummary.needsGeneration) return;
     let sharedPlanName = "";
     if (fullRefresh) {
       const name = window.prompt("향후 선택 학급에 공개할 공동 평가계획 이름을 입력하세요. 현재 학급에서만 새로 제작하려면 빈칸으로 확인하세요.", "");
@@ -861,7 +861,7 @@ function PlanManager({ plan, onChanged, current }: { plan: AssessmentPlan[]; onC
     setErrors([]);
     try {
       const response = await fetch("/api/comment-pools", {
-        method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(fullRefresh ? { fullRefresh: true, sharedPlanName } : {}),
+        method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(retryFailed ? { retryFailed: true } : fullRefresh ? { fullRefresh: true, sharedPlanName } : {}),
       });
       const result = await readApiJson<{ ready?: boolean; jobId?: string; total?: number; job?: PoolJobView }>(response, "AI 평어 제작을 시작하지 못했습니다.");
       if (!response.ok) throw new Error(result.error || "AI 평어 제작을 시작하지 못했습니다.");
@@ -1033,7 +1033,7 @@ function PlanManager({ plan, onChanged, current }: { plan: AssessmentPlan[]; onC
               : poolSummary.needsGeneration === 0 ? <span className="all-ready">전체 준비 완료</span> : null}
           {selectedPoolWarningSentenceCount > 0 && !activePoolJob && <button className="pool-remove-warnings" type="button" disabled={poolBusy || poolSentencesLoading} onClick={() => void excludeWarningPoolSentences()}>경고 문장 제거</button>}
         </div>}
-        {!activePoolJob && poolJob && ["failed", "completed_with_errors"].includes(poolJob.status) && <div className="ai-pool-job-error" role="alert"><b>최근 제작 작업에서 {poolJob.failed}개 항목을 완료하지 못했습니다.</b><span>{poolJob.error || "남은 항목은 이어서 제작할 수 있습니다."}</span></div>}
+        {!activePoolJob && poolJob && ["failed", "completed_with_errors"].includes(poolJob.status) && <div className="ai-pool-job-error" role="alert"><b>최근 제작 작업에서 {poolJob.failed}개 항목을 완료하지 못했습니다.</b><span>{poolJob.error || "남은 항목은 이어서 제작할 수 있습니다."}</span>{poolJob.failed > 0 && <button disabled={poolBusy} onClick={() => void startPoolProduction(false, true)}>{poolJob.failed}개 이어서 제작</button>}</div>}
         {!!poolGroups.length && <div className="ai-pool-browser">
           <div className="ai-pool-selection-row"><label><span>과목·영역·수준</span><span className={`ai-pool-select-box${selectedPoolGroup?.qualityWarnings.length ? " has-warning" : ""}`}><select value={selectedPoolFingerprint} onChange={(event) => setSelectedPoolFingerprint(event.target.value)}>{poolGroups.map((group) => <option value={group.fingerprint} key={group.fingerprint}>{group.subject} · {group.domain} · {group.level} ({group.approvedCount}/{group.targetCount}){group.qualityWarnings.length ? " · 확인 필요" : group.reviewCount ? ` · 검토 ${group.reviewCount}` : ""}</option>)}</select>{selectedPoolGroup?.qualityWarnings.length > 0 && <button className="pool-warning-jump" type="button" disabled={poolSentencesLoading} onClick={() => firstPoolWarningRef.current?.scrollIntoView({ behavior: "smooth", block: "center" })}>⚠ {selectedPoolWarningSentenceCount > 0 ? `확인 필요 ${selectedPoolWarningSentenceCount}개` : "확인 필요 문장 있음"}</button>}</span></label></div>
           {selectedPoolGroup && <div className="ai-pool-quality" aria-label="선택 문장 풀 품질 지표">

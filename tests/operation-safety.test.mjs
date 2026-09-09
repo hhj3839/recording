@@ -68,7 +68,7 @@ test("comment jobs assign prepared approved pools without a paid AI call", () =>
   const poolRoute = readFileSync("app/api/comment-pools/route.ts", "utf8");
   const page = readFileSync("app/page.tsx", "utf8");
   assert.doesNotMatch(poolRoute, /freeFallbackOnly|buildValidatedMinimumPoolFallbacks/);
-  assert.match(page, /body: JSON\.stringify\(fullRefresh \? \{ fullRefresh: true, sharedPlanName \} : \{\}\)/);
+  assert.match(page, /body: JSON\.stringify\(retryFailed \? \{ retryFailed: true \} : fullRefresh \? \{ fullRefresh: true, sharedPlanName \} : \{\}\)/);
   const single = readFileSync("app/api/generate-comment/route.ts", "utf8");
   assert.match(single.slice(0, single.indexOf("const apiKey")), /mode === "regenerate"[\s\S]*comment_pool_sentences[\s\S]*source: "approved-pool"/);
   const pump = readFileSync("app/api/comment-jobs/pump/route.ts", "utf8");
@@ -263,7 +263,7 @@ test("continues all remaining pools while keeping bounded lab validation", () =>
   assert.match(route, /targetFingerprints\.length && body\.labOnly !== true/);
   assert.match(route, /targetFingerprints\.includes\(spec\.fingerprint\)/);
   assert.match(route, /specs\.length !== targetFingerprints\.length/);
-  assert.match(page, /body: JSON\.stringify\(fullRefresh \? \{ fullRefresh: true, sharedPlanName \} : \{\}\)/);
+  assert.match(page, /body: JSON\.stringify\(retryFailed \? \{ retryFailed: true \} : fullRefresh \? \{ fullRefresh: true, sharedPlanName \} : \{\}\)/);
   assert.doesNotMatch(page, /무료 보완|poolProductionConfirmation/);
 });
 
@@ -349,7 +349,7 @@ test("shows resumable pool production progress beside the ready count", () => {
   assert.match(page, /ready-count[\s\S]*준비 완료[\s\S]*pool-progress/);
   assert.match(page, /poolSummary\.needsGeneration[\s\S]*개 이어서 제작/);
   assert.match(page, /poolSummary\.ready === 0 \? "AI 평어 제작"/);
-  assert.match(page, /body: JSON\.stringify\(fullRefresh \? \{ fullRefresh: true, sharedPlanName \} : \{\}\)/);
+  assert.match(page, /body: JSON\.stringify\(retryFailed \? \{ retryFailed: true \} : fullRefresh \? \{ fullRefresh: true, sharedPlanName \} : \{\}\)/);
   assert.match(page, /제작·검수 중/);
   assert.doesNotMatch(page, /poolProductionConfirmation|AI 평어 제작을 계속할까요|AI 제작 시작|무료 보완/);
   assert.doesNotMatch(page, /개 제작·보완 필요/);
@@ -534,6 +534,18 @@ test("scopes fresh production to the current class and bounds calls, retaining t
   assert.match(route, /maxAiCalls: batches\.length \* 2/);
   assert.match(route, /activateWhenReady: true/);
   assert.match(route, /previousPoolVersionIds/);
+});
+
+test("retries only incomplete owned fresh batches from the latest classroom job", () => {
+  const route = readFileSync("app/api/comment-pools/route.ts", "utf8");
+  const retry = route.slice(route.indexOf("if (body.retryFailed === true)"), route.indexOf("if (fullRefresh && body.labOnly === true"));
+  assert.match(retry, /owner_id: eq\(user\.id\), class_id: eq\(classId\)/);
+  assert.match(retry, /source\.status !== "completed_with_errors"/);
+  assert.match(retry, /source\.batches\.some\(batch => !batch\.freshOnly\)/);
+  assert.match(retry, /!commentPoolIsComplete/);
+  assert.match(retry, /batches\.length > Number\(source\.failed_items\)/);
+  assert.match(retry, /maxAttempts: 2/);
+  assert.doesNotMatch(retry, /insertRows.*comment_pool_versions|method: "DELETE"/);
 });
 
 test("publishes an owned fresh job without modifying classroom links or invoking AI", () => {

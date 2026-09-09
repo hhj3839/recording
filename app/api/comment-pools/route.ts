@@ -221,7 +221,7 @@ export async function POST(request: Request) {
     const { user, classId } = await getDataScope();
     const body = await request.json().catch(() => ({})) as {
       subject?: unknown; maxGroups?: unknown; labOnly?: unknown; targetFingerprints?: unknown; canonicalOnly?: unknown;
-      refresh?: unknown; fullRefresh?: unknown; sharedPlanName?: unknown;
+      refresh?: unknown; fullRefresh?: unknown; sharedPlanName?: unknown; retryFailed?: unknown;
     };
     const subject = typeof body.subject === "string" ? body.subject.trim() : "";
     if (body.labOnly === true && !user.email.toLowerCase().endsWith("@giroksam.test")) {
@@ -258,6 +258,28 @@ export async function POST(request: Request) {
       return Response.json({ jobId: job.id, total: job.total, existing: true, job }, { status: 202 });
     }
     const allSpecs = await currentSpecs(user.id, classId);
+    if (body.retryFailed === true) {
+      if (fullRefresh || refresh || subject || targetFingerprints.length) return Response.json({ error: "실패 항목 재시도는 다른 제작 옵션과 함께 사용할 수 없습니다." }, { status: 400 });
+      type RetryBatch = { spec: CommentPoolSpec; poolVersionId: number; maxAttempts?: number; freshOnly?: boolean; activateWhenReady?: boolean; previousPoolVersionIds?: number[] };
+      const source = (await selectRows<{ status: string; failed_items: number; batches: RetryBatch[] }>("generation_jobs", {
+        owner_id: eq(user.id), class_id: eq(classId), job_type: eq("comment-pools"), order: "created_at.desc", limit: 1,
+      }))[0];
+      if (!source || source.status !== "completed_with_errors" || !Array.isArray(source.batches) || source.batches.some(batch => !batch.freshOnly)) return Response.json({ error: "이어서 제작할 새 풀 실패 작업이 없습니다." }, { status: 409 });
+      if (source.batches.some(batch => !allSpecs.some(spec => spec.fingerprint === batch.spec.fingerprint && spec.assessmentPlanId === batch.spec.assessmentPlanId))) return Response.json({ error: "평가계획이 변경되어 실패 작업을 이어갈 수 없습니다." }, { status: 409 });
+      const ids = source.batches.map(batch => batch.poolVersionId);
+      const owned = await selectRows<{ id: number }>("comment_pool_versions", { id: inValues(ids), created_by: eq(user.id) });
+      if (owned.length !== ids.length) return Response.json({ error: "재시도할 풀의 소유권을 확인하지 못했습니다." }, { status: 409 });
+      const rows = await approvedPoolRows(ids);
+      const batches = source.batches.filter(batch => !commentPoolIsComplete(rows.filter(row => Number(row.pool_version_id) === batch.poolVersionId).map(row => row.sentence), batch.spec.canonicalSentence)).map(batch => ({ ...batch, maxAttempts: 2 }));
+      if (!batches.length || batches.length > Number(source.failed_items)) return Response.json({ error: "실패 묶음 범위를 확인하지 못했습니다." }, { status: 409 });
+      const jobs = await insertRows<{ id: string }>("generation_jobs", [{
+        owner_id: user.id, owner_email: user.email, class_id: classId, job_type: "comment-pools", status: "queued",
+        batches, current_batch: 0, total_batches: batches.length, total_items: batches.length, completed_items: 0, failed_items: 0,
+        error_message: "", created_at: new Date().toISOString(), updated_at: new Date().toISOString(),
+      }]);
+      queueRunner(request, jobs[0].id);
+      return Response.json({ jobId: jobs[0].id, total: batches.length, maxAiCalls: batches.length * 2 }, { status: 202 });
+    }
     if (fullRefresh && body.labOnly === true && allSpecs.length !== 75) {
       return Response.json({ error: `실험실 전체 새 버전 제작 범위가 75개가 아닙니다. (${allSpecs.length}개)` }, { status: 409 });
     }
