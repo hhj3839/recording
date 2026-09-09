@@ -112,7 +112,16 @@ export async function PUT(request: Request) {
       fingerprint: inValues(fingerprints),
     }) : [];
     const versionByFingerprint = new Map(versions.map((version) => [version.fingerprint, version]));
-    const versionIds = versions.map((version) => Number(version.id));
+    // Only future imports choose a newly published version; existing links remain pinned.
+    const published = specs.length ? await selectRows<PoolVersion & { generator_version: string }>("comment_pool_versions", {
+      generator_version: inValues(specs.map(spec => `shared-${shared.id}-${spec.fingerprint}`)),
+      created_by: eq(shared.created_by), status: eq("ready"), order: "id.desc",
+    }) : [];
+    for (const spec of specs) {
+      const newest = published.find(version => version.generator_version === `shared-${shared.id}-${spec.fingerprint}`);
+      if (newest) versionByFingerprint.set(spec.fingerprint, newest);
+    }
+    const versionIds = [...versionByFingerprint.values()].map((version) => Number(version.id));
     const sentenceRows = await approvedPoolRows(versionIds);
     const sentencesByVersion = new Map<number, string[]>();
     sentenceRows.forEach((row) => {

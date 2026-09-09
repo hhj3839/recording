@@ -836,14 +836,21 @@ function PlanManager({ plan, onChanged, current }: { plan: AssessmentPlan[]; onC
       if (!fingerprint) setPoolStatusLoading(false);
     }
   }, []);
-  const startPoolProduction = async () => {
+  const startPoolProduction = async (fullRefresh = false) => {
     if (!plan.length || poolBusy) return;
-    if (!poolSummary.needsGeneration) return;
+    if (!fullRefresh && !poolSummary.needsGeneration) return;
+    let sharedPlanName = "";
+    if (fullRefresh) {
+      const name = window.prompt("향후 선택 학급에 공개할 공동 평가계획 이름을 입력하세요. 현재 학급에서만 새로 제작하려면 빈칸으로 확인하세요.", "");
+      if (name === null) return;
+      sharedPlanName = name.trim();
+      if (!window.confirm(`현재 평가계획의 ${poolSummary.total}개 묶음을 기존 풀 재사용 없이 새로 제작합니다. 최대 ${poolSummary.total * 2}회 유료 AI 호출이 발생합니다. 기존 학생 기록과 다른 학급은 유지됩니다.${sharedPlanName ? "\n공동계획: " + sharedPlanName + " — 향후 선택 학급에만 새 풀 적용" : ""}`)) return;
+    }
     setPoolBusy(true);
     setErrors([]);
     try {
       const response = await fetch("/api/comment-pools", {
-        method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({}),
+        method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(fullRefresh ? { fullRefresh: true, sharedPlanName } : {}),
       });
       const result = await readApiJson<{ ready?: boolean; jobId?: string; total?: number; job?: PoolJobView }>(response, "AI 평어 제작을 시작하지 못했습니다.");
       if (!response.ok) throw new Error(result.error || "AI 평어 제작을 시작하지 못했습니다.");
@@ -1002,7 +1009,7 @@ function PlanManager({ plan, onChanged, current }: { plan: AssessmentPlan[]; onC
       <button role="tab" aria-selected={planSection === "ai"} className={planSection === "ai" ? "active" : ""} onClick={() => setPlanSection("ai")}>AI 평어{poolSummary.needsGeneration > 0 ? " · 제작 필요" : ""}</button>
     </div>
     {planSection === "ai" && <section className="ai-comment-pool-panel">
-      <div className="section-heading"><div><p className="eyebrow">평가계획용 문장 풀</p><h2>AI 평어</h2><p>학생에게 배정하기 전, 평가영역·수준별로 서로 다른 평어 20개를 제작하고 검수합니다.</p></div><div className="ai-pool-heading-actions"><button className="danger-text" disabled={poolBusy || !plan.length || poolSummary.usable === 0 || activePoolJob} onClick={() => void resetPoolLinks()}>AI 평어 초기화</button></div></div>
+      <div className="section-heading"><div><p className="eyebrow">평가계획용 문장 풀</p><h2>AI 평어</h2><p>학생에게 배정하기 전, 평가영역·수준별로 서로 다른 평어 20개를 제작하고 검수합니다.</p></div><div className="ai-pool-heading-actions"><button className="secondary" disabled={poolBusy || !plan.length || activePoolJob} onClick={() => void startPoolProduction(true)}>전체 새로 제작</button><button className="danger-text" disabled={poolBusy || !plan.length || poolSummary.usable === 0 || activePoolJob} onClick={() => void resetPoolLinks()}>AI 평어 초기화</button></div></div>
       {!plan.length ? <p className="empty-cell">평가계획을 먼저 저장해 주세요.</p> : <>
         {poolStatusLoading ? <div className="ai-pool-loading" role="status"><i aria-hidden="true" /><span><b>AI 평어 상태를 확인하고 있습니다.</b><small>현재 평가계획의 승인 문장과 최신 검수 결과를 읽는 중입니다.</small></span></div> : <div className="ai-pool-summary">
           <span><b>{poolSummary.total}</b>개 영역·수준</span>

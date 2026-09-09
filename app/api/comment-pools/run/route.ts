@@ -10,7 +10,7 @@ import { openAiOutputText, parseFirstJsonObject } from "../../../openai-response
 export const maxDuration = 300;
 type PoolBatch = {
   spec: CommentPoolSpec; poolVersionId: number; maxAttempts?: number; activateWhenReady?: boolean;
-  previousPoolVersionIds?: number[];
+  previousPoolVersionIds?: number[]; freshOnly?: boolean;
 };
 type JobRow = {
   id: string; owner_id: string; owner_email: string; class_id: number; status: string; batches: PoolBatch[];
@@ -91,7 +91,7 @@ export async function POST(request: Request) {
     });
     const existing = rows.map((row) => row.sentence);
     approved = [...existing];
-    const canonical = approvePoolCandidates([batch.spec.canonicalSentence], batch.spec, approved).approved;
+    const canonical = batch.freshOnly ? [] : approvePoolCandidates([batch.spec.canonicalSentence], batch.spec, approved).approved;
     if (canonical.length) {
       await upsertRows("comment_pool_sentences", canonical.map((sentence) => ({
         pool_version_id: batch.poolVersionId, sentence, normalized_sentence: normalizedPoolSentence(sentence),

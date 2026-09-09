@@ -68,7 +68,7 @@ test("comment jobs assign prepared approved pools without a paid AI call", () =>
   const poolRoute = readFileSync("app/api/comment-pools/route.ts", "utf8");
   const page = readFileSync("app/page.tsx", "utf8");
   assert.doesNotMatch(poolRoute, /freeFallbackOnly|buildValidatedMinimumPoolFallbacks/);
-  assert.match(page, /body: JSON\.stringify\(\{\}\)/);
+  assert.match(page, /body: JSON\.stringify\(fullRefresh \? \{ fullRefresh: true, sharedPlanName \} : \{\}\)/);
   const single = readFileSync("app/api/generate-comment/route.ts", "utf8");
   assert.match(single.slice(0, single.indexOf("const apiKey")), /mode === "regenerate"[\s\S]*comment_pool_sentences[\s\S]*source: "approved-pool"/);
   const pump = readFileSync("app/api/comment-jobs/pump/route.ts", "utf8");
@@ -263,7 +263,7 @@ test("continues all remaining pools while keeping bounded lab validation", () =>
   assert.match(route, /targetFingerprints\.length && body\.labOnly !== true/);
   assert.match(route, /targetFingerprints\.includes\(spec\.fingerprint\)/);
   assert.match(route, /specs\.length !== targetFingerprints\.length/);
-  assert.match(page, /body: JSON\.stringify\(\{\}\)/);
+  assert.match(page, /body: JSON\.stringify\(fullRefresh \? \{ fullRefresh: true, sharedPlanName \} : \{\}\)/);
   assert.doesNotMatch(page, /무료 보완|poolProductionConfirmation/);
 });
 
@@ -349,7 +349,7 @@ test("shows resumable pool production progress beside the ready count", () => {
   assert.match(page, /ready-count[\s\S]*준비 완료[\s\S]*pool-progress/);
   assert.match(page, /poolSummary\.needsGeneration[\s\S]*개 이어서 제작/);
   assert.match(page, /poolSummary\.ready === 0 \? "AI 평어 제작"/);
-  assert.match(page, /body: JSON\.stringify\(\{\}\)/);
+  assert.match(page, /body: JSON\.stringify\(fullRefresh \? \{ fullRefresh: true, sharedPlanName \} : \{\}\)/);
   assert.match(page, /제작·검수 중/);
   assert.doesNotMatch(page, /poolProductionConfirmation|AI 평어 제작을 계속할까요|AI 제작 시작|무료 보완/);
   assert.doesNotMatch(page, /개 제작·보완 필요/);
@@ -520,10 +520,16 @@ test("keeps the approved-pool audit read-only and reports sentence ids instead o
   assert.match(audit, /failedIds/);
 });
 
-test("limits a full pool refresh to the exact 75-group lab scope and 150 calls", () => {
+test("scopes fresh production to the current class and bounds calls, retaining the lab guard", () => {
   const route = readFileSync("app/api/comment-pools/route.ts", "utf8");
-  assert.match(route, /fullRefresh && body\.labOnly !== true/);
-  assert.match(route, /fullRefresh && allSpecs\.length !== 75/);
+  assert.match(route, /fullRefresh && body\.labOnly === true && allSpecs\.length !== 75/);
+  assert.match(route, /matching\[0\]\.created_by !== user\.id/);
+  assert.match(route, /matching\.length !== 1/);
+  assert.match(route, /freshOnly: true/);
+  const runner = readFileSync("app/api/comment-pools/run/route.ts", "utf8");
+  assert.match(runner, /batch\.freshOnly \? \[\] : approvePoolCandidates/);
+  const shared = readFileSync("app/api/shared-assessment-plans/route.ts", "utf8");
+  assert.match(shared, /created_by: eq\(shared\.created_by\), status: eq\("ready"\)/);
   assert.match(route, /maxAttempts: 2/);
   assert.match(route, /maxAiCalls: batches\.length \* 2/);
   assert.match(route, /activateWhenReady: true/);
