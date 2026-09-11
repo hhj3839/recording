@@ -45,6 +45,9 @@ test("keeps the pool prompt simple and delegates only sentence writing to the mo
   assert.match(commentPoolSystemPrompt, /능력 진술 대신, 평가수준에 맞는 수행을 서술하고 ‘~함\.’으로 끝낸다/);
   assert.match(commentPoolSystemPrompt, /수량의 의미는 유지하되, 범위 기호는 자연스러운 우리말로 표현한다/);
   assert.ok(commentPoolSystemPrompt.includes('‘2~3개’ → ‘두세 개’'));
+  assert.match(commentPoolSystemPrompt, /목적어·서술어의 연결을 다듬고/);
+  assert.match(commentPoolSystemPrompt, /평가수준을 구분하는 수량·수행 범위·정확성이 유지됐는지/);
+  assert.doesNotMatch(commentPoolSystemPrompt, /맞춤법, 문장 호응과 어색한 표현을 확인한 후/);
   assert.doesNotMatch(commentPoolSystemPrompt, /모든 문장은 자연스러운 명사형 종결과 마침표로 끝낸다/);
   assert.match(commentPoolSystemPrompt, /자연스럽게 다른 요소로 시작/);
   assert.match(commentPoolSystemPrompt, /바로 앞에서 작성한 문장과 같은 시작 표현을 반복하지 않는다/);
