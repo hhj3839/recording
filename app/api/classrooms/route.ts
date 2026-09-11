@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { eq, selectRows, supabaseRequest, upsertRows } from "../../../db/supabase";
 import { ACTIVE_CLASS_COOKIE, AuthenticationRequiredError, dataError } from "../../data-scope";
-import { getAuthUser } from "../../supabase-auth";
+import { getAuthUser, rememberClassroom } from "../../supabase-auth";
 import { CLASS_DATA_TABLES } from "../../class-data-tables";
 
 type ClassroomRow = {
@@ -64,6 +64,7 @@ export async function POST(request: Request) {
       class_number: classNumber,
       created_at: new Date().toISOString(),
     }], "owner_email,school_year,semester,grade,class_number");
+    await rememberClassroom(Number(rows[0].id));
     const response = NextResponse.json({ classroom: present(rows[0]) });
     response.cookies.set(ACTIVE_CLASS_COOKIE, String(rows[0].id), {
       httpOnly: true, secure: process.env.NODE_ENV === "production", sameSite: "lax", path: "/", maxAge: 60 * 60 * 24 * 365,
@@ -82,6 +83,7 @@ export async function PUT(request: Request) {
     if (!Number.isInteger(id)) return Response.json({ error: "학급 정보를 확인해 주세요." }, { status: 400 });
     const classroom = (await selectRows<ClassroomRow>("classrooms", { id: eq(id), owner_id: eq(user.id), limit: 1 }))[0];
     if (!classroom) return Response.json({ error: "선택할 수 없는 학급입니다." }, { status: 403 });
+    await rememberClassroom(Number(classroom.id));
     const response = NextResponse.json({ classroom: present(classroom) });
     response.cookies.set(ACTIVE_CLASS_COOKIE, String(classroom.id), {
       httpOnly: true, secure: process.env.NODE_ENV === "production", sameSite: "lax", path: "/", maxAge: 60 * 60 * 24 * 365,
@@ -124,6 +126,7 @@ export async function DELETE(request: Request) {
     });
 
     const nextClassroom = classrooms.find((item) => Number(item.id) !== id)!;
+    await rememberClassroom(Number(nextClassroom.id));
     const response = NextResponse.json({ ok: true, classroom: present(nextClassroom) });
     response.cookies.set(ACTIVE_CLASS_COOKIE, String(nextClassroom.id), {
       httpOnly: true, secure: process.env.NODE_ENV === "production", sameSite: "lax", path: "/", maxAge: 60 * 60 * 24 * 365,

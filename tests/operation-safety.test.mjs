@@ -536,6 +536,20 @@ test("scopes fresh production to the current class and bounds calls, retaining t
   assert.match(route, /previousPoolVersionIds/);
 });
 
+test("remembers owned classroom choices across login without trusting metadata as authorization", () => {
+  const scope = readFileSync("app/data-scope.ts", "utf8");
+  const classes = readFileSync("app/api/classrooms/route.ts", "utf8");
+  const login = readFileSync("app/api/auth/login/route.ts", "utf8");
+  const auth = readFileSync("app/supabase-auth.ts", "utf8");
+  assert.match(scope, /id: eq\(user\.lastClassId!\), owner_id: eq\(user\.id\)/);
+  assert.ok(scope.indexOf("user.lastClassId") < scope.indexOf("school_year: eq(user.schoolYear)"));
+  assert.match(login, /id: eq\(lastId\), owner_id: eq\(data\.user\.id\)/);
+  assert.match(login, /else response\.cookies\.delete\(ACTIVE_CLASS_COOKIE\)/);
+  assert.match(auth, /updateUser\(\{ data: \{ last_class_id: classId \} \}\)/);
+  assert.equal((classes.match(/await rememberClassroom/g) ?? []).length, 3);
+  assert.ok(classes.indexOf('선택할 수 없는 학급입니다.') < classes.indexOf('await rememberClassroom(Number(classroom.id))'));
+});
+
 test("retries only incomplete owned fresh batches from the latest classroom job", () => {
   const route = readFileSync("app/api/comment-pools/route.ts", "utf8");
   const retry = route.slice(route.indexOf("if (body.retryFailed === true)"), route.indexOf("if (fullRefresh && body.labOnly === true"));

@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createHash } from "node:crypto";
+import { ACTIVE_CLASS_COOKIE } from "../../../data-scope";
 import { eq, selectRows, supabaseRequest, upsertRows } from "../../../../db/supabase";
 import {
   ACCESS_COOKIE,
@@ -42,5 +43,11 @@ export async function POST(request: NextRequest) {
   const response = NextResponse.json({ returnTo: safeReturnTo(body.returnTo) });
   response.cookies.set(ACCESS_COOKIE, data.session.access_token, authCookieOptions(data.session.expires_in));
   response.cookies.set(REFRESH_COOKIE, data.session.refresh_token, authCookieOptions(60 * 60 * 24 * 30));
+  const lastId = Number(data.user?.user_metadata?.last_class_id);
+  const remembered = Number.isSafeInteger(lastId) && lastId > 0
+    ? (await selectRows<{ id: number }>("classrooms", { id: eq(lastId), owner_id: eq(data.user.id), limit: 1 }))[0]
+    : undefined;
+  if (remembered) response.cookies.set(ACTIVE_CLASS_COOKIE, String(remembered.id), authCookieOptions(60 * 60 * 24 * 365));
+  else response.cookies.delete(ACTIVE_CLASS_COOKIE);
   return response;
 }
