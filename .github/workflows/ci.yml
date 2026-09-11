@@ -51,3 +51,6 @@ jobs:
 
       - name: Test and build
         run: pnpm test
+
+      - name: Check one-shot trial safety
+        run: node --experimental-strip-types --test tests/comment-pool-trial.test.ts
