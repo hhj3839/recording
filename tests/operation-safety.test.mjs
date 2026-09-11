@@ -63,7 +63,7 @@ test("comment jobs assign prepared approved pools without a paid AI call", () =>
   assert.doesNotMatch(route, /api\.openai\.com|generateCommentPoolBatch|recordAiUsage/);
   assert.match(route, /assignApprovedCommentPools\(pending\)/);
   assert.match(producer, /api\.openai\.com\/v1\/responses/);
-  assert.match(producer, /source: "canonical"/);
+  assert.doesNotMatch(producer, /source: "canonical"|approvePoolCandidates\(\[batch\.spec\.canonicalSentence\]/);
   assert.doesNotMatch(producer, /buildValidatedMinimumPoolFallbacks|saveFreeFallbacks/);
   const poolRoute = readFileSync("app/api/comment-pools/route.ts", "utf8");
   const page = readFileSync("app/page.tsx", "utf8");
@@ -409,11 +409,11 @@ test("keeps the pool summary in a loading state and exposes read-only quality re
   assert.match(route, /warnings: row\.warnings/);
 });
 
-test("allows only an explicitly bounded lab canonical-pool recovery", () => {
+test("rejects retired canonical-only requests instead of silently charging for AI", () => {
   const route = readFileSync("app/api/comment-pools/route.ts", "utf8");
   const runner = readFileSync("app/api/comment-pools/run/route.ts", "utf8");
-  assert.match(route, /canonicalOnly && body\.labOnly !== true/);
-  assert.match(route, /maxAttempts: canonicalOnly \? 0 : 2/);
+  assert.match(route, /if \(canonicalOnly\) \{[\s\S]*?status: 400/);
+  assert.doesNotMatch(route, /maxAttempts: canonicalOnly/);
   assert.match(runner, /Math\.max\(0, Math\.min\(2/);
 });
 
@@ -527,7 +527,7 @@ test("scopes fresh production to the current class and bounds calls, retaining t
   assert.match(route, /matching\.length !== 1/);
   assert.match(route, /freshOnly: true/);
   const runner = readFileSync("app/api/comment-pools/run/route.ts", "utf8");
-  assert.match(runner, /batch\.freshOnly \? \[\] : approvePoolCandidates/);
+  assert.doesNotMatch(runner, /source: "canonical"|approvePoolCandidates\(\[batch\.spec\.canonicalSentence\]/);
   const shared = readFileSync("app/api/shared-assessment-plans/route.ts", "utf8");
   assert.match(shared, /created_by: eq\(shared\.created_by\), status: eq\("ready"\)/);
   assert.match(route, /maxAttempts: 2/);

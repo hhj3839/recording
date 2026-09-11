@@ -228,8 +228,8 @@ export async function POST(request: Request) {
       return Response.json({ error: "제한 검증은 실험실 계정에서만 실행할 수 있습니다." }, { status: 403 });
     }
     const canonicalOnly = body.canonicalOnly === true;
-    if (canonicalOnly && body.labOnly !== true) {
-      return Response.json({ error: "기준 문장 전용 복구는 실험실 제한 검증에서만 사용할 수 있습니다." }, { status: 403 });
+    if (canonicalOnly) {
+      return Response.json({ error: "기준 문장 자동 보완은 더 이상 지원하지 않습니다. AI 평어 제작을 이용해 주세요." }, { status: 400 });
     }
     const targetFingerprints = Array.isArray(body.targetFingerprints)
       ? [...new Set(body.targetFingerprints.filter((value): value is string => typeof value === "string" && /^[a-f0-9]{64}$/.test(value)))]
@@ -409,7 +409,7 @@ export async function POST(request: Request) {
     const pending = specsToCreate.flatMap((spec) => {
       const version = byFingerprint.get(spec.fingerprint);
       return version && !commentPoolIsComplete(sentencesByVersion.get(Number(version.id)) ?? [], spec.canonicalSentence)
-        ? [{ spec, poolVersionId: Number(version.id), maxAttempts: canonicalOnly ? 0 : 2 }]
+        ? [{ spec, poolVersionId: Number(version.id), maxAttempts: 2 }]
         : [];
     }).slice(0, maxGroups);
     if (!pending.length) return Response.json({ ready: true, reused: specs.length });

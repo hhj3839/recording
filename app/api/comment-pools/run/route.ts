@@ -91,14 +91,7 @@ export async function POST(request: Request) {
     });
     const existing = rows.map((row) => row.sentence);
     approved = [...existing];
-    const canonical = batch.freshOnly ? [] : approvePoolCandidates([batch.spec.canonicalSentence], batch.spec, approved).approved;
-    if (canonical.length) {
-      await upsertRows("comment_pool_sentences", canonical.map((sentence) => ({
-        pool_version_id: batch.poolVersionId, sentence, normalized_sentence: normalizedPoolSentence(sentence),
-        status: "approved", source: "canonical", updated_at: new Date().toISOString(),
-      })), "pool_version_id,normalized_sentence");
-      approved.push(...canonical);
-    }
+    // Preserve saved candidates; every new candidate comes from AI, including resume jobs.
     const maxAttempts = Number.isInteger(batch.maxAttempts) ? Math.max(0, Math.min(2, Number(batch.maxAttempts))) : 2;
     for (let attempt = 0; attempt < maxAttempts && approved.length < COMMENT_POOL_TARGET; attempt += 1) {
       const requestCount = COMMENT_POOL_TARGET - approved.length;
