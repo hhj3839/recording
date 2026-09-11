@@ -10,6 +10,7 @@ export type AuthUser = {
   semester: number;
   grade: number;
   classNumber: number;
+  lastClassId?: number;
 };
 
 export const ACCESS_COOKIE = "giroksam-access-token";
@@ -62,7 +63,23 @@ export async function getAuthUser(): Promise<AuthUser | null> {
     semester: Number(data.user.user_metadata?.semester ?? 1),
     grade: Number(data.user.user_metadata?.grade ?? 1),
     classNumber: Number(data.user.user_metadata?.class_number ?? 1),
+    lastClassId: Number(data.user.user_metadata?.last_class_id) || undefined,
   };
+}
+
+// Call only after verifying that the classroom belongs to the authenticated user.
+export async function rememberClassroom(classId: number) {
+  const store = await cookies();
+  const access = store.get(ACCESS_COOKIE)?.value;
+  const refresh = store.get(REFRESH_COOKIE)?.value;
+  if (!access || !refresh) throw new Error("로그인이 필요합니다.");
+  const client = createAuthClient();
+  const session = await client.auth.setSession({ access_token: access, refresh_token: refresh });
+  if (session.error || !session.data.session) throw new Error("학급 선택 저장 인증에 실패했습니다.");
+  const { error } = await client.auth.updateUser({ data: { last_class_id: classId } });
+  if (error) throw new Error("마지막 학급을 저장하지 못했습니다.");
+  store.set(ACCESS_COOKIE, session.data.session.access_token, authCookieOptions(session.data.session.expires_in));
+  store.set(REFRESH_COOKIE, session.data.session.refresh_token, authCookieOptions(60 * 60 * 24 * 30));
 }
 
 export function safeReturnTo(value: unknown) {

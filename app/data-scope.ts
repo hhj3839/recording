@@ -39,6 +39,12 @@ export async function getDataScope() {
       }))[0]
     : undefined;
 
+  if (!classroom && Number.isSafeInteger(user.lastClassId) && Number(user.lastClassId) > 0) {
+    classroom = (await selectRows<SupabaseClassroom>("classrooms", {
+      id: eq(user.lastClassId!), owner_id: eq(user.id), limit: 1,
+    }))[0];
+  }
+
   if (!classroom) {
     classroom = (await selectRows<SupabaseClassroom>("classrooms", {
       owner_id: eq(user.id),
