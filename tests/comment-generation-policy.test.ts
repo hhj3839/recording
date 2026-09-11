@@ -42,6 +42,10 @@ test("keeps the pool prompt simple and delegates only sentence writing to the mo
   const prompt = buildCommentPoolCandidatePrompt(spec, ["기존 승인 문장임."], 15);
   assert.match(commentPoolSystemPrompt, /수준별 변별 기준/);
   assert.match(commentPoolSystemPrompt, /관찰 가능한 학습 행동과 성취/);
+  assert.match(commentPoolSystemPrompt, /능력 진술 대신, 평가수준에 맞는 수행을 서술하고 ‘~함\.’으로 끝낸다/);
+  assert.match(commentPoolSystemPrompt, /수량의 의미는 유지하되, 범위 기호는 자연스러운 우리말로 표현한다/);
+  assert.ok(commentPoolSystemPrompt.includes('‘2~3개’ → ‘두세 개’'));
+  assert.doesNotMatch(commentPoolSystemPrompt, /모든 문장은 자연스러운 명사형 종결과 마침표로 끝낸다/);
   assert.match(commentPoolSystemPrompt, /자연스럽게 다른 요소로 시작/);
   assert.match(commentPoolSystemPrompt, /바로 앞에서 작성한 문장과 같은 시작 표현을 반복하지 않는다/);
   assert.match(commentPoolSystemPrompt, /서로 다른 첫 낱말로 시작/);
