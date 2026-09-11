@@ -410,6 +410,8 @@ test("keeps the pool summary in a loading state and exposes read-only quality re
 });
 
 test("rejects retired canonical-only requests instead of silently charging for AI", () => {
+  const manifest = JSON.parse(readFileSync("package.json", "utf8"));
+  assert.equal(manifest.scripts["test:approved-canonical-recovery"], undefined);
   const route = readFileSync("app/api/comment-pools/route.ts", "utf8");
   const runner = readFileSync("app/api/comment-pools/run/route.ts", "utf8");
   assert.match(route, /if \(canonicalOnly\) \{[\s\S]*?status: 400/);
