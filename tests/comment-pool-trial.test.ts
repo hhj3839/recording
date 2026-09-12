@@ -2,7 +2,21 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { trialAccess, POOL_TRIAL, claimAndRunTrial } from '../app/comment-pool-trial.ts';
+import { trialResponse } from '../app/comment-pool-trial-response.ts';
 const now = Date.parse('2026-09-12T00:00:00+09:00');
+test('form results render safe HTML, while API results retain JSON', async () => {
+  const payload = { candidates: ['<script>alert(1)</script>'], before: ['기존 문장임.'], elapsedMs: 8000 };
+  const html = trialResponse(payload, 200, 'text/html,application/xhtml+xml');
+  assert.match(html.headers.get('content-type')!, /text\/html/);
+  const body = await html.text();
+  assert.match(body, /생성 완료 · 1문장 · 8초/);
+  assert.match(body, /&lt;script&gt;/);
+  assert.doesNotMatch(body, /<script>|<form/);
+  assert.deepEqual(await trialResponse(payload).json(), payload);
+  const error = trialResponse({error: '이미 실행됨'}, 409, 'text/html');
+  assert.equal(error.status, 409);
+  assert.match(await error.text(), /role="alert"/);
+});
 test('trial rejects unauthenticated, other users, cross-origin and expired requests', () => {
   assert.equal(trialAccess(undefined, null, now), 401);
   assert.equal(trialAccess('other@example.com', 'https://giroksam-recording.vercel.app', now), 403);

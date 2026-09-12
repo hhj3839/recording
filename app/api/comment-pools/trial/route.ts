@@ -7,6 +7,7 @@ import { primaryAiModel } from "../../../ai-model-policy";
 import { openAiOutputText, parseFirstJsonObject } from "../../../openai-response";
 import { checkAiUsage, recordAiUsage } from "../../../ai-usage";
 import { estimateAiCostUsd } from "../../../ai-pricing";
+import { trialResponse } from "../../../comment-pool-trial-response";
 
 export const maxDuration = 300;
 const json = (value: unknown, status = 200) => Response.json(value, { status, headers: { "Cache-Control": "no-store" } });
@@ -30,6 +31,7 @@ export async function GET() {
 }
 
 export async function POST(request: Request) {
+  const json = (value: unknown, status = 200) => trialResponse(value, status, request.headers.get("accept") ?? "");
   try {
     const user = await getAuthUser();
     const access = trialAccess(user?.email, request.headers.get("origin"));
