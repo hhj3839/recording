@@ -1,6 +1,6 @@
 // One approved comparison, not a reusable generation API.
 export const POOL_TRIAL = {
-  id: "86fd1194-72b4-4529-967a-ceaa84a219cf",
+  id: "178f3228-a6bb-4d71-985a-b251337ea501",
   email: "dlddu3839@gmail.com",
   classId: 29,
   planId: 272,
