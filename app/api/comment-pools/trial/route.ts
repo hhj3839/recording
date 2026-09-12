@@ -11,6 +11,24 @@ import { estimateAiCostUsd } from "../../../ai-pricing";
 export const maxDuration = 300;
 const json = (value: unknown, status = 200) => Response.json(value, { status, headers: { "Cache-Control": "no-store" } });
 
+// Read-only launch page. Visiting this URL never claims the budget or calls AI.
+export async function GET() {
+  try {
+    const user = await getAuthUser();
+    const access = trialAccess(user?.email, "https://giroksam-recording.vercel.app");
+    if (access !== 200 || !user) return json({ error: "지정 계정으로 로그인해 주세요. 만료된 시험은 실행할 수 없습니다." }, access);
+    const used = await selectRows<{ id: string }>("generation_jobs", { id: eq(POOL_TRIAL.id), limit: 1 });
+    return new Response(`<!doctype html><html lang="ko"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>기록샘 영어 문장 시험</title>
+      <body><main><h1>영어 이해·중 문장 시험</h1><p>2026학년도 2학기 · 3학년 7반 · 후보 20문장</p>
+      <p>기존 운영 키로 최대 1회 생성합니다. 기존 문장 풀과 학생 자료는 변경하지 않습니다.</p>
+      <p>실행 기록과 사용량만 저장하며 생성 결과는 이 화면에만 표시됩니다. 결과가 나오면 화면을 닫지 마세요.</p>
+      ${used.length ? '<p>이미 시험 예산을 사용했습니다. 다시 호출하지 않습니다.</p>' : '<form method="post" action="/api/comment-pools/trial"><button type="submit">영어 20문장 시험 생성 · 1회</button></form>'}
+      <p><a href="/">기록샘으로 돌아가기</a></p></main></body></html>`, {
+      headers: { "Content-Type": "text/html; charset=utf-8", "Cache-Control": "no-store", "Content-Security-Policy": "default-src 'none'; form-action 'self'; frame-ancestors 'none'; base-uri 'none'", "X-Content-Type-Options": "nosniff" },
+    });
+  } catch { return json({ error: "시험 준비 상태를 확인하지 못했습니다." }, 500); }
+}
+
 export async function POST(request: Request) {
   try {
     const user = await getAuthUser();
