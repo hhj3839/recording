@@ -1839,6 +1839,7 @@ function Behavior({ roster }: { roster: AssessmentStudent[] }) {
                   ...(validation.bytes < 500 ? [`500B 미만 · 현재 ${validation.bytes}B`] : []),
                   ...(validation.bytes > 600 ? [`600B 초과 · 현재 ${validation.bytes}B`] : []),
                   ...(!validation.endingsOk ? ["음·임 종결 확인"] : []),
+                  ...validation.styleIssues,
                   ...(validation.forbidden.length > 0 ? [`금지어 확인: ${validation.forbidden.join(" · ")}`] : []),
                   ...(!validation.spellingOk ? validation.spellingIssues.map((issue) => `맞춤법: ${issue}`) : []),
                   ...(validation.repeated.length > 0 ? ["반복 표현 확인"] : []),

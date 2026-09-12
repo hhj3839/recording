@@ -3,6 +3,20 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { validateRecord } from '../app/record-validation.ts';
 import { canPersistBehaviorDraft, assertStrictGeneratedBehaviors, selectBehaviorCandidate } from '../app/behavior-persistence-policy.ts';
+import { behaviorRepairInstruction } from '../app/behavior-repair-policy.ts';
+
+test('generation and repair guidance agree with short draft persistence', () => {
+  const source = readFileSync(new URL('../app/behavior-generation.ts', import.meta.url), 'utf8');
+  const route = readFileSync(new URL('../app/api/behavior-jobs/route.ts', import.meta.url), 'utf8');
+  assert.match(route, /maxBytes: 600/);
+  assert.doesNotMatch(route, /maxBytes: 550/);
+  assert.match(source, /500바이트 미만이어도 자연스러운 초안/);
+  assert.doesNotMatch(source, /서버 허용 범위는 500~600/);
+  for (const bytes of [450, 550, 650]) {
+    assert.match(behaviorRepairInstruction(bytes), /완결성/);
+    assert.doesNotMatch(behaviorRepairInstruction(bytes), /받침 ㅁ/);
+  }
+});
 
 test('generation asks for complete predicates and meaning-preserving self-review', () => {
   const source = readFileSync(new URL('../app/behavior-generation.ts', import.meta.url), 'utf8');
