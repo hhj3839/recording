@@ -32,10 +32,8 @@ export function behaviorRepairInstruction(bytes: number) {
   if (plan.direction === "none") {
     return `현재 ${plan.bytes}바이트로 500~600바이트 기준을 충족하므로 문장 수·순서·길이와 핵심 사실을 유지하고, 다른 검수 오류가 있을 때만 같은 의미의 표현으로 최소 교체함. 모든 문장은 마침표 직전 글자가 받침 ㅁ인 ‘음/임/함/됨’ 형태인지 확인함`;
   }
-  const action = plan.direction === "add" ? "추가" : "삭제";
-  const location = plan.direction === "add" ? "기존 문장에" : "기존 문장에서";
   const editScope = plan.direction === "add"
-    ? "이미 언급된 행동의 방법·과정만 구체화하고 새 활동·인물·성과·태도는 만들지 않음"
+    ? "입력에 명시된 관찰 사실 중 빠진 내용만 보완하고, 근거가 부족하면 짧더라도 기존 문장을 유지함"
     : "중복 연결어·수식어만 줄이고 관찰 사실·성장 표현·문장 수는 삭제하지 않음";
-  return `현재 ${plan.bytes}바이트이므로 후보 1은 ${targets[0]}바이트, 후보 2는 ${targets[1]}바이트를 각각 목표로 함. ${location} 한글 약 ${plan.syllables}음절(${Math.abs(plan.byteDelta)}바이트 안팎)만 ${action}함. ${editScope}. 문장 전체를 다시 쓰거나 순서를 바꾸지 말고, 각 후보를 직전 본문과 대조한 뒤 UTF-8 바이트를 다시 계산함. 모든 문장은 마침표 직전 글자가 받침 ㅁ인 ‘음/임/함/됨’ 형태인지 확인하고 500~600바이트 범위에 들어오면 더 수정하지 않음`;
+  return `현재 ${plan.bytes}바이트이며 후보별 참고 목표는 ${targets[0]}·${targets[1]}바이트임. ${editScope}. 길이를 맞추기 위해 추상적인 성장 표현이나 같은 의미를 덧붙이지 않음. 기존 사실과 순서를 유지하며 필요한 부분만 수정하고 문장 호응과 자연스러운 명사형 서술어의 완결성을 확인함. 500~600바이트 범위에 들어오면 길이를 더 수정하지 않음`;
 }
