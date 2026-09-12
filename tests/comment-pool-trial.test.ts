@@ -4,6 +4,14 @@ import { readFileSync } from 'node:fs';
 import { trialAccess, POOL_TRIAL, claimAndRunTrial } from '../app/comment-pool-trial.ts';
 import { trialResponse } from '../app/comment-pool-trial-response.ts';
 const now = Date.parse('2026-09-12T00:00:00+09:00');
+test('response respects Accept exclusions, weights and case', () => {
+  for (const accept of ['application/json, text/html;q=0', 'text/html;q=0.5, application/json', '*/*', 'text/html;q=0, */*;q=1']) {
+    assert.match(trialResponse({}, 200, accept).headers.get('content-type')!, /application\/json/);
+  }
+  for (const accept of ['TEXT/HTML', 'text/html;q=0.9, application/json;q=0.5', 'text/html, */*;q=0.8']) {
+    assert.match(trialResponse({}, 200, accept).headers.get('content-type')!, /text\/html/);
+  }
+});
 test('form results render safe HTML, while API results retain JSON', async () => {
   const payload = { candidates: ['<script>alert(1)</script>'], before: ['기존 문장임.'], elapsedMs: 8000 };
   const html = trialResponse(payload, 200, 'text/html,application/xhtml+xml');

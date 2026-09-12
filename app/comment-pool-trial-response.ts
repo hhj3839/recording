@@ -5,7 +5,21 @@ const escapeHtml = (value: string) => value.replace(/[&<>"']/g, (c) => ({
 // Native form submissions need a document, not an unhandled JSON navigation.
 // API clients still receive JSON. Neither rendering path runs or saves anything.
 export function trialResponse(value: unknown, status = 200, accept = '') {
-  if (!accept.includes('text/html')) return Response.json(value, {status, headers: {'Cache-Control':'no-store'}});
+  const ranges = accept.toLowerCase().split(',').map((entry) => {
+    const [type, ...params] = entry.trim().split(';');
+    const weight = params.map((p) => p.trim()).find((p) => p.startsWith('q='));
+    const q = weight === undefined ? 1 : Number(weight.slice(2));
+    return { type: type.trim(), q: Number.isFinite(q) && q >= 0 && q <= 1 ? q : 0 };
+  });
+  const quality = (type: string) => {
+    const match = ranges.find((r) => r.type === type)
+      ?? ranges.find((r) => r.type === `${type.split('/')[0]}/*`)
+      ?? ranges.find((r) => r.type === '*/*');
+    return match?.q ?? 0;
+  };
+  const htmlPreferred = ranges.some((r) => r.type === 'text/html')
+    && quality('text/html') > 0 && quality('text/html') >= quality('application/json');
+  if (!htmlPreferred) return Response.json(value, {status, headers: {'Cache-Control':'no-store'}});
   const data = value as { error?: string; candidates?: string[]; before?: string[]; elapsedMs?: number; usage?: unknown; estimatedCostUsd?: number };
   const list = (items: string[] = []) => `<ol>${items.map((s) => `<li>${escapeHtml(s)}</li>`).join('')}</ol>`;
   const body = data.error ? `<p role="alert">${escapeHtml(data.error)}</p>` :
