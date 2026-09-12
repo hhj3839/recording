@@ -30,7 +30,7 @@ export function behaviorRepairInstruction(bytes: number) {
   const plan = behaviorRepairPlan(bytes);
   const targets = behaviorRepairTargets(bytes);
   if (plan.direction === "none") {
-    return `현재 ${plan.bytes}바이트로 500~600바이트 기준을 충족하므로 문장 수·순서·길이와 핵심 사실을 유지하고, 다른 검수 오류가 있을 때만 같은 의미의 표현으로 최소 교체함. 모든 문장은 마침표 직전 글자가 받침 ㅁ인 ‘음/임/함/됨’ 형태인지 확인함`;
+    return `현재 ${plan.bytes}바이트로 500~600바이트 기준을 충족하므로 문장 수·순서·길이와 핵심 사실을 유지하고, 다른 검수 오류가 있을 때만 같은 의미의 표현으로 최소 교체함. 문장 호응과 자연스러운 명사형 서술어의 완결성을 확인하고 명사만 남은 종결이나 의미가 겹치는 추상적 표현을 관찰 사실을 유지하며 다듬음`;
   }
   const editScope = plan.direction === "add"
     ? "입력에 명시된 관찰 사실 중 빠진 내용만 보완하고, 근거가 부족하면 짧더라도 기존 문장을 유지함"

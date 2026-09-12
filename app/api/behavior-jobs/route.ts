@@ -43,7 +43,7 @@ export async function POST(request: Request) {
     if (!Array.isArray(body.students)) return Response.json({ error: "학생 특성을 다시 확인해 주세요." }, { status: 400 });
     const options: BehaviorOptions = {
       sentenceCount: 0,
-      maxBytes: 550,
+      maxBytes: 600,
       emphasis: "balanced",
     };
     const inputs: BehaviorInput[] = body.students.flatMap((item) => {
