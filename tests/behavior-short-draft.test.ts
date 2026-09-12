@@ -21,7 +21,9 @@ test('generation and repair guidance agree with short draft persistence', () => 
 test('generation asks for complete predicates and meaning-preserving self-review', () => {
   const source = readFileSync(new URL('../app/behavior-generation.ts', import.meta.url), 'utf8');
   assert.match(source, /각 문장이 행동이나 상태를 서술하는 완결된 문장인지 확인/);
-  assert.match(source, /명사만 남은 종결과 의미가 겹치는 추상적 표현은 관찰 사실을 유지하며 자연스럽게 고친다/);
+  assert.match(source, /명사만 남은 종결과 의미가 겹치는 추상적 표현은 입력에 있는 구체적인 행동이나 상태를 서술하도록 고친다/);
+  assert.match(source, /이미 수행한 행동을 단순한 의지나 노력으로 약화하지 않고/);
+  assert.match(source, /노력 중인 행동을 완료한 성과로 높이지 않으며 관찰된 수행 정도를 유지한다/);
 });
 
 // Human quality-review fixtures: regex does not certify grammar or naturalness.
