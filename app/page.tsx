@@ -1520,7 +1520,7 @@ function Comments({ assessmentDataBySubject, plan, roster }: { assessmentDataByS
       <div className="page-heading comments-page-heading">
         <div><p className="eyebrow">작성 결과</p><h1>교과 평어</h1><p>평가수준 입력을 마친 과목부터 학생별 평어를 생성할 수 있습니다.</p></div>
         <div className="subject-generation-controls">
-          <div><span>{formattedLastGeneratedAt ? `마지막 생성 ${formattedLastGeneratedAt}` : "생성 기록 없음"}</span><strong>{eligibleCount}명 중 {completedCount}명 생성 완료</strong></div>
+          <div><span>{formattedLastGeneratedAt ? `마지막 생성 ${formattedLastGeneratedAt}` : "생성 기록 없음"}</span><strong>{eligibleCount === 0 ? "평가수준을 먼저 입력하세요." : `${eligibleCount}명 중 ${completedCount}명 생성 완료`}</strong></div>
           <button className="subject-generate-button" onClick={openSubjectGenerationDialog} disabled={loading || !eligibleCount}>{selectedSubjectIsGenerating ? generationProgress || `${selectedSubject} 생성 중…` : `✦ ${selectedSubject} 평어 생성`}</button>
           <button className="secondary result-copy-button" onClick={() => void copySubjectComments()} disabled={!roster.some((student) => comments[`${student.id}|${selectedSubject}`])}>{copied ? "복사됨 ✓" : "평어만 복사하기"}</button>
           <button className="subject-reset-button" title="학생 명단·평가계획·평가수준은 유지하고 현재 과목의 생성된 평어만 초기화합니다." onClick={() => void clearSubjectComments()} disabled={loading || !completedCount}><span aria-hidden="true">↺</span>{selectedSubject} 결과 초기화</button>
@@ -1843,16 +1843,12 @@ function Behavior({ roster }: { roster: AssessmentStudent[] }) {
                   ...(!validation.spellingOk ? validation.spellingIssues.map((issue) => `맞춤법: ${issue}`) : []),
                   ...(validation.repeated.length > 0 ? ["반복 표현 확인"] : []),
                 ] : [];
-                const preferredLengthAdvisory = record.behavior && validation.bytes > 550 && validation.bytes <= 600
-                  ? `권장 550B 초과 · 현재 ${validation.bytes}B`
-                  : "";
                 return <tr className={activeStudentId === student.id ? "active-reference-row" : ""} key={student.id}>
                   <td>{student.number ?? student.id}</td><td><strong>{student.name}</strong></td>
                   <td className="behavior-source-pane"><textarea className={sourceIssues.length ? "input-blocked" : ""} value={record.characteristic} onFocus={() => setActiveStudentId(student.id)} onChange={(event) => updateRecord(student.id, { characteristic: event.target.value })} onBlur={() => void saveRecord(student.id, records[student.id] ?? record)} placeholder={"관찰한 내용을 키워드·메모·문장 중 편한 방식으로 작성하세요.\n예: 질문을 자주 함 · 친구 말을 잘 들어줌 · 맡은 역할을 끝까지 함 · 발표에 자신감이 생김"} />{sourceIssues.length > 0 && <small className="source-warning">AI 전송 불가: {sourceIssues.join(" · ")}</small>}</td>
                   <td className="behavior-result-pane"><textarea value={record.behavior} onChange={(event) => updateRecord(student.id, { behavior: event.target.value })} onBlur={() => void saveRecord(student.id, records[student.id] ?? record)} placeholder={record.characteristic ? "행동특성을 생성하면 이곳에 결과가 표시됩니다." : "왼쪽에 관찰 키워드나 메모를 먼저 입력해 주세요."} /></td>
                   <td className="validation-cell behavior-validation issue-only-validation behavior-review-cell">
                     <ReviewWarning issues={behaviorReviewIssues} />
-                    {preferredLengthAdvisory && <small className="behavior-length-advisory">{preferredLengthAdvisory}</small>}
                     {similarStudents.length > 0 && closest && <div className="similarity-detail"><strong>{closest.student.name} 학생과 {Math.round(closest.score * 100)}%</strong>{closest.overlaps.length > 0 && <span>겹치는 표현: {closest.overlaps.join(" · ")}</span>}</div>}
                   </td>
                 </tr>;

@@ -1642,8 +1642,8 @@ test("turns behavior byte gaps into concrete Korean syllable repair instructions
   assert.deepEqual(behaviorRepairPlan(625), {
     bytes: 625, targetBytes: 570, byteDelta: -55, syllables: 18, direction: "remove",
   });
-  assert.match(behaviorRepairInstruction(495), /후보 1은 515바이트, 후보 2는 540바이트.*약 12음절.*35바이트.*추가/);
-  assert.match(behaviorRepairInstruction(625), /후보 1은 585바이트, 후보 2는 560바이트.*약 18음절.*55바이트.*삭제/);
+  assert.match(behaviorRepairInstruction(495), /참고 목표는 515·540바이트/);
+  assert.match(behaviorRepairInstruction(625), /참고 목표는 585·560바이트/);
   assert.match(behaviorRepairInstruction(525), /기준을 충족.*길이와 핵심 사실을 유지/);
 });
 
@@ -1675,9 +1675,11 @@ test("keeps behavior repair targets stable across byte boundaries and large miss
 
 test("limits behavior length repair to fact-preserving local edits", () => {
   const shortInstruction = behaviorRepairInstruction(495);
-  assert.match(shortInstruction, /이미 언급된 행동의 방법·과정만 구체화/);
-  assert.match(shortInstruction, /새 활동·인물·성과·태도는 만들지 않음/);
-  assert.match(shortInstruction, /문장 전체를 다시 쓰거나 순서를 바꾸지 말고/);
+  assert.match(shortInstruction, /입력에 명시된 관찰 사실 중 빠진 내용만 보완/);
+  assert.match(shortInstruction, /근거가 부족하면 짧더라도 기존 문장을 유지/);
+  assert.match(shortInstruction, /기존 사실과 순서를 유지/);
+  assert.doesNotMatch(shortInstruction, /음절|구체화/);
+  assert.match(shortInstruction, /추상적인 성장 표현이나 같은 의미를 덧붙이지 않음/);
 
   const longInstruction = behaviorRepairInstruction(625);
   assert.match(longInstruction, /중복 연결어·수식어만 줄이고/);

@@ -1,4 +1,12 @@
 import { validateRecord } from "./record-validation.ts";
+import type { ValidationResult } from "./record-validation.ts";
+
+// Length remains a UI warning; only short, otherwise passing drafts are accepted.
+export function canPersistBehaviorDraft(validation: ValidationResult) {
+  return validation.valid || (validation.bytes > 0 && validation.bytes < 500
+    && validation.sentenceCountOk && validation.endingsOk && validation.spellingOk
+    && !validation.forbidden.length && !validation.styleIssues.length && !validation.repeated.length);
+}
 
 export type StrictBehaviorCandidate = { studentId: number; behavior: string };
 
@@ -11,12 +19,14 @@ export function selectBehaviorCandidate(candidates: unknown[]) {
       !validation.forbidden.length, !validation.styleIssues.length, !validation.repeated.length]
       .filter((passed) => !passed).length;
     return { behavior, validation, score: nonLengthFailures * 10_000 + byteDistance };
-  }).sort((left, right) => Number(right.validation.valid) - Number(left.validation.valid) || left.score - right.score);
+  }).sort((left, right) => Number(right.validation.valid) - Number(left.validation.valid)
+    || Number(canPersistBehaviorDraft(right.validation)) - Number(canPersistBehaviorDraft(left.validation))
+    || left.score - right.score);
   return ranked[0] ?? null;
 }
 
 export function assertStrictGeneratedBehaviors<T extends StrictBehaviorCandidate>(behaviors: T[]) {
-  const invalid = behaviors.filter((item) => !validateRecord(item.behavior, true).valid);
+  const invalid = behaviors.filter((item) => !canPersistBehaviorDraft(validateRecord(item.behavior, true)));
   if (invalid.length) {
     throw new Error(`엄격 검수를 통과하지 못한 행동특성은 저장할 수 없습니다: ${invalid.map((item) => item.studentId).join(", ")}`);
   }
