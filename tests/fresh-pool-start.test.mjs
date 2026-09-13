@@ -3,12 +3,16 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 
 const source = readFileSync(new URL('../app/page.tsx', import.meta.url), 'utf8');
+const dialog = readFileSync(new URL('../app/fresh-pool-dialog.tsx', import.meta.url), 'utf8');
 const start = source.slice(source.indexOf('const startPoolProduction ='), source.indexOf('const resetPoolLinks ='));
 
 test('fresh production uses page confirmation, not unsupported browser dialogs', () => {
   assert.doesNotMatch(start, /window\.(prompt|confirm)/);
-  assert.match(source, /aria-label="전체 새로 제작 확인"/);
-  assert.match(source, /유료 전체 새 제작 시작/);
+  assert.match(dialog, /aria-label="전체 새로 제작 확인"/);
+  assert.match(dialog, /dialog\?\.showModal\(\)/);
+  assert.match(dialog, /제작 시작 중…/);
+  assert.match(dialog, /role="alert"/);
+  assert.match(dialog, /if \(!busy\) onCancel\(\)/);
   assert.match(start, /fullRefresh: true, sharedPlanName/);
 });
 

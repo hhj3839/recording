@@ -64,11 +64,12 @@ function queueRunner(request: Request, jobId: string) {
 }
 
 function publicJob(job: Record<string, unknown>) {
-  const batches = Array.isArray(job.batches) ? job.batches as Array<{ spec?: { subject?: string; domain?: string; level?: string } }> : [];
+  const batches = Array.isArray(job.batches) ? job.batches as Array<{ freshOnly?: boolean; spec?: { subject?: string; domain?: string; level?: string } }> : [];
   const current = batches[Math.max(0, Number(job.current_batch) || 0)]?.spec;
   return {
     id: String(job.id), status: String(job.status), completed: Number(job.completed_items), total: Number(job.total_items),
     failed: Number(job.failed_items), error: String(job.error_message ?? ""),
+    freshOnly: batches.length > 0 && batches.every(batch => batch.freshOnly),
     current: current ? { subject: String(current.subject ?? ""), domain: String(current.domain ?? ""), level: String(current.level ?? "") } : null,
   };
 }
@@ -121,6 +122,26 @@ export async function GET(request: Request) {
       linkedVersions(user.id, classId),
     ]);
     const { links, versionById } = linked;
+    const activeJob = (await selectRows<Record<string, unknown>>("generation_jobs", {
+      owner_id: eq(user.id), class_id: eq(classId), job_type: eq("comment-pools"), status: "in.(queued,running)", order: "updated_at.desc", limit: 1,
+    }))[0];
+    if (activeJob) queueRunner(request, String(activeJob.id));
+    const freshBatches = activeJob && Array.isArray(activeJob.batches) && activeJob.batches.length > 0
+      && activeJob.batches.every((batch: { freshOnly?: boolean }) => batch.freshOnly)
+      ? activeJob.batches as Array<{ spec: CommentPoolSpec; poolVersionId: number }> : null;
+    if (freshBatches) {
+      // Display this run only; never fall back to old linked versions while refreshing.
+      versionById.clear();
+      links.length = 0;
+      const ids = freshBatches.map(batch => Number(batch.poolVersionId)).filter(Number.isInteger);
+      const versions = ids.length ? await selectRows<PoolVersionRow>("comment_pool_versions", { id: inValues(ids), created_by: eq(user.id) }) : [];
+      versions.forEach(version => versionById.set(Number(version.id), version));
+      freshBatches.forEach(batch => {
+        if (specs.some(spec => spec.assessmentPlanId === batch.spec.assessmentPlanId && spec.fingerprint === batch.spec.fingerprint)) {
+          links.push({ assessment_plan_id: batch.spec.assessmentPlanId, pool_version_id: Number(batch.poolVersionId) });
+        }
+      });
+    }
     const sentencesByVersion = await approvedSentencesByVersion([...versionById.keys()]);
     const linkedVersionFor = (spec: (typeof specs)[number]) => links
       .filter((link) => Number(link.assessment_plan_id) === spec.assessmentPlanId)
@@ -174,10 +195,6 @@ export async function GET(request: Request) {
         warnings: detailWarnings[index] ?? [],
       }))
       : [];
-    const activeJob = (await selectRows<Record<string, unknown>>("generation_jobs", {
-      owner_id: eq(user.id), class_id: eq(classId), job_type: eq("comment-pools"), status: "in.(queued,running)", order: "updated_at.desc", limit: 1,
-    }))[0];
-    if (activeJob) queueRunner(request, String(activeJob.id));
     const latestJob = activeJob ?? (await selectRows<Record<string, unknown>>("generation_jobs", {
       owner_id: eq(user.id), class_id: eq(classId), job_type: eq("comment-pools"), order: "updated_at.desc", limit: 1,
     }))[0];
