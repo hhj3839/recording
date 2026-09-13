@@ -1,4 +1,5 @@
 import { dataError, getDataScope } from "../../data-scope";
+import { hasAbilityStatement } from "../../ability-statement-policy";
 import { checkAiUsage, recordAiUsage } from "../../ai-usage";
 import { createCommentVariations } from "../../comment-variation";
 import { eq, selectRows } from "../../../db/supabase";
@@ -138,6 +139,7 @@ export async function POST(request: Request) {
       }) : [];
       const sentencesByVersion = new Map<number, string[]>();
       for (const row of sentences) {
+        if (hasAbilityStatement(row.sentence ?? "")) continue;
         const values = sentencesByVersion.get(Number(row.pool_version_id)) ?? [];
         if (row.sentence) values.push(row.sentence);
         sentencesByVersion.set(Number(row.pool_version_id), values);
@@ -243,6 +245,7 @@ export async function POST(request: Request) {
       ? normalizeGeneratedCommentWhitespace(rawGeneratedText)
       : rawGeneratedText;
     if (!generatedText) return Response.json({ error: "AI가 문장을 반환하지 않았습니다. 다시 시도해 주세요." }, { status: 502 });
+    if (hasAbilityStatement(generatedText)) return Response.json({ error: "가능·능력 표현 후보를 제외하여 미완료입니다. 자동 재호출은 하지 않습니다.", code: "CANDIDATE_EXCLUDED" }, { status: 422 });
     if (mode === "regenerate") {
       const sentences = generatedText.split(/(?<=\.)\s+/).map((sentence) => sentence.trim()).filter(Boolean);
       const formatsOk = sentences.length === activeEvidenceCount && sentences.every((sentence, index) => {

@@ -1,4 +1,5 @@
 import { waitUntil } from "@vercel/functions";
+import { ABILITY_STATEMENT_ISSUE, hasAbilityStatement } from "../../../ability-statement-policy";
 import { eq, selectRows, supabaseRequest, updateRows, upsertRows } from "../../../../db/supabase";
 import { approvePoolCandidates, commentPoolIsComplete, commentPoolQuality, COMMENT_POOL_TARGET, normalizedPoolSentence, type CommentPoolSpec } from "../../../comment-pool-library";
 import { signCommentJob, verifyCommentJob } from "../../../comment-generation";
@@ -89,14 +90,15 @@ export async function POST(request: Request) {
     const rows = await selectRows<{ sentence: string }>("comment_pool_sentences", {
       pool_version_id: eq(batch.poolVersionId), status: eq("approved"), order: "id.asc",
     });
-    const existing = rows.map((row) => row.sentence);
+    const existing = rows.map((row) => row.sentence).filter((sentence) => !hasAbilityStatement(sentence));
     approved = [...existing];
     // Preserve saved candidates; every new candidate comes from AI, including resume jobs.
     const maxAttempts = Number.isInteger(batch.maxAttempts) ? Math.max(0, Math.min(2, Number(batch.maxAttempts))) : 2;
     for (let attempt = 0; attempt < maxAttempts && approved.length < COMMENT_POOL_TARGET; attempt += 1) {
       const requestCount = COMMENT_POOL_TARGET - approved.length;
       const generated = await generateCandidates(batch.spec, approved, requestCount);
-      const selected = approvePoolCandidates(generated.candidates, batch.spec, approved).approved
+      const review = approvePoolCandidates(generated.candidates, batch.spec, approved);
+      const selected = review.approved
         .slice(0, COMMENT_POOL_TARGET - approved.length);
       if (selected.length) {
         await upsertRows("comment_pool_sentences", selected.map((sentence) => ({
@@ -106,6 +108,7 @@ export async function POST(request: Request) {
         approved = [...approved, ...selected].slice(0, COMMENT_POOL_TARGET);
       }
       await recordAiUsage({ ownerId: job.owner_id, ownerEmail: job.owner_email, classId: Number(job.class_id), feature: `comment-pool-attempt-${attempt + 1}`, ...generated.usage });
+      if (review.rejectedIssues.includes(ABILITY_STATEMENT_ISSUE)) break;
     }
     const quality = commentPoolQuality(approved, batch.spec.canonicalSentence);
     const complete = commentPoolIsComplete(approved, batch.spec.canonicalSentence);

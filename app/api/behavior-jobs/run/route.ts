@@ -1,4 +1,5 @@
 import { waitUntil } from "@vercel/functions";
+import { ABILITY_STATEMENT_ISSUE } from "../../../ability-statement-policy";
 import { eq, selectRows, updateRows } from "../../../../db/supabase";
 import { getAiUsage, MONTHLY_AI_LIMIT, recordAiUsage } from "../../../ai-usage";
 import { BehaviorInput, GeneratedBehavior, generateBehaviorBatch, saveGeneratedBehaviors } from "../../../behavior-generation";
@@ -81,8 +82,9 @@ export async function POST(request: Request) {
           ].filter(Boolean).join(" ").slice(-1800);
         }
         const generatedIds = new Set(generated.behaviors.map((item) => item.studentId));
+        const excludedIds = new Set(generated.failures.filter((item) => item.issues.includes(ABILITY_STATEMENT_ISSUE)).map((item) => item.studentId));
         pending = pending
-          .filter((item) => !generatedIds.has(item.studentId))
+          .filter((item) => !generatedIds.has(item.studentId) && !excludedIds.has(item.studentId))
           .map((item) => {
             const failure = generated.failures.find((candidate) => candidate.studentId === item.studentId);
             return failure ? {
@@ -115,7 +117,7 @@ export async function POST(request: Request) {
   const returned = new Set(behaviors.map((item) => item.studentId));
   const failedInBatch = batch.filter((item) => !returned.has(item.studentId)).length;
   if (failedInBatch) {
-    const detail = `행동특성 배치 ${batchIndex + 1}: ${failedInBatch}명이 ${MAX_GENERATION_ATTEMPTS}회 생성 후에도 검수를 통과하지 못했습니다. 저장된 다른 학생 결과는 유지됩니다.`;
+    const detail = `행동특성 배치 ${batchIndex + 1}: ${failedInBatch}명이 검수를 통과하지 못해 미완료입니다. 저장된 다른 학생 결과는 유지됩니다.`;
     errorMessage = [job.error_message, errorMessage, detail].filter(Boolean).join(" ").slice(-1800);
   }
   const nextBatch = batchIndex + 1;

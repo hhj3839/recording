@@ -1,8 +1,8 @@
 import { waitUntil } from "@vercel/functions";
+import { hasAbilityStatement } from "../../../ability-statement-policy";
 import { eq, selectRows, updateRows } from "../../../../db/supabase";
 import { selectMostDiverseComments } from "../../../comment-diversity";
 import { CommentEvidence, GeneratedComment, GeneratedCommentPart, saveGeneratedCommentParts, saveGeneratedComments, signCommentJob, verifyCommentJob } from "../../../comment-generation";
-import { assignApprovedCommentPools } from "../../../comment-pool-generation";
 import { COMMENT_POOL_TARGET } from "../../../comment-pool-library";
 import { assembleRotatedComment } from "../../../comment-assembly";
 
@@ -84,6 +84,7 @@ export async function POST(request: Request) {
     owner_id: eq(job.owner_id), class_id: eq(job.class_id), subject: eq(subject),
   }) : [];
   for (const saved of savedParts) {
+    if (hasAbilityStatement(saved.sentence ?? "")) continue;
     if (!batchStudentIds.has(Number(saved.student_id)) || !["complete", "warning"].includes(saved.status) || !saved.sentence) continue;
     const studentEvidence = batch.find((item) => item.studentId === Number(saved.student_id));
     if (studentEvidence?.forceRegenerateItems === true
@@ -126,6 +127,7 @@ export async function POST(request: Request) {
   const versionByFingerprint = new Map(poolVersions.map((pool) => [pool.fingerprint, Number(pool.id)]));
   const sentencesByVersion = new Map<number, string[]>();
   for (const row of poolSentences) {
+    if (hasAbilityStatement(row.sentence ?? "")) continue;
     const sentences = sentencesByVersion.get(Number(row.pool_version_id)) ?? [];
     if (row.sentence && sentences.length < COMMENT_POOL_TARGET) sentences.push(row.sentence);
     sentencesByVersion.set(Number(row.pool_version_id), sentences);
@@ -163,25 +165,8 @@ export async function POST(request: Request) {
     return missingItems.length ? [{ ...item, items: missingItems }] : [];
   });
 
-  // 모든 문장 풀 생성·검수 뒤에도 후보가 0개인 그룹만 평가기준에서 만든
-  // 기준문장으로 채운다. 다양성보다 완전성을 우선하여 빈칸은 남기지 않는다.
-  const fallbackParts: Array<GeneratedCommentPart & { attempts: number; status: "warning"; issues: string[] }> = [];
-  for (const fallback of assignApprovedCommentPools(pending)) {
-    const key = `${fallback.studentId}|${fallback.subject}|${fallback.assessmentIndex}`;
-    if (generatedParts.has(key)) continue;
-    const warning = "검증된 문장 풀 후보가 없어 평가기준 문장을 재사용함";
-    const reused = { ...fallback, warnings: [warning] };
-    generatedParts.set(key, reused);
-    fallbackParts.push({ ...reused, attempts: 1, status: "warning", issues: [warning] });
-  }
-  if (fallbackParts.length) {
-    await saveGeneratedCommentParts({
-      ownerId: job.owner_id,
-      ownerEmail: job.owner_email,
-      classId: Number(job.class_id),
-      parts: fallbackParts,
-    });
-  }
+  // 승인 후보가 없는 영역은 아래 unresolvedParts에서 미완료로 기록한다.
+  // 평가기준 문장을 대신 삽입하거나 이 단계에서 유료 생성을 호출하지 않는다.
 
   comments = batch.flatMap((item) => {
     const available = (item.subjectItems ?? item.items).flatMap((evidenceItem) => {

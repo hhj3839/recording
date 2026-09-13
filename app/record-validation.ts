@@ -1,3 +1,5 @@
+import { ABILITY_STATEMENT_ISSUE, hasAbilityStatement } from "./ability-statement-policy.ts";
+
 export type ValidationResult = {
   bytes: number;
   lengthOk: boolean;
@@ -68,6 +70,7 @@ export function validateRecord(text: string, behavior = false): ValidationResult
     ? behaviorStyleRules.filter((rule) => rule.pattern.test(normalized)).map((rule) => rule.message)
     : [];
   const counts = new Map<string, number>();
+  if (hasAbilityStatement(normalized)) styleIssues.push(ABILITY_STATEMENT_ISSUE);
   sentences.forEach((sentence) => {
     const key = sentence.replace(/[.!?\s]/g, "");
     counts.set(key, (counts.get(key) ?? 0) + 1);
