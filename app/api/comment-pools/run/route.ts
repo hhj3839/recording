@@ -85,6 +85,7 @@ export async function POST(request: Request) {
   let failed = false;
   let errorMessage = "";
   let approved: string[] = [];
+  const rejectionReasons = new Set<string>();
   try {
     await updateRows("comment_pool_versions", { id: eq(batch.poolVersionId) }, { status: "generating", updated_at: new Date().toISOString() });
     const rows = await selectRows<{ sentence: string }>("comment_pool_sentences", {
@@ -95,9 +96,12 @@ export async function POST(request: Request) {
     // Preserve saved candidates; every new candidate comes from AI, including resume jobs.
     const maxAttempts = Number.isInteger(batch.maxAttempts) ? Math.max(0, Math.min(3, Number(batch.maxAttempts))) : 2;
     for (let attempt = 0; attempt < maxAttempts && approved.length < COMMENT_POOL_TARGET; attempt += 1) {
-      const requestCount = COMMENT_POOL_TARGET - approved.length;
+      const requestCount = Math.max(3, COMMENT_POOL_TARGET - approved.length);
       const generated = await generateCandidates(batch.spec, approved, requestCount);
       const review = approvePoolCandidates(generated.candidates, batch.spec, approved);
+      review.rejectedIssues.forEach(issue => rejectionReasons.add(issue));
+      if (!generated.candidates.length) rejectionReasons.add("AI 응답에 후보 문장이 없음");
+      if (generated.candidates.length > 0 && !review.approved.length && !review.rejectedIssues.length) rejectionReasons.add("기존 승인 문장과 완전 중복");
       const selected = review.approved
         .slice(0, COMMENT_POOL_TARGET - approved.length);
       if (selected.length) {
@@ -134,7 +138,7 @@ export async function POST(request: Request) {
     failed = !complete;
     if (failed) errorMessage = batch.activateWhenReady
       ? approved.length > 0
-        ? `${batch.spec.subject} ${batch.spec.domain} ${batch.spec.level} 수준의 정상 문장 ${approved.length}개를 사용할 수 있습니다. 목표 ${COMMENT_POOL_TARGET}개까지는 이어서 제작이 필요합니다.`
+        ? `${batch.spec.subject} ${batch.spec.domain} ${batch.spec.level} 수준의 정상 문장 ${approved.length}개를 사용할 수 있습니다. 목표 ${COMMENT_POOL_TARGET}개까지는 이어서 제작이 필요합니다.${rejectionReasons.size ? " 제외 사유: " + [...rejectionReasons].join(" · ") : ""}`
         : `${batch.spec.subject} ${batch.spec.domain} ${batch.spec.level} 수준의 승인 문장을 확보하지 못해 기존 문장 풀을 유지했습니다. (${quality.issues.join(" · ")})`
       : `${batch.spec.subject} ${batch.spec.domain} ${batch.spec.level} 수준의 승인 문장을 확보하지 못했습니다.`;
   } catch (error) {

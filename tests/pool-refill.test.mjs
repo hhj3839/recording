@@ -7,6 +7,9 @@ test('pool refill preserves accepted candidates and retries only the shortage', 
   assert.match(runner, /approvePoolCandidates\(rows.map/);
   assert.match(runner, /Math.min\(3, Number\(batch.maxAttempts\)\)/);
   assert.match(runner, /COMMENT_POOL_TARGET - approved.length/);
+  assert.match(runner, /Math.max\(3, COMMENT_POOL_TARGET - approved.length\)/);
+  assert.match(runner, /review.rejectedIssues.forEach/);
+  assert.match(runner, /기존 승인 문장과 완전 중복/);
   assert.match(runner, /generateCandidates\(batch.spec, approved, requestCount\)/);
   assert.doesNotMatch(runner, /rejectedIssues.includes.*break/);
   assert.match(runner, /failed = !complete/);
