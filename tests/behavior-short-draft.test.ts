@@ -5,6 +5,15 @@ import { validateRecord } from '../app/record-validation.ts';
 import { canPersistBehaviorDraft, assertStrictGeneratedBehaviors, selectBehaviorCandidate } from '../app/behavior-persistence-policy.ts';
 import { behaviorRepairInstruction } from '../app/behavior-repair-policy.ts';
 
+test('behavior prompt requests ham endings while retaining growth and diversity', () => {
+  const source = readFileSync(new URL('../app/behavior-generation.ts', import.meta.url), 'utf8');
+  assert.ok(source.includes("모든 문장은 ‘참여함.’, ‘실천함.’, ‘표현함.’처럼 ‘~함.’으로 끝낸다."));
+  assert.ok(source.includes("‘~할 수 있음.’ 같은 가능 표현 대신 입력에 나타난 행동이나 성장 모습을 서술한다."));
+  assert.match(source, /variation의 문장 구조·시작 방식·특성 순서를 따르고/);
+  assert.match(source, /관찰된 수행 정도를 유지한다/);
+  assert.doesNotMatch(source, /‘향상됨\.’, ‘돋보임\.’처럼/);
+});
+
 test('generation and repair guidance agree with short draft persistence', () => {
   const source = readFileSync(new URL('../app/behavior-generation.ts', import.meta.url), 'utf8');
   const route = readFileSync(new URL('../app/api/behavior-jobs/route.ts', import.meta.url), 'utf8');
