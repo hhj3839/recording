@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { FreshPoolDialog } from "./fresh-pool-dialog";
+import { PoolRecoveryNotice } from "./pool-recovery-notice";
 import { recordSimilarityDetails, validateBehaviorSource, validateRecord } from "./record-validation";
 import { parseStudentRosterText } from "./student-roster-parser";
 import { parseAssessmentPlanText } from "./assessment-plan-parser";
@@ -1001,6 +1002,7 @@ function PlanManager({ plan, onChanged, current }: { plan: AssessmentPlan[]; onC
   const sharedYears = [...new Set(sharedPlans.map((item) => item.schoolYear))].sort((a, b) => b - a);
   const sharedSubjects = [...new Set(sharedPlans.flatMap((item) => item.subjects))].sort((a, b) => a.localeCompare(b, "ko"));
   const activePoolJob = Boolean(poolJob && ["queued", "running"].includes(poolJob.status));
+  const showPoolRecovery = Boolean(!activePoolJob && poolJob && ["failed", "completed_with_errors"].includes(poolJob.status));
   const selectedPoolGroup = poolGroups.find((group) => group.fingerprint === selectedPoolFingerprint) ?? poolGroups[0];
   const selectedPoolWarningSentenceCount = poolGroupWarningSentenceCount(selectedPoolGroup, poolSentences);
   const orderedPoolSentences = [...poolSentences].sort((left, right) => {
@@ -1036,11 +1038,11 @@ function PlanManager({ plan, onChanged, current }: { plan: AssessmentPlan[]; onC
           {!(activePoolJob && poolJob?.freshOnly) && poolSummary.reviewCount > 0 && <span className="review-count">검수 제외 <b>{poolSummary.reviewCount}</b>문장</span>}
           {poolSummary.warningPools > 0 && <span className="diversity-warning">확인 필요</span>}
           {activePoolJob && poolJob ? <span className="pool-progress" role="status"><i aria-hidden="true" /> {poolJob.freshOnly ? "새 제작 " : ""}<b>{poolJob.completed}/{poolJob.total}</b> {poolJob.current ? `${poolJob.current.subject} · ${poolJob.current.domain} · ${poolJob.current.level} 제작·검수 중` : "제작 대기 중"}</span>
-            : poolSummary.needsGeneration > 0 ? <button className="pool-continue" disabled={poolBusy || !plan.length} onClick={() => void startPoolProduction()}>{poolBusy ? "제작 준비 중…" : poolSummary.ready === 0 ? "AI 평어 제작" : `${poolSummary.needsGeneration}개 이어서 제작`}</button>
+            : poolSummary.needsGeneration > 0 && !showPoolRecovery ? <button className="pool-continue" disabled={poolBusy || !plan.length} onClick={() => void startPoolProduction()}>{poolBusy ? "제작 준비 중…" : poolSummary.ready === 0 ? "AI 평어 제작" : `${poolSummary.needsGeneration}개 이어서 제작`}</button>
               : poolSummary.needsGeneration === 0 ? <span className="all-ready">전체 준비 완료</span> : null}
           {selectedPoolWarningSentenceCount > 0 && !activePoolJob && <button className="pool-remove-warnings" type="button" disabled={poolBusy || poolSentencesLoading} onClick={() => void excludeWarningPoolSentences()}>경고 문장 제거</button>}
         </div>}
-        {!activePoolJob && poolJob && ["failed", "completed_with_errors"].includes(poolJob.status) && <div className="ai-pool-job-error" role="alert"><b>최근 제작 작업에서 {poolJob.failed}개 항목을 완료하지 못했습니다.</b><span>{poolJob.error || "남은 항목은 이어서 제작할 수 있습니다."}</span>{poolJob.failed > 0 && <button disabled={poolBusy} onClick={() => void startPoolProduction(false, true)}>{poolJob.failed}개 이어서 제작</button>}</div>}
+        {showPoolRecovery && poolJob && <PoolRecoveryNotice count={poolJob.failed} error={poolJob.error} busy={poolBusy} onRetry={() => void startPoolProduction(false, Boolean(poolJob.freshOnly && poolJob.status === "completed_with_errors"))} />}
         {!!poolGroups.length && <div className="ai-pool-browser">
           <div className="ai-pool-selection-row"><label><span>과목·영역·수준</span><span className={`ai-pool-select-box${selectedPoolGroup?.qualityWarnings.length ? " has-warning" : ""}`}><select value={selectedPoolFingerprint} onChange={(event) => setSelectedPoolFingerprint(event.target.value)}>{poolGroups.map((group) => <option value={group.fingerprint} key={group.fingerprint}>{group.subject} · {group.domain} · {group.level} ({group.approvedCount}/{group.targetCount}){group.qualityWarnings.length ? " · 확인 필요" : group.reviewCount ? ` · 검토 ${group.reviewCount}` : ""}</option>)}</select>{selectedPoolGroup?.qualityWarnings.length > 0 && <button className="pool-warning-jump" type="button" disabled={poolSentencesLoading} onClick={() => firstPoolWarningRef.current?.scrollIntoView({ behavior: "smooth", block: "center" })}>⚠ {selectedPoolWarningSentenceCount > 0 ? `확인 필요 ${selectedPoolWarningSentenceCount}개` : "확인 필요 문장 있음"}</button>}</span></label></div>
           {selectedPoolGroup && <div className="ai-pool-quality" aria-label="선택 문장 풀 품질 지표">
