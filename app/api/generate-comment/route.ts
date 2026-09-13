@@ -1,5 +1,6 @@
 import { dataError, getDataScope } from "../../data-scope";
 import { hasAbilityStatement } from "../../ability-statement-policy";
+import { hasNaturalNominalEnding } from "../../comment-generation-policy";
 import { linkedCommentPools } from "../../linked-comment-pools";
 import { checkAiUsage, recordAiUsage } from "../../ai-usage";
 import { createCommentVariations } from "../../comment-variation";
@@ -148,6 +149,7 @@ export async function POST(request: Request) {
       const sentencesByVersion = new Map<number, string[]>();
       for (const row of sentences) {
         if (hasAbilityStatement(row.sentence ?? "")) continue;
+        if (!hasNaturalNominalEnding(row.sentence ?? "")) continue;
         const values = sentencesByVersion.get(Number(row.pool_version_id)) ?? [];
         if (row.sentence) values.push(row.sentence);
         sentencesByVersion.set(Number(row.pool_version_id), values);

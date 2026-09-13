@@ -1,6 +1,7 @@
 import { waitUntil } from "@vercel/functions";
 import { linkedCommentPools } from "../../../linked-comment-pools";
 import { hasAbilityStatement } from "../../../ability-statement-policy";
+import { hasNaturalNominalEnding } from "../../../comment-generation-policy";
 import { eq, selectRows, updateRows } from "../../../../db/supabase";
 import { selectMostDiverseComments } from "../../../comment-diversity";
 import { CommentEvidence, GeneratedComment, GeneratedCommentPart, saveGeneratedCommentParts, saveGeneratedComments, signCommentJob, verifyCommentJob } from "../../../comment-generation";
@@ -86,6 +87,7 @@ export async function POST(request: Request) {
   }) : [];
   for (const saved of savedParts) {
     if (hasAbilityStatement(saved.sentence ?? "")) continue;
+    if (!hasNaturalNominalEnding(saved.sentence ?? "")) continue;
     if (!batchStudentIds.has(Number(saved.student_id)) || !["complete", "warning"].includes(saved.status) || !saved.sentence) continue;
     const studentEvidence = batch.find((item) => item.studentId === Number(saved.student_id));
     if (studentEvidence?.forceRegenerateItems === true
@@ -135,6 +137,7 @@ export async function POST(request: Request) {
   const sentencesByVersion = new Map<number, string[]>();
   for (const row of poolSentences) {
     if (hasAbilityStatement(row.sentence ?? "")) continue;
+    if (!hasNaturalNominalEnding(row.sentence ?? "")) continue;
     const sentences = sentencesByVersion.get(Number(row.pool_version_id)) ?? [];
     if (row.sentence && sentences.length < COMMENT_POOL_TARGET) sentences.push(row.sentence);
     sentencesByVersion.set(Number(row.pool_version_id), sentences);
