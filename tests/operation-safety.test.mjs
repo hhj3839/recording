@@ -308,7 +308,7 @@ test("keeps isolated pool refresh safe without exposing a teacher-facing selecti
   assert.match(runner, /batch\.activateWhenReady && approved\.length > 0/);
   assert.match(runner, /upsertRows\("assessment_plan_pool_links"/);
   assert.match(runner, /method: "DELETE"[\s\S]*previousPoolVersionIds/);
-  assert.match(runner, /batch\.activateWhenReady \? !complete/);
+  assert.match(runner, /failed = !complete/);
   assert.doesNotMatch(page, /선택 풀 새로 제작/);
   assert.doesNotMatch(page, /targetFingerprints: \[selected\.fingerprint\], maxGroups: 1, refresh: true/);
 });
@@ -420,7 +420,7 @@ test("rejects retired canonical-only requests instead of silently charging for A
   const runner = readFileSync("app/api/comment-pools/run/route.ts", "utf8");
   assert.match(route, /if \(canonicalOnly\) \{[\s\S]*?status: 400/);
   assert.doesNotMatch(route, /maxAttempts: canonicalOnly/);
-  assert.match(runner, /Math\.max\(0, Math\.min\(2/);
+  assert.match(runner, /Math\.max\(0, Math\.min\(3/);
 });
 
 test("allows the signed comment-pool runner through the auth proxy", () => {
@@ -439,7 +439,7 @@ test("serializes comment-pool batches and caps every reusable pool at the curren
   assert.match(producer, /status: eq\("queued"\)/);
   assert.match(producer, /slice\(0, COMMENT_POOL_TARGET - approved\.length\)/);
   assert.match(poolApi, /limit: 500, offset/);
-  assert.match(poolApi, /rows.filter\(row => !hasAbilityStatement\(row.sentence\)\).slice\(0, COMMENT_POOL_TARGET - sentences.length\)/);
+  assert.match(poolApi, /rows.filter\(row => detailSpec && validatePoolCandidate\(row.sentence, detailSpec\).issues.length === 0\).slice\(0, COMMENT_POOL_TARGET - sentences.length\)/);
   assert.match(assignment, /sentences\.length < COMMENT_POOL_TARGET/);
 });
 
@@ -537,8 +537,8 @@ test("scopes fresh production to the current class and bounds calls, retaining t
   assert.doesNotMatch(runner, /source: "canonical"|approvePoolCandidates\(\[batch\.spec\.canonicalSentence\]/);
   const shared = readFileSync("app/api/shared-assessment-plans/route.ts", "utf8");
   assert.match(shared, /created_by: eq\(shared\.created_by\), status: eq\("ready"\)/);
-  assert.match(route, /maxAttempts: 2/);
-  assert.match(route, /maxAiCalls: batches\.length \* 2/);
+  assert.match(route, /maxAttempts: 3/);
+  assert.match(route, /maxAiCalls: batches\.length \* 3/);
   assert.match(route, /activateWhenReady: true/);
   assert.match(route, /previousPoolVersionIds/);
 });
@@ -565,7 +565,7 @@ test("retries only incomplete owned fresh batches from the latest classroom job"
   assert.match(retry, /source\.batches\.some\(batch => !batch\.freshOnly\)/);
   assert.match(retry, /!commentPoolIsComplete/);
   assert.match(retry, /batches\.length > Number\(source\.failed_items\)/);
-  assert.match(retry, /maxAttempts: 2/);
+  assert.match(retry, /maxAttempts: 3/);
   assert.doesNotMatch(retry, /insertRows.*comment_pool_versions|method: "DELETE"/);
 });
 

@@ -1,5 +1,4 @@
 import { waitUntil } from "@vercel/functions";
-import { hasAbilityStatement } from "../../ability-statement-policy";
 import { createHash } from "node:crypto";
 import { eq, insertRows, selectRows, supabaseRequest, upsertRows } from "../../../db/supabase";
 import { buildCommentPoolSpecs, commentPoolIsComplete, commentPoolQuality, commentPoolSentenceWarnings, COMMENT_POOL_GENERATOR_VERSION, COMMENT_POOL_TARGET, validatePoolCandidate, type CommentPoolSpec, type PoolPlanItem } from "../../comment-pool-library";
@@ -161,7 +160,7 @@ export async function GET(request: Request) {
         const rows = await selectRows<{ id: number; sentence: string }>("comment_pool_sentences", {
           pool_version_id: eq(detailVersion.id), status: eq("approved"), order: "id.asc", limit: 500, offset,
         });
-        sentences.push(...rows.filter(row => !hasAbilityStatement(row.sentence)).slice(0, COMMENT_POOL_TARGET - sentences.length));
+        sentences.push(...rows.filter(row => detailSpec && validatePoolCandidate(row.sentence, detailSpec).issues.length === 0).slice(0, COMMENT_POOL_TARGET - sentences.length));
         if (rows.length < 500) break;
       }
     }
@@ -278,7 +277,7 @@ export async function POST(request: Request) {
       const owned = await selectRows<{ id: number }>("comment_pool_versions", { id: inValues(ids), created_by: eq(user.id) });
       if (owned.length !== ids.length) return Response.json({ error: "재시도할 풀의 소유권을 확인하지 못했습니다." }, { status: 409 });
       const rows = await approvedPoolRows(ids);
-      const batches = source.batches.filter(batch => !commentPoolIsComplete(rows.filter(row => Number(row.pool_version_id) === batch.poolVersionId).map(row => row.sentence), batch.spec.canonicalSentence)).map(batch => ({ ...batch, maxAttempts: 2 }));
+      const batches = source.batches.filter(batch => !commentPoolIsComplete(rows.filter(row => Number(row.pool_version_id) === batch.poolVersionId).map(row => row.sentence), batch.spec.canonicalSentence)).map(batch => ({ ...batch, maxAttempts: 3 }));
       if (!batches.length || batches.length > Number(source.failed_items)) return Response.json({ error: "실패 묶음 범위를 확인하지 못했습니다." }, { status: 409 });
       const jobs = await insertRows<{ id: string }>("generation_jobs", [{
         owner_id: user.id, owner_email: user.email, class_id: classId, job_type: "comment-pools", status: "queued",
@@ -286,7 +285,7 @@ export async function POST(request: Request) {
         error_message: "", created_at: new Date().toISOString(), updated_at: new Date().toISOString(),
       }]);
       queueRunner(request, jobs[0].id);
-      return Response.json({ jobId: jobs[0].id, total: batches.length, maxAiCalls: batches.length * 2 }, { status: 202 });
+      return Response.json({ jobId: jobs[0].id, total: batches.length, maxAiCalls: batches.length * 3 }, { status: 202 });
     }
     if (fullRefresh && body.labOnly === true && allSpecs.length !== 75) {
       return Response.json({ error: `실험실 전체 새 버전 제작 범위가 75개가 아닙니다. (${allSpecs.length}개)` }, { status: 409 });
@@ -328,7 +327,7 @@ export async function POST(request: Request) {
       const batches = specs.map((spec, index) => ({
         spec,
         poolVersionId: Number(versions[index].id),
-        maxAttempts: 2,
+        maxAttempts: 3,
         freshOnly: true,
         activateWhenReady: true,
         previousPoolVersionIds: currentLinked.links
@@ -346,7 +345,7 @@ export async function POST(request: Request) {
       queueRunner(request, jobs[0].id);
       return Response.json({
         jobId: jobs[0].id, subject: "전체", total: batches.length,
-        maxAiCalls: batches.length * 2, reused: 0, fullRefresh: true,
+        maxAiCalls: batches.length * 3, reused: 0, fullRefresh: true,
       }, { status: 202 });
     }
     if (refresh) {
@@ -370,7 +369,7 @@ export async function POST(request: Request) {
       const jobs = await insertRows<{ id: string }>("generation_jobs", [{
         owner_id: user.id, owner_email: user.email, class_id: classId, job_type: "comment-pools",
         status: "queued", batches: [{
-          spec, poolVersionId: Number(version.id), maxAttempts: 2, activateWhenReady: true,
+          spec, poolVersionId: Number(version.id), maxAttempts: 3, activateWhenReady: true,
           previousPoolVersionIds,
         }], current_batch: 0, total_batches: 1, total_items: 1, completed_items: 0,
         failed_items: 0, error_message: "", created_at: new Date().toISOString(), updated_at: new Date().toISOString(),
@@ -417,7 +416,7 @@ export async function POST(request: Request) {
     const pending = specsToCreate.flatMap((spec) => {
       const version = byFingerprint.get(spec.fingerprint);
       return version && !commentPoolIsComplete(sentencesByVersion.get(Number(version.id)) ?? [], spec.canonicalSentence)
-        ? [{ spec, poolVersionId: Number(version.id), maxAttempts: 2 }]
+        ? [{ spec, poolVersionId: Number(version.id), maxAttempts: 3 }]
         : [];
     }).slice(0, maxGroups);
     if (!pending.length) return Response.json({ ready: true, reused: specs.length });

@@ -1,5 +1,4 @@
 import { waitUntil } from "@vercel/functions";
-import { ABILITY_STATEMENT_ISSUE, hasAbilityStatement } from "../../../ability-statement-policy";
 import { eq, selectRows, supabaseRequest, updateRows, upsertRows } from "../../../../db/supabase";
 import { approvePoolCandidates, commentPoolIsComplete, commentPoolQuality, COMMENT_POOL_TARGET, normalizedPoolSentence, type CommentPoolSpec } from "../../../comment-pool-library";
 import { signCommentJob, verifyCommentJob } from "../../../comment-generation";
@@ -90,10 +89,10 @@ export async function POST(request: Request) {
     const rows = await selectRows<{ sentence: string }>("comment_pool_sentences", {
       pool_version_id: eq(batch.poolVersionId), status: eq("approved"), order: "id.asc",
     });
-    const existing = rows.map((row) => row.sentence).filter((sentence) => !hasAbilityStatement(sentence));
+    const existing = approvePoolCandidates(rows.map((row) => row.sentence), batch.spec).approved;
     approved = [...existing];
     // Preserve saved candidates; every new candidate comes from AI, including resume jobs.
-    const maxAttempts = Number.isInteger(batch.maxAttempts) ? Math.max(0, Math.min(2, Number(batch.maxAttempts))) : 2;
+    const maxAttempts = Number.isInteger(batch.maxAttempts) ? Math.max(0, Math.min(3, Number(batch.maxAttempts))) : 2;
     for (let attempt = 0; attempt < maxAttempts && approved.length < COMMENT_POOL_TARGET; attempt += 1) {
       const requestCount = COMMENT_POOL_TARGET - approved.length;
       const generated = await generateCandidates(batch.spec, approved, requestCount);
@@ -108,7 +107,6 @@ export async function POST(request: Request) {
         approved = [...approved, ...selected].slice(0, COMMENT_POOL_TARGET);
       }
       await recordAiUsage({ ownerId: job.owner_id, ownerEmail: job.owner_email, classId: Number(job.class_id), feature: `comment-pool-attempt-${attempt + 1}`, ...generated.usage });
-      if (review.rejectedIssues.includes(ABILITY_STATEMENT_ISSUE)) break;
     }
     const quality = commentPoolQuality(approved, batch.spec.canonicalSentence);
     const complete = commentPoolIsComplete(approved, batch.spec.canonicalSentence);
@@ -132,7 +130,7 @@ export async function POST(request: Request) {
         }).catch(() => undefined);
       }
     }
-    failed = batch.activateWhenReady ? !complete : approved.length === 0;
+    failed = !complete;
     if (failed) errorMessage = batch.activateWhenReady
       ? approved.length > 0
         ? `${batch.spec.subject} ${batch.spec.domain} ${batch.spec.level} 수준의 정상 문장 ${approved.length}개를 사용할 수 있습니다. 목표 ${COMMENT_POOL_TARGET}개까지는 이어서 제작이 필요합니다.`
