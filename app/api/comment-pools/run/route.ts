@@ -116,7 +116,7 @@ export async function POST(request: Request) {
     await updateRows("comment_pool_versions", { id: eq(batch.poolVersionId) }, {
       status, approved_count: approved.length, updated_at: new Date().toISOString(),
     });
-    if (batch.activateWhenReady && complete) {
+    if (batch.activateWhenReady && approved.length > 0) {
       await upsertRows("assessment_plan_pool_links", [{
         owner_id: job.owner_id, owner_email: job.owner_email, class_id: Number(job.class_id),
         assessment_plan_id: batch.spec.assessmentPlanId, pool_version_id: batch.poolVersionId,
@@ -134,7 +134,9 @@ export async function POST(request: Request) {
     }
     failed = batch.activateWhenReady ? !complete : approved.length === 0;
     if (failed) errorMessage = batch.activateWhenReady
-      ? `${batch.spec.subject} ${batch.spec.domain} ${batch.spec.level} 수준의 새 문장 풀이 품질 검수를 통과하지 못해 기존 문장 풀을 유지했습니다. (${quality.issues.join(" · ")})`
+      ? approved.length > 0
+        ? `${batch.spec.subject} ${batch.spec.domain} ${batch.spec.level} 수준의 정상 문장 ${approved.length}개를 사용할 수 있습니다. 목표 ${COMMENT_POOL_TARGET}개까지는 이어서 제작이 필요합니다.`
+        : `${batch.spec.subject} ${batch.spec.domain} ${batch.spec.level} 수준의 승인 문장을 확보하지 못해 기존 문장 풀을 유지했습니다. (${quality.issues.join(" · ")})`
       : `${batch.spec.subject} ${batch.spec.domain} ${batch.spec.level} 수준의 승인 문장을 확보하지 못했습니다.`;
   } catch (error) {
     failed = batch.activateWhenReady ? true : approved.length === 0;

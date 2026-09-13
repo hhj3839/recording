@@ -1,10 +1,33 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
+import { POST as legacyPost } from '../app/api/generate-all-comments/route.ts';
 import { hasAbilityStatement, ABILITY_STATEMENT_ISSUE } from '../app/ability-statement-policy.ts';
 import { validateRecord } from '../app/record-validation.ts';
 import { selectBehaviorCandidate, canPersistBehaviorDraft, assertStrictGeneratedBehaviors } from '../app/behavior-persistence-policy.ts';
-import { approvePoolCandidates, buildCommentPoolSpecs } from '../app/comment-pool-library.ts';
+import { approvePoolCandidates, buildCommentPoolSpecs, commentPoolQuality, commentPoolIsComplete } from '../app/comment-pool-library.ts';
+
+test('legacy generation endpoint returns gone without AI or persistence code', async () => {
+  const response = await legacyPost();
+  assert.equal(response.status, 410);
+  assert.equal((await response.json()).code, 'LEGACY_GENERATION_RETIRED');
+  const source = readFileSync(new URL('../app/api/generate-all-comments/route.ts', import.meta.url), 'utf8');
+  assert.doesNotMatch(source, /fetch\(|upsertRows|archiveComment|OPENAI_API_KEY/);
+});
+
+test('particle variants use the same exclusion rule', () => {
+  for (const text of ['해결할 수도 있음.', '해결할 수는 있음.', '성장할 가능성도 있음.', '성장할 가능성은 있음.']) assert.equal(hasAbilityStatement(text), true, text);
+});
+
+test('display count and completion exclude unusable stored candidates', () => {
+  const bad = Array.from({ length: 20 }, (_, i) => `${i}번 문제를 해결할 수 있음.`);
+  assert.equal(commentPoolQuality(bad).count, 0);
+  assert.equal(commentPoolIsComplete(bad), false);
+  const normal = Array.from({ length: 20 }, (_, i) => `${i}번 문제를 해결함.`);
+  assert.equal(commentPoolIsComplete(normal), true);
+  assert.equal(commentPoolQuality([...bad, ...normal.slice(0, 19)]).count, 19);
+  assert.equal(commentPoolIsComplete([...bad, ...normal.slice(0, 19)]), false);
+});
 
 test('only ability and possibility families are excluded, including connected clauses', () => {
   for (const text of ['문제를 해결할 수 있음.', '글을 쓸수있음.', '도형을 그릴 수가 있음.', '성장할 가능성이 있음.', '참여할 수 있으며 의견을 표현함.']) assert.equal(hasAbilityStatement(text), true, text);

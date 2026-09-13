@@ -305,7 +305,7 @@ test("keeps isolated pool refresh safe without exposing a teacher-facing selecti
   assert.match(route, /insertRows<PoolVersionRow>\("comment_pool_versions"/);
   assert.match(route, /activateWhenReady: true/);
   assert.match(route, /previousPoolVersionIds/);
-  assert.match(runner, /batch\.activateWhenReady && complete/);
+  assert.match(runner, /batch\.activateWhenReady && approved\.length > 0/);
   assert.match(runner, /upsertRows\("assessment_plan_pool_links"/);
   assert.match(runner, /method: "DELETE"[\s\S]*previousPoolVersionIds/);
   assert.match(runner, /batch\.activateWhenReady \? !complete/);
