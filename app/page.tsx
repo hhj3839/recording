@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
+import { FreshPoolDialog } from "./fresh-pool-dialog";
 import { recordSimilarityDetails, validateBehaviorSource, validateRecord } from "./record-validation";
 import { parseStudentRosterText } from "./student-roster-parser";
 import { parseAssessmentPlanText } from "./assessment-plan-parser";
@@ -583,9 +584,8 @@ function PlanManager({ plan, onChanged, current }: { plan: AssessmentPlan[]; onC
   const firstPoolWarningRef = useRef<HTMLParagraphElement>(null);
   const [poolBusy, setPoolBusy] = useState(false);
   const [showFreshPoolConfirmation, setShowFreshPoolConfirmation] = useState(false);
-  const [freshPoolSharedName, setFreshPoolSharedName] = useState("");
   const [poolStartError, setPoolStartError] = useState("");
-  type PoolJobView = { id: string; status: string; completed: number; total: number; failed: number; error: string; current: { subject: string; domain: string; level: string } | null };
+  type PoolJobView = { id: string; status: string; completed: number; total: number; failed: number; error: string; freshOnly?: boolean; current: { subject: string; domain: string; level: string } | null };
   const [poolJob, setPoolJob] = useState<PoolJobView | null>(null);
   const columns: Array<[keyof AssessmentPlan, string]> = [
     ["subject", "과목"], ["unit", "단원"], ["goal", "평가목표"], ["domain", "영역"],
@@ -853,7 +853,7 @@ function PlanManager({ plan, onChanged, current }: { plan: AssessmentPlan[]; onC
   const startPoolProduction = async (fullRefresh = false, retryFailed = false) => {
     if (!plan.length || poolBusy || (poolJob && ["queued", "running"].includes(poolJob.status))) return;
     if (!fullRefresh && !retryFailed && !poolSummary.needsGeneration) return;
-    const sharedPlanName = fullRefresh ? freshPoolSharedName.trim() : "";
+    const sharedPlanName = "";
     setPoolBusy(true);
     setPoolStartError("");
     setErrors([]);
@@ -868,7 +868,9 @@ function PlanManager({ plan, onChanged, current }: { plan: AssessmentPlan[]; onC
         setMessage("현재 평가계획의 AI 평어가 모두 준비되어 있습니다.");
         await loadPoolStatus();
       } else if (result.jobId) {
-        setPoolJob(result.job ?? { id: result.jobId, status: "queued", completed: 0, total: Number(result.total), failed: 0, error: "", current: null });
+        setPoolJob(result.job ?? { id: result.jobId, status: "queued", completed: 0, total: Number(result.total), failed: 0, error: "", freshOnly: fullRefresh, current: null });
+        if (fullRefresh) { setPoolGroups([]); setPoolSentences([]); setPoolSummary({ ...EMPTY_POOL_SUMMARY, total: poolSummary.total }); }
+        void loadPoolStatus();
         if (result.job) {
           setMessage("이미 진행 중인 AI 평어 제작 작업을 다시 연결했습니다.");
         } else {
@@ -981,6 +983,10 @@ function PlanManager({ plan, onChanged, current }: { plan: AssessmentPlan[]; onC
         .then((result) => {
           if (!result.job) return;
           setPoolJob(result.job);
+          if (result.job.completed !== poolJob.completed || result.job.failed !== poolJob.failed) {
+            void loadPoolStatus();
+            if (selectedPoolFingerprint) void loadPoolStatus(selectedPoolFingerprint);
+          }
           if (!["queued", "running"].includes(result.job.status)) {
             window.clearInterval(timer);
             void loadPoolStatus();
@@ -988,7 +994,7 @@ function PlanManager({ plan, onChanged, current }: { plan: AssessmentPlan[]; onC
         }).catch(() => undefined);
     }, 2500);
     return () => window.clearInterval(timer);
-  }, [poolJob, loadPoolStatus]);
+  }, [poolJob, loadPoolStatus, selectedPoolFingerprint]);
   const changePlan = (id: number | undefined, key: keyof AssessmentPlan, value: string) => {
     onChanged(plan.map((item) => item.id === id ? { ...item, [key]: value } : item));
   };
@@ -1019,24 +1025,17 @@ function PlanManager({ plan, onChanged, current }: { plan: AssessmentPlan[]; onC
       <button role="tab" aria-selected={planSection === "ai"} className={planSection === "ai" ? "active" : ""} onClick={() => setPlanSection("ai")}>AI 평어{poolSummary.needsGeneration > 0 ? " · 제작 필요" : ""}</button>
     </div>
     {planSection === "ai" && <section className="ai-comment-pool-panel">
-      <div className="section-heading"><div><p className="eyebrow">평가계획용 문장 풀</p><h2>AI 평어</h2><p>학생에게 배정하기 전, 평가영역·수준별로 서로 다른 평어 20개를 제작하고 검수합니다.</p></div><div className="ai-pool-heading-actions"><button className="secondary" disabled={poolBusy || poolStatusLoading || !plan.length || activePoolJob} onClick={() => { setPoolStartError(""); setFreshPoolSharedName(""); setShowFreshPoolConfirmation(true); }}>전체 새로 제작</button><button className="danger-text" disabled={poolBusy || !plan.length || poolSummary.usable === 0 || activePoolJob} onClick={() => void resetPoolLinks()}>AI 평어 초기화</button></div></div>
-      {showFreshPoolConfirmation && <div className="ai-pool-job-error" role="region" aria-label="전체 새로 제작 확인">
-        <b>{poolSummary.total}개 전체 새 제작 · 기존 문장 재사용 안 함</b>
-        <p>묶음당 최초 1회와 부족분 보완 최대 2회, 총 최대 {poolSummary.total * 3}회 유료 AI 호출이 발생합니다. 학생 기록과 다른 학급의 문장은 변경하지 않습니다.</p>
-        <details><summary>공동 평가계획으로 공개하기 (선택)</summary><label>공동 평가계획 이름<input value={freshPoolSharedName} disabled={poolBusy} onChange={(event) => setFreshPoolSharedName(event.target.value)} /></label><p>빈칸이면 현재 학급에서만 제작합니다. 이름을 입력하면 향후 이 공동 평가계획을 선택하는 학급에 새 풀을 제공합니다.</p></details>
-        <button disabled={poolBusy} onClick={() => setShowFreshPoolConfirmation(false)}>취소</button>
-        <button disabled={poolBusy || poolStatusLoading || activePoolJob || !plan.length} onClick={() => void startPoolProduction(true)}>{poolBusy ? "새 제작 시작 중…" : "유료 전체 새 제작 시작"}</button>
-        {activePoolJob && <p>진행 중인 작업이 끝난 뒤 새 제작을 시작할 수 있습니다.</p>}
-      </div>}
+      <div className="section-heading"><div><p className="eyebrow">평가계획용 문장 풀</p><h2>AI 평어</h2><p>학생에게 배정하기 전, 평가영역·수준별로 서로 다른 평어 20개를 제작하고 검수합니다.</p></div><div className="ai-pool-heading-actions"><button className="secondary" disabled={poolBusy || poolStatusLoading || !plan.length || activePoolJob} onClick={() => { setPoolStartError(""); setShowFreshPoolConfirmation(true); }}>전체 새로 제작</button><button className="danger-text" disabled={poolBusy || !plan.length || poolSummary.usable === 0 || activePoolJob} onClick={() => void resetPoolLinks()}>AI 평어 초기화</button></div></div>
+      {showFreshPoolConfirmation && <FreshPoolDialog count={poolSummary.total} busy={poolBusy} disabled={poolStatusLoading || activePoolJob || !plan.length} error={poolStartError} onCancel={() => setShowFreshPoolConfirmation(false)} onStart={() => void startPoolProduction(true)} />}
       {poolStartError && <div className="ai-pool-job-error" role="alert"><b>AI 평어 제작 시작 실패</b><span>{poolStartError}</span></div>}
       {!plan.length ? <p className="empty-cell">평가계획을 먼저 저장해 주세요.</p> : <>
         {poolStatusLoading ? <div className="ai-pool-loading" role="status"><i aria-hidden="true" /><span><b>AI 평어 상태를 확인하고 있습니다.</b><small>현재 평가계획의 승인 문장과 최신 검수 결과를 읽는 중입니다.</small></span></div> : <div className="ai-pool-summary">
           <span><b>{poolSummary.total}</b>개 영역·수준</span>
-          <span className="ready-count"><b>{poolSummary.ready}/{poolSummary.total}</b> 준비 완료</span>
-          <span><b>{poolSummary.approved}</b>개 승인 문장</span>
-          {poolSummary.reviewCount > 0 && <span className="review-count">검수 제외 <b>{poolSummary.reviewCount}</b>문장</span>}
+          {!(activePoolJob && poolJob?.freshOnly) && <span className="ready-count"><b>{poolSummary.ready}/{poolSummary.total}</b> 준비 완료</span>}
+          <span>{activePoolJob && poolJob?.freshOnly ? "이번 제작 " : ""}<b>{poolSummary.approved}</b>개 승인 문장</span>
+          {!(activePoolJob && poolJob?.freshOnly) && poolSummary.reviewCount > 0 && <span className="review-count">검수 제외 <b>{poolSummary.reviewCount}</b>문장</span>}
           {poolSummary.warningPools > 0 && <span className="diversity-warning">확인 필요</span>}
-          {activePoolJob && poolJob ? <span className="pool-progress" role="status"><i aria-hidden="true" /> <b>{poolJob.completed}/{poolJob.total}</b> {poolJob.current ? `${poolJob.current.subject} · ${poolJob.current.domain} · ${poolJob.current.level} 제작·검수 중` : "제작 대기 중"}</span>
+          {activePoolJob && poolJob ? <span className="pool-progress" role="status"><i aria-hidden="true" /> {poolJob.freshOnly ? "새 제작 " : ""}<b>{poolJob.completed}/{poolJob.total}</b> {poolJob.current ? `${poolJob.current.subject} · ${poolJob.current.domain} · ${poolJob.current.level} 제작·검수 중` : "제작 대기 중"}</span>
             : poolSummary.needsGeneration > 0 ? <button className="pool-continue" disabled={poolBusy || !plan.length} onClick={() => void startPoolProduction()}>{poolBusy ? "제작 준비 중…" : poolSummary.ready === 0 ? "AI 평어 제작" : `${poolSummary.needsGeneration}개 이어서 제작`}</button>
               : poolSummary.needsGeneration === 0 ? <span className="all-ready">전체 준비 완료</span> : null}
           {selectedPoolWarningSentenceCount > 0 && !activePoolJob && <button className="pool-remove-warnings" type="button" disabled={poolBusy || poolSentencesLoading} onClick={() => void excludeWarningPoolSentences()}>경고 문장 제거</button>}
