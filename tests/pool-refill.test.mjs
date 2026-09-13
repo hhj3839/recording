@@ -13,7 +13,13 @@ test('pool refill preserves accepted candidates and retries only the shortage', 
 });
 test('new jobs get three calls while old jobs keep their saved limit', () => {
   const route = read('../app/api/comment-pools/route.ts');
-  assert.doesNotMatch(route, /maxAttempts: 2/);
+  assert.match(route, /maxAttempts: 2, activateWhenReady: true/);
   assert.match(route, /maxAiCalls: batches.length \* 3/);
   assert.match(read('../app/api/comment-pools/run/route.ts'), /Number\(batch.maxAttempts\)\)\) : 2/);
+});
+
+test('both allocation paths skip stored invalid endings before selecting candidates', () => {
+  for (const path of ['../app/api/comment-jobs/run/route.ts', '../app/api/generate-comment/route.ts']) {
+    assert.match(read(path), /if \(!hasNaturalNominalEnding\(row.sentence \?\? ""\)\) continue/);
+  }
 });

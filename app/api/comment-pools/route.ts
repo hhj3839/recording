@@ -369,7 +369,7 @@ export async function POST(request: Request) {
       const jobs = await insertRows<{ id: string }>("generation_jobs", [{
         owner_id: user.id, owner_email: user.email, class_id: classId, job_type: "comment-pools",
         status: "queued", batches: [{
-          spec, poolVersionId: Number(version.id), maxAttempts: 3, activateWhenReady: true,
+          spec, poolVersionId: Number(version.id), maxAttempts: 2, activateWhenReady: true,
           previousPoolVersionIds,
         }], current_batch: 0, total_batches: 1, total_items: 1, completed_items: 0,
         failed_items: 0, error_message: "", created_at: new Date().toISOString(), updated_at: new Date().toISOString(),

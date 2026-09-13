@@ -1,4 +1,5 @@
 import { waitUntil } from "@vercel/functions";
+import { hasNaturalNominalEnding } from "../../../comment-generation-policy";
 import { eq, selectRows, supabaseRequest, updateRows, upsertRows } from "../../../../db/supabase";
 import { approvePoolCandidates, commentPoolIsComplete, commentPoolQuality, COMMENT_POOL_TARGET, normalizedPoolSentence, type CommentPoolSpec } from "../../../comment-pool-library";
 import { signCommentJob, verifyCommentJob } from "../../../comment-generation";
@@ -89,7 +90,7 @@ export async function POST(request: Request) {
     const rows = await selectRows<{ sentence: string }>("comment_pool_sentences", {
       pool_version_id: eq(batch.poolVersionId), status: eq("approved"), order: "id.asc",
     });
-    const existing = approvePoolCandidates(rows.map((row) => row.sentence), batch.spec).approved;
+    const existing = approvePoolCandidates(rows.map((row) => row.sentence).filter(hasNaturalNominalEnding), batch.spec).approved;
     approved = [...existing];
     // Preserve saved candidates; every new candidate comes from AI, including resume jobs.
     const maxAttempts = Number.isInteger(batch.maxAttempts) ? Math.max(0, Math.min(3, Number(batch.maxAttempts))) : 2;
