@@ -1,11 +1,25 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
+import { hasNaturalNominalEnding } from '../app/comment-generation-policy.ts';
 import { POST as legacyPost } from '../app/api/generate-all-comments/route.ts';
 import { hasAbilityStatement, ABILITY_STATEMENT_ISSUE } from '../app/ability-statement-policy.ts';
 import { validateRecord } from '../app/record-validation.ts';
 import { selectBehaviorCandidate, canPersistBehaviorDraft, assertStrictGeneratedBehaviors } from '../app/behavior-persistence-policy.ts';
 import { approvePoolCandidates, buildCommentPoolSpecs, commentPoolQuality, commentPoolIsComplete } from '../app/comment-pool-library.ts';
+
+test('comment and behavior share nominal conjugation checks without rewriting', () => {
+  for (const text of ['자료를 만듦.', '방법을 앎.', '표현을 익힘.', '활동에 참여함.']) {
+    assert.equal(hasNaturalNominalEnding(text), true);
+    assert.equal(validateRecord(text, true).endingsOk, true);
+    assert.equal(validateRecord(text).endingsOk, true);
+  }
+  for (const text of ['', '활동에 참여한다.']) {
+    assert.equal(hasNaturalNominalEnding(text), false);
+    assert.equal(validateRecord(text, true).endingsOk, false);
+  }
+  assert.equal(validateRecord('활동에 참여할 수 있음.', true).valid, false);
+});
 
 test('legacy generation endpoint returns gone without AI or persistence code', async () => {
   const response = await legacyPost();
