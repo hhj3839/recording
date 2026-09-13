@@ -78,10 +78,11 @@ test('pool excludes bad candidates without rewriting and retains normal alternat
   assert.deepEqual(approvePoolCandidates([bad], spec).approved, []);
 });
 
-test('job routes stop paid retries for excluded candidates and allocation skips old candidates', () => {
+test('behavior stops excluded retries while pools refill within bounds and allocation skips old candidates', () => {
   const read = (path: string) => readFileSync(new URL('../app/' + path, import.meta.url), 'utf8');
   assert.match(read('api/behavior-jobs/run/route.ts'), /!excludedIds.has\(item.studentId\)/);
-  assert.match(read('api/comment-pools/run/route.ts'), /if \(review.rejectedIssues.includes\(ABILITY_STATEMENT_ISSUE\)\) break/);
+  assert.doesNotMatch(read('api/comment-pools/run/route.ts'), /if \(review.rejectedIssues.includes\(ABILITY_STATEMENT_ISSUE\)\) break/);
+  assert.match(read('api/comment-pools/run/route.ts'), /attempt < maxAttempts && approved.length < COMMENT_POOL_TARGET/);
   assert.match(read('api/comment-jobs/run/route.ts'), /hasAbilityStatement\(row.sentence/);
   assert.match(read('api/comment-jobs/run/route.ts'), /hasAbilityStatement\(saved.sentence/);
   assert.match(read('api/generate-comment/route.ts'), /hasAbilityStatement\(row.sentence/);
