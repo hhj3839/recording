@@ -1,4 +1,5 @@
 import { waitUntil } from "@vercel/functions";
+import { linkedCommentPools } from "../../../linked-comment-pools";
 import { hasAbilityStatement } from "../../../ability-statement-policy";
 import { eq, selectRows, updateRows } from "../../../../db/supabase";
 import { selectMostDiverseComments } from "../../../comment-diversity";
@@ -121,10 +122,16 @@ export async function POST(request: Request) {
     fingerprint: `in.(${fingerprints.join(",")})`,
   }) : [];
   const versionIds = poolVersions.map((pool) => Number(pool.id));
+  const linkedPools = await linkedCommentPools(job.owner_id, Number(job.class_id));
+  for (const version of linkedPools.values()) if (!versionIds.includes(Number(version.id))) versionIds.push(Number(version.id));
   const poolSentences = versionIds.length ? await selectRows<{ pool_version_id: number; sentence: string }>("comment_pool_sentences", {
     pool_version_id: `in.(${versionIds.join(",")})`, status: eq("approved"), order: "id.asc",
   }) : [];
   const versionByFingerprint = new Map(poolVersions.map((pool) => [pool.fingerprint, Number(pool.id)]));
+  for (const [fingerprint, version] of linkedPools) {
+    versionByFingerprint.set(fingerprint, Number(version.id));
+    versionByFingerprint.set(version.fingerprint, Number(version.id));
+  }
   const sentencesByVersion = new Map<number, string[]>();
   for (const row of poolSentences) {
     if (hasAbilityStatement(row.sentence ?? "")) continue;

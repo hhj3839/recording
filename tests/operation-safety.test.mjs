@@ -438,7 +438,8 @@ test("serializes comment-pool batches and caps every reusable pool at the curren
   assert.match(producer, /job\.status !== "queued"/);
   assert.match(producer, /status: eq\("queued"\)/);
   assert.match(producer, /slice\(0, COMMENT_POOL_TARGET - approved\.length\)/);
-  assert.match(poolApi, /limit: COMMENT_POOL_TARGET/);
+  assert.match(poolApi, /limit: 500, offset/);
+  assert.match(poolApi, /rows.filter\(row => !hasAbilityStatement\(row.sentence\)\).slice\(0, COMMENT_POOL_TARGET - sentences.length\)/);
   assert.match(assignment, /sentences\.length < COMMENT_POOL_TARGET/);
 });
 

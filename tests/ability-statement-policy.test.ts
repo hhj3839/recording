@@ -1,12 +1,23 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
+import { matchLinkedPools } from '../app/linked-comment-pools.ts';
 import { hasNaturalNominalEnding } from '../app/comment-generation-policy.ts';
 import { POST as legacyPost } from '../app/api/generate-all-comments/route.ts';
 import { hasAbilityStatement, ABILITY_STATEMENT_ISSUE } from '../app/ability-statement-policy.ts';
 import { validateRecord } from '../app/record-validation.ts';
 import { selectBehaviorCandidate, canPersistBehaviorDraft, assertStrictGeneratedBehaviors } from '../app/behavior-persistence-policy.ts';
 import { approvePoolCandidates, buildCommentPoolSpecs, commentPoolQuality, commentPoolIsComplete } from '../app/comment-pool-library.ts';
+
+test('linked refresh version wins and mismatched criteria are not allocated', () => {
+  const specs = buildCommentPoolSpecs([{ id: 7, subject: '국어', unit: '대화', goal: '표현', domain: '말하기', perspective: '대화', high: '대화를 표현함.', middle: '대화를 표현함.', low: '대화를 표현함.' }]);
+  const spec = specs[0];
+  const version = { ...spec, id: 99, fingerprint: 'fresh-nonce' };
+  const links = [{ assessment_plan_id: 7, pool_version_id: 99 }];
+  assert.equal(matchLinkedPools(specs, links, [version]).get(spec.fingerprint)?.id, 99);
+  assert.equal(matchLinkedPools(specs, links, [{ ...version, criterion: '다른 기준' }]).size, 0);
+  assert.equal(matchLinkedPools(specs, [{ ...links[0], assessment_plan_id: 8 }], [version]).size, 0);
+});
 
 test('comment and behavior share nominal conjugation checks without rewriting', () => {
   for (const text of ['자료를 만듦.', '방법을 앎.', '표현을 익힘.', '활동에 참여함.']) {

@@ -1,5 +1,6 @@
 import { dataError, getDataScope } from "../../data-scope";
 import { hasAbilityStatement } from "../../ability-statement-policy";
+import { linkedCommentPools } from "../../linked-comment-pools";
 import { checkAiUsage, recordAiUsage } from "../../ai-usage";
 import { createCommentVariations } from "../../comment-variation";
 import { eq, selectRows } from "../../../db/supabase";
@@ -134,6 +135,13 @@ export async function POST(request: Request) {
       }) : [];
       const versionByFingerprint = new Map(versions.map((version) => [version.fingerprint, Number(version.id)]));
       const versionIds = versions.map((version) => Number(version.id));
+      const linkedPools = await linkedCommentPools(user.id, classId);
+      for (const spec of selectedSpecs) {
+        const version = linkedPools.get(spec.fingerprint);
+        if (!version) continue;
+        versionByFingerprint.set(spec.fingerprint, Number(version.id));
+        if (!versionIds.includes(Number(version.id))) versionIds.push(Number(version.id));
+      }
       const sentences = versionIds.length ? await selectRows<{ pool_version_id: number; sentence: string }>("comment_pool_sentences", {
         pool_version_id: `in.(${versionIds.join(",")})`, status: eq("approved"), order: "id.asc",
       }) : [];
