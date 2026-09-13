@@ -75,7 +75,7 @@ export function hasDiscouragedPoolFormatting(value: string) {
 }
 
 export function commentPoolQuality(sentences: string[], referenceSentence = "") {
-  const normalized = sentences.map(normalizedPoolSentence).filter(Boolean);
+  const normalized = sentences.filter((sentence) => !hasAbilityStatement(sentence)).map(normalizedPoolSentence).filter(Boolean);
   const unique = [...new Set(normalized)];
   const pairSimilarities: number[] = [];
   const nearest = unique.map((sentence, index) => {

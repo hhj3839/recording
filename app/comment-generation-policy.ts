@@ -1,3 +1,5 @@
+import { hasNominalEnding } from "./nominal-ending-policy.ts";
+
 export function hasCompleteEvidenceCoverage(expectedIds: string[], coveredIds: unknown) {
   if (!Array.isArray(coveredIds)) return false;
   const normalized = coveredIds.filter((id): id is string => typeof id === "string");
@@ -199,13 +201,7 @@ export function levelAppropriatenessIssues(comment: string, level: string | unde
 export function hasNaturalNominalEnding(sentence: string) {
   const trimmed = sentence.trim();
   if (!trimmed.endsWith(".")) return false;
-  const normalized = trimmed.replace(/[.!?]+$/, "");
-  const last = normalized.at(-1);
-  if (!last) return false;
-  const code = last.charCodeAt(0);
-  // 일반 명사형 받침 ㅁ뿐 아니라 만들다→만듦, 알다→앎처럼
-  // ㄹㅁ으로 활용되는 올바른 명사형도 허용한다.
-  return code >= 0xac00 && code <= 0xd7a3 && [10, 16].includes((code - 0xac00) % 28);
+  return hasNominalEnding(trimmed);
 }
 
 export function ensureGeneratedCommentPeriod(sentence: string) {

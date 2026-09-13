@@ -1,4 +1,5 @@
 import { waitUntil } from "@vercel/functions";
+import { linkedCommentPools } from "../../linked-comment-pools";
 import { eq, insertRows, selectRows, supabaseRequest } from "../../../db/supabase";
 import { batchCommentsByAssessmentArea } from "../../comment-batching";
 import { CommentEvidence, signCommentJob } from "../../comment-generation";
@@ -103,7 +104,8 @@ export async function POST(request: Request) {
       perspective: String(row.perspective), high: String(row.high), middle: String(row.middle), low: String(row.low),
     }));
     const poolSpecs = buildCommentPoolSpecs(planRows);
-    const poolFingerprintByPlanLevel = new Map(poolSpecs.map((spec) => [`${spec.assessmentPlanId}|${spec.level}`, spec.fingerprint]));
+    const linkedPools = await linkedCommentPools(user.id, classId);
+    const poolFingerprintByPlanLevel = new Map(poolSpecs.map((spec) => [`${spec.assessmentPlanId}|${spec.level}`, linkedPools.get(spec.fingerprint)?.fingerprint ?? spec.fingerprint]));
     const scores = body.scores as Record<string, ScoreStudent[]>;
     const targetAssessmentIndexes = body.targetAssessmentIndexes && typeof body.targetAssessmentIndexes === "object"
       && !Array.isArray(body.targetAssessmentIndexes)

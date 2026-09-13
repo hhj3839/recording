@@ -305,7 +305,7 @@ test("keeps isolated pool refresh safe without exposing a teacher-facing selecti
   assert.match(route, /insertRows<PoolVersionRow>\("comment_pool_versions"/);
   assert.match(route, /activateWhenReady: true/);
   assert.match(route, /previousPoolVersionIds/);
-  assert.match(runner, /batch\.activateWhenReady && complete/);
+  assert.match(runner, /batch\.activateWhenReady && approved\.length > 0/);
   assert.match(runner, /upsertRows\("assessment_plan_pool_links"/);
   assert.match(runner, /method: "DELETE"[\s\S]*previousPoolVersionIds/);
   assert.match(runner, /batch\.activateWhenReady \? !complete/);
@@ -438,7 +438,8 @@ test("serializes comment-pool batches and caps every reusable pool at the curren
   assert.match(producer, /job\.status !== "queued"/);
   assert.match(producer, /status: eq\("queued"\)/);
   assert.match(producer, /slice\(0, COMMENT_POOL_TARGET - approved\.length\)/);
-  assert.match(poolApi, /limit: COMMENT_POOL_TARGET/);
+  assert.match(poolApi, /limit: 500, offset/);
+  assert.match(poolApi, /rows.filter\(row => !hasAbilityStatement\(row.sentence\)\).slice\(0, COMMENT_POOL_TARGET - sentences.length\)/);
   assert.match(assignment, /sentences\.length < COMMENT_POOL_TARGET/);
 });
 

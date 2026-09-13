@@ -1,4 +1,5 @@
 import { waitUntil } from "@vercel/functions";
+import { hasAbilityStatement } from "../../ability-statement-policy";
 import { createHash } from "node:crypto";
 import { eq, insertRows, selectRows, supabaseRequest, upsertRows } from "../../../db/supabase";
 import { buildCommentPoolSpecs, commentPoolIsComplete, commentPoolQuality, commentPoolSentenceWarnings, COMMENT_POOL_GENERATOR_VERSION, COMMENT_POOL_TARGET, validatePoolCandidate, type CommentPoolSpec, type PoolPlanItem } from "../../comment-pool-library";
@@ -154,9 +155,16 @@ export async function GET(request: Request) {
     const detailFingerprint = params.get("fingerprint");
     const detailSpec = detailFingerprint ? specs.find((spec) => spec.fingerprint === detailFingerprint) : undefined;
     const detailVersion = detailSpec ? linkedVersionFor(detailSpec) : undefined;
-    const sentences = detailVersion ? await selectRows<{ id: number; sentence: string }>("comment_pool_sentences", {
-      pool_version_id: eq(detailVersion.id), status: eq("approved"), order: "id.asc", limit: COMMENT_POOL_TARGET,
-    }) : [];
+    const sentences: Array<{ id: number; sentence: string }> = [];
+    if (detailVersion) {
+      for (let offset = 0; sentences.length < COMMENT_POOL_TARGET; offset += 500) {
+        const rows = await selectRows<{ id: number; sentence: string }>("comment_pool_sentences", {
+          pool_version_id: eq(detailVersion.id), status: eq("approved"), order: "id.asc", limit: 500, offset,
+        });
+        sentences.push(...rows.filter(row => !hasAbilityStatement(row.sentence)).slice(0, COMMENT_POOL_TARGET - sentences.length));
+        if (rows.length < 500) break;
+      }
+    }
     const detailWarnings = detailSpec
       ? commentPoolSentenceWarnings(sentences.map((row) => row.sentence), detailSpec.canonicalSentence)
       : [];
