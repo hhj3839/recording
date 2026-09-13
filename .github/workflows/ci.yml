@@ -56,4 +56,4 @@ jobs:
         run: node --experimental-strip-types --test tests/comment-pool-trial.test.ts
 
       - name: Check behavior draft and review UI policies
-        run: node --experimental-strip-types --test tests/behavior-short-draft.test.ts tests/review-ui-policy.test.ts
+        run: node --experimental-strip-types --test tests/behavior-short-draft.test.ts tests/review-ui-policy.test.ts tests/ability-statement-policy.test.ts

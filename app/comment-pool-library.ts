@@ -1,4 +1,5 @@
 import { createHash } from "node:crypto";
+import { ABILITY_STATEMENT_ISSUE, hasAbilityStatement } from "./ability-statement-policy.ts";
 import { buildCanonicalCommentSentence, criterionToSafeNominalCandidates, hasNaturalNominalEnding, positiveGrowthCriterion, repairSafeNominalEnding } from "./comment-generation-policy.ts";
 
 export const COMMENT_POOL_TARGET = 20;
@@ -201,6 +202,7 @@ export function buildCommentPoolSpecs(plan: PoolPlanItem[]): CommentPoolSpec[] {
 export function validatePoolCandidate(candidate: string, spec: CommentPoolSpec) {
   const text = repairSafeNominalEnding(candidate);
   const issues = hasNaturalNominalEnding(text) ? [] : ["자연스러운 명사형 종결 검수 미통과"];
+  if (hasAbilityStatement(candidate)) issues.push(ABILITY_STATEMENT_ISSUE);
   return { text, issues, qualityWarnings: [], qualityScore: poolCandidateQualityScore(text, spec) };
 }
 

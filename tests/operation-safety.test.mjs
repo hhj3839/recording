@@ -61,7 +61,11 @@ test("comment jobs assign prepared approved pools without a paid AI call", () =>
   assert.match(route, /status: eq\("approved"\)/);
   assert.match(route, /학생 평어 생성 단계에서는 OpenAI를 호출하지 않는다/);
   assert.doesNotMatch(route, /api\.openai\.com|generateCommentPoolBatch|recordAiUsage/);
-  assert.match(route, /assignApprovedCommentPools\(pending\)/);
+  assert.doesNotMatch(route, /assignApprovedCommentPools|fallbackParts/);
+  assert.match(route, /status: "needs_review" as const/);
+  assert.match(route, /해당 평가 영역·수준의 승인 문장 풀을 먼저 준비해야 함/);
+  assert.match(route, /if \(assignedParts.length\)/);
+  assert.match(route, /generatedParts.has\(key\) \? \[\] :/);
   assert.match(producer, /api\.openai\.com\/v1\/responses/);
   assert.doesNotMatch(producer, /source: "canonical"|approvePoolCandidates\(\[batch\.spec\.canonicalSentence\]/);
   assert.doesNotMatch(producer, /buildValidatedMinimumPoolFallbacks|saveFreeFallbacks/);
