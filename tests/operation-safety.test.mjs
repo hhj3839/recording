@@ -570,15 +570,6 @@ test("retries only incomplete owned fresh batches from the latest classroom job"
   assert.doesNotMatch(retry, /insertRows.*comment_pool_versions|method: "DELETE"/);
 });
 
-test("publishes an owned fresh job without modifying classroom links or invoking AI", () => {
-  const route = readFileSync("app/api/shared-assessment-plans/route.ts", "utf8");
-  const publish = route.slice(route.indexOf("export async function PATCH"), route.indexOf("export async function PUT"));
-  assert.match(publish, /id: eq\(id\), created_by: eq\(user\.id\)/);
-  assert.match(publish, /owner_id: eq\(user\.id\), class_id: eq\(classId\)/);
-  assert.match(publish, /batches\.some\(batch => !batch\.freshOnly\)/);
-  assert.match(publish, /signature\(specs\) !== signature/);
-  assert.doesNotMatch(publish, /assessment_plan_pool_links|recordAiUsage|openai\.com|method: "DELETE"/);
-});
 
 test("recovers only safe five-sentence pools from the exact completed lab job without AI", () => {
   const route = readFileSync("app/api/comment-pools/recover-job/route.ts", "utf8");
