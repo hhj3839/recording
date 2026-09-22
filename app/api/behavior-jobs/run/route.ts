@@ -67,13 +67,18 @@ export async function POST(request: Request) {
       const groups = attempt === 0 ? [pending] : pending.map((item) => [item]);
       for (const group of groups) {
         const generated = await generateBehaviorBatch(group, avoidBehaviors, generationModel(attempt, MAX_GENERATION_ATTEMPTS));
+        await recordAiUsage({
+          ownerId: job.owner_id, ownerEmail: job.owner_email, classId: Number(job.class_id),
+          feature: `all-behaviors-attempt-${attempt + 1}`,
+          ...generated.usage,
+        });
         const known = new Set(behaviors.map((item) => item.studentId));
         const newBehaviors = generated.behaviors.filter((item) => !known.has(item.studentId));
-        behaviors = [...behaviors, ...newBehaviors];
         if (newBehaviors.length) {
           await saveGeneratedBehaviors({
             ownerId: job.owner_id, ownerEmail: job.owner_email, classId: Number(job.class_id), behaviors: newBehaviors,
           });
+          behaviors = [...behaviors, ...newBehaviors];
         }
         for (const failure of generated.failures) {
           errorMessage = [
@@ -94,20 +99,10 @@ export async function POST(request: Request) {
               repairTargets: behaviorRepairTargets(failure.bytes),
             } : item;
           });
-        await recordAiUsage({
-          ownerId: job.owner_id, ownerEmail: job.owner_email, classId: Number(job.class_id),
-          feature: `all-behaviors-attempt-${attempt + 1}`,
-          ...generated.usage,
-        });
       }
     }
     catch (error) {
       errorMessage = error instanceof Error ? error.message : "AI 생성 오류";
-      await recordAiUsage({
-        ownerId: job.owner_id, ownerEmail: job.owner_email, classId: Number(job.class_id),
-        feature: `all-behaviors-attempt-${attempt + 1}`,
-        model: generationModel(attempt, MAX_GENERATION_ATTEMPTS),
-      });
     }
   }
   const cancelledBeforeSave = (await selectRows<{ status: string }>("generation_jobs", { id: eq(jobId), limit: 1 }))[0]?.status === "cancelled";

@@ -53,7 +53,7 @@ type CommentPoolGroupView = {
   };
 };
 const poolGroupWarningSentenceCount = (group: CommentPoolGroupView | undefined, sentences: Array<{ issues: string[]; warnings?: string[] }>) => {
-  if (!group?.qualityWarnings.length) return 0;
+  if (!group) return 0;
   return sentences.filter((row) => row.issues.length > 0 || (row.warnings?.length ?? 0) > 0).length;
 };
 const poolSentenceReviewLabel = (reason: string) => ({
@@ -1045,7 +1045,7 @@ function PlanManager({ plan, onChanged, current }: { plan: AssessmentPlan[]; onC
         </div>}
         {showPoolRecovery && poolJob && <PoolRecoveryNotice count={poolJob.failed} error={poolJob.error} busy={poolBusy} onRetry={() => void startPoolProduction(false, Boolean(poolJob.freshOnly && poolJob.status === "completed_with_errors"))} />}
         {!!poolGroups.length && <div className="ai-pool-browser">
-          <div className="ai-pool-selection-row"><label><span>과목·영역·수준</span><span className={`ai-pool-select-box${selectedPoolGroup?.qualityWarnings.length ? " has-warning" : ""}`}><select value={selectedPoolFingerprint} onChange={(event) => setSelectedPoolFingerprint(event.target.value)}>{poolGroups.map((group) => <option value={group.fingerprint} key={group.fingerprint}>{group.subject} · {group.domain} · {group.level} ({group.approvedCount}/{group.targetCount}){group.qualityWarnings.length ? " · 확인 필요" : group.reviewCount ? ` · 검토 ${group.reviewCount}` : ""}</option>)}</select>{selectedPoolGroup?.qualityWarnings.length > 0 && <button className="pool-warning-jump" type="button" disabled={poolSentencesLoading} onClick={() => firstPoolWarningRef.current?.scrollIntoView({ behavior: "smooth", block: "center" })}>⚠ {selectedPoolWarningSentenceCount > 0 ? `확인 필요 ${selectedPoolWarningSentenceCount}개` : "확인 필요 문장 있음"}</button>}</span></label></div>
+          <div className="ai-pool-selection-row"><label><span>과목·영역·수준</span><span className={`ai-pool-select-box${(selectedPoolGroup?.qualityWarnings.length || selectedPoolGroup?.reviewCount) ? " has-warning" : ""}`}><select value={selectedPoolFingerprint} onChange={(event) => setSelectedPoolFingerprint(event.target.value)}>{poolGroups.map((group) => <option value={group.fingerprint} key={group.fingerprint}>{group.subject} · {group.domain} · {group.level} ({group.approvedCount}/{group.targetCount}){group.qualityWarnings.length ? " · 확인 필요" : group.reviewCount ? ` · 검토 ${group.reviewCount}` : ""}</option>)}</select>{(selectedPoolGroup?.qualityWarnings.length || selectedPoolGroup?.reviewCount) > 0 && <button className="pool-warning-jump" type="button" disabled={poolSentencesLoading} onClick={() => firstPoolWarningRef.current?.scrollIntoView({ behavior: "smooth", block: "center" })}>⚠ {selectedPoolWarningSentenceCount > 0 ? `확인 필요 ${selectedPoolWarningSentenceCount}개` : "확인 필요 문장 있음"}</button>}</span></label></div>
           {selectedPoolGroup && <div className="ai-pool-quality" aria-label="선택 문장 풀 품질 지표">
             <span><small>고유 문장</small><b>{selectedPoolGroup.diversity.uniqueCount}/{selectedPoolGroup.approvedCount}</b></span>
             <span><small>서로 다른 첫머리</small><b>{selectedPoolGroup.diversity.openingCount}</b></span>
