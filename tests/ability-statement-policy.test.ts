@@ -44,6 +44,14 @@ test('particle variants use the same exclusion rule', () => {
   for (const text of ['해결할 수도 있음.', '해결할 수는 있음.', '성장할 가능성도 있음.', '성장할 가능성은 있음.']) assert.equal(hasAbilityStatement(text), true, text);
 });
 
+test('pool UI separates usable sentences, review candidates and incomplete groups', () => {
+  const page = readFileSync(new URL('../app/page.tsx', import.meta.url), 'utf8');
+  assert.match(page, /개 사용 가능 문장/);
+  assert.match(page, /재검토 필요 <b>\{poolSummary.reviewCount\}/);
+  assert.match(page, /제작 부족 <b>\{poolSummary.needsGeneration\}/);
+  assert.doesNotMatch(page, /검수 제외/);
+});
+
 test('display count and completion exclude unusable stored candidates', () => {
   const bad = Array.from({ length: 20 }, (_, i) => `${i}번 문제를 해결할 수 있음.`);
   assert.equal(commentPoolQuality(bad).count, 0);
@@ -54,9 +62,28 @@ test('display count and completion exclude unusable stored candidates', () => {
   assert.equal(commentPoolIsComplete([...bad, ...normal.slice(0, 19)]), false);
 });
 
-test('only ability and possibility families are excluded, including connected clauses', () => {
-  for (const text of ['문제를 해결할 수 있음.', '글을 쓸수있음.', '도형을 그릴 수가 있음.', '성장할 가능성이 있음.', '참여할 수 있으며 의견을 표현함.']) assert.equal(hasAbilityStatement(text), true, text);
+test('only sentence-final ability and possibility statements are excluded', () => {
+  for (const text of ['문제를 해결할 수 있음.', '글을 쓸수있음.', '도형을 그릴 수가 있음.', '성장할 가능성이 있음.', '해결할 수 있음. 의견을 표현함.', '성장할 가능성이 있음! 활동에 참여함.', '활동에 참여함. 해결할 수 있음', '해결할 수 있음。']) assert.equal(hasAbilityStatement(text), true, text);
   for (const text of ['꾸준히 참여하려고 노력함.', '표현을 익힘.', '자신감이 있음.', '친구에게 박수 보냄.', '좋은 점수 있음.', '참여가 향상됨.', '가능성을 탐색함.']) assert.equal(hasAbilityStatement(text), false, text);
+});
+
+test('modifiers and embedded content remain usable for both comments and behaviors', () => {
+  const [spec] = buildCommentPoolSpecs([{ id: 1, subject: '국어', unit: '쓰기', goal: '설명', domain: '쓰기', perspective: '자료 조사', high: '자료를 조사하여 설명함.', middle: '자료를 조사함.', low: '조사에 참여함.' }]);
+  const normal = [
+    '신뢰할 수 있는 자료를 찾아 출처를 밝히고 설명하는 글을 작성함.',
+    '생활에서 실천할 수 있는 방법을 찾아 제안함.',
+    '생활 모습이 달라질 수 있음을 파악함.',
+    '다른 사람도 비슷한 감정을 느낄 수 있음을 이해함.',
+    '변화할 가능성이 있음을 설명함.',
+    '참여할 수 있으며 의견을 표현함.',
+    '독자가 이용할 수 있도록 순서를 설명함.',
+  ];
+  for (const text of normal) {
+    assert.equal(hasAbilityStatement(text), false, text);
+    assert.equal(validateRecord(text, true).styleIssues.includes(ABILITY_STATEMENT_ISSUE), false, text);
+  }
+  assert.deepEqual(approvePoolCandidates(normal, spec).approved, normal);
+  assert.equal(commentPoolQuality(normal).count, normal.length);
 });
 
 test('behavior chooses a valid alternative and never persists the excluded candidate', () => {

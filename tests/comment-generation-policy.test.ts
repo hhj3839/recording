@@ -9,10 +9,9 @@ import { batchCommentRepairs, batchCommentsByAssessmentArea, COMMENT_BATCH_SIZE,
 import { batchBehaviors, BEHAVIOR_BATCH_SIZE } from "../app/behavior-batching.ts";
 import { estimateAiCostUsd } from "../app/ai-pricing.ts";
 import { commentAreaOverlapReasons } from "../app/comment-area-diversity.ts";
-import { assignApprovedCommentPools, assignUniquePoolCandidates, buildApprovedCommentPool, buildCanonicalBaselinePart, buildCommentPoolGroups, buildPublicCommentPoolRequests, commentPoolCandidateCount, spreadCandidatesByOpening } from "../app/comment-pool-generation.ts";
 import { assembleRotatedComment } from "../app/comment-assembly.ts";
 import { readApiJson } from "../app/api-response.ts";
-import { approvePoolCandidates, buildCommentPoolSpecs, buildValidatedMinimumPoolFallbacks, commentPoolIsComplete, commentPoolQuality, commentPoolSelectionTarget, commentPoolSentenceWarnings, COMMENT_POOL_CLUSTER_LIMIT, COMMENT_POOL_CLUSTER_THRESHOLD, COMMENT_POOL_MINIMUM, COMMENT_POOL_SIMILARITY_LIMIT, COMMENT_POOL_TARGET, hasDiscouragedPoolFormatting, poolCandidateQualityScore, poolSentenceOpening, poolSentenceSimilarity, repairLegacyPoolCandidate, validatePoolCandidate } from "../app/comment-pool-library.ts";
+import { approvePoolCandidates, buildCommentPoolSpecs, commentPoolIsComplete, commentPoolQuality, commentPoolSelectionTarget, commentPoolSentenceWarnings, COMMENT_POOL_CLUSTER_LIMIT, COMMENT_POOL_CLUSTER_THRESHOLD, COMMENT_POOL_MINIMUM, COMMENT_POOL_SIMILARITY_LIMIT, COMMENT_POOL_TARGET, hasDiscouragedPoolFormatting, poolCandidateQualityScore, poolSentenceOpening, poolSentenceSimilarity, repairLegacyPoolCandidate, validatePoolCandidate } from "../app/comment-pool-library.ts";
 import { buildCommentPoolCandidatePrompt, commentPoolSystemPrompt } from "../app/comment-pool-prompt.ts";
 import { compileCommentPoolEvidence, validCommentPoolEvidenceIds } from "../app/comment-pool-evidence.ts";
 import { openAiOutputText, parseFirstJsonObject } from "../app/openai-response.ts";
@@ -150,6 +149,24 @@ test("accepts natural nominal candidates without a semantic blocking gate", () =
   assert.deepEqual(validatePoolCandidate("지역 자료를 정확하게 조사하여 정리하고 그 결과를 발표함.", spec).issues, []);
 });
 
+test("uses the stored sentence form consistently for pool status and allocation", () => {
+  const [spec] = buildCommentPoolSpecs([poolPlan({
+    goal: "지역 자료를 조사하고 결과를 정리한다.",
+    perspective: "지역 자료를 조사하여 정리하는가?",
+    middle: "지역 자료를 조사하여 정리함.",
+  })]).filter((item) => item.level === "중");
+  const missingPeriod = "지역 자료를 조사하여 결과를 정리함";
+  const complete = `${missingPeriod}.`;
+
+  assert.notDeepEqual(validatePoolCandidate(missingPeriod, spec).issues, []);
+  assert.equal(commentPoolQuality([missingPeriod]).count, 0);
+  assert.deepEqual(approvePoolCandidates([missingPeriod], spec).approved, []);
+
+  assert.deepEqual(validatePoolCandidate(complete, spec).issues, []);
+  assert.equal(commentPoolQuality([complete]).count, 1);
+  assert.deepEqual(approvePoolCandidates([complete], spec).approved, [complete]);
+});
+
 test("leaves activity grounding to generation rather than mechanical rejection", () => {
   const [base] = buildCommentPoolSpecs([poolPlan({
     goal: "들은 내용을 알맞게 표현한다.",
@@ -190,23 +207,6 @@ test("requests the configured sentence pool for both short and long criteria", (
   assert.equal(commentPoolSelectionTarget(spec), COMMENT_POOL_TARGET);
   assert.equal(poolCandidateQualityScore(concise, spec) > poolCandidateQualityScore(padded, spec), true);
   assert.match(prompt, /서로 다른 교과 평가 문장 후보 15개/);
-});
-
-test("keeps free fallbacks nominal and exact-distinct", () => {
-  const spec = buildCommentPoolSpecs([poolPlan({
-    subject: "국어", unit: "마음을 전해요", domain: "쓰기", goal: "마음을 전하는 글을 쓴다.",
-    perspective: "마음을 전하는 글을 쓰는 방법을 알고 글을 쓰는가?",
-    high: "마음을 전하는 글을 쓰는 방법을 알고, 이를 활용하여 전하고자 하는 마음이 잘 드러나도록 글을 쓴다.",
-    middle: "마음을 전하는 글을 쓰는 방법을 알고, 마음을 전하는 글을 쓰기 위해 노력한다.",
-    low: "교사의 도움을 받아 마음을 전하는 글을 쓰는 방법을 알고 글을 쓴다.",
-  })]).find((item) => item.level === "중")!;
-  const existing = [spec.canonicalSentence];
-  const fallbacks = buildValidatedMinimumPoolFallbacks(spec, existing);
-  assert.equal(new Set([...existing, ...fallbacks].map((sentence) => sentence.replace(/[.!?]+$/g, ""))).size, existing.length + fallbacks.length);
-  fallbacks.forEach((candidate) => {
-    assert.deepEqual(validatePoolCandidate(candidate, spec).issues, [], candidate);
-    assert.match(candidate, /마음을 전하는 글/);
-  });
 });
 
 test("creates three reusable pool identities without student data", () => {
@@ -410,25 +410,6 @@ test("preserves the full subject evidence while batching a missing-area repair",
   assert.deepEqual(batch[0].subjectItems.map((item) => item.assessmentIndex), [0, 1, 2, 3, 4]);
 });
 
-test("builds level pools without putting student identifiers in the AI pool request", () => {
-  const evidence = [1, 2, 3].map((studentId) => ({
-    studentId,
-    subject: "국어",
-    items: [{ assessmentIndex: 0, level: "중" as const, criterion: "자료의 내용을 표현할 수 있다.", text: "1단원 | 문법 | 수준: 중 | 기준: 자료의 내용을 표현할 수 있다." }],
-  }));
-  const groups = buildCommentPoolGroups(evidence);
-  assert.equal(groups.length, 1);
-  assert.equal(groups[0].members.length, 3);
-  const publicPools = buildPublicCommentPoolRequests(groups);
-  assert.equal(JSON.stringify(publicPools).includes("studentId"), false);
-  assert.equal(publicPools[0].requiredCount, 3);
-  assert.equal(publicPools[0].candidateCount, 5);
-  assert.equal(publicPools[0].canonicalSentence, "자료의 내용을 표현함.");
-  assert.deepEqual(publicPools[0].commonGuide.requiredActions, ["표현하기"]);
-  assert.equal(publicPools[0].commonGuide.completion, "completed");
-  assert.equal(new Set(publicPools[0].variantPlans.map((plan) => JSON.stringify(plan))).size, 5);
-});
-
 test("builds a canonical sentence before asking AI for limited variants", () => {
   const cases = [
     ["작품을 읽고 재미나 감동을 느낀 부분과 그 까닭을 쓸 수 있다.", "작품을 읽고 재미나 감동을 느낀 부분과 그 까닭을 씀."],
@@ -442,97 +423,6 @@ test("builds a canonical sentence before asking AI for limited variants", () => 
     assert.equal(validateGeneratedCommentPart(expected, criterion).valid, true, criterion);
     assert.deepEqual(criterionSemanticIssues(expected, criterion), []);
   }
-});
-
-test("uses the canonical sentence when AI pool candidates fail validation", () => {
-  const [group] = buildCommentPoolGroups([{
-    studentId: 1,
-    subject: "과학",
-    items: [{
-      assessmentIndex: 0,
-      level: "중" as const,
-      criterion: "관찰한 결과를 기록할 수 있다.",
-      text: "관찰 | 수준: 중 | 기준: 관찰한 결과를 기록할 수 있다.",
-    }],
-  }]);
-  const result = assignUniquePoolCandidates(group, ["관찰함."]);
-  assert.deepEqual(result.candidates, ["관찰한 결과를 기록함."]);
-});
-
-test("prepares a complete 105-area canonical baseline before optional AI replacement", () => {
-  const criteria = [
-    "작품 속 인물들의 상황에 알맞은 표정과 몸짓으로 대화를 표현할 수 있다.",
-    "문장을 문장의 짜임에 따라 나누고 자료의 내용을 그 짜임에 맞게 표현할 수 있다.",
-    "작품을 읽고 재미나 감동을 느낀 부분과 그 까닭을 쓸 수 있다.",
-    "중심 문장과 뒷받침 문장을 파악하여 내용을 간추릴 수 있다.",
-    "마음을 전하는 글을 쓰는 방법을 알고 글을 쓰기 위해 노력한다.",
-  ];
-  const baselines = Array.from({ length: 21 }, (_, studentIndex) => criteria.map((criterion, assessmentIndex) =>
-    buildCanonicalBaselinePart(studentIndex + 1, "국어", {
-      assessmentIndex,
-      level: "중",
-      criterion,
-      text: `영역 ${assessmentIndex + 1} | 수준: 중 | 기준: ${criterion}`,
-    }))).flat();
-  assert.equal(baselines.length, 105);
-  for (const part of baselines) assert.ok(part, "every baseline must be present");
-  const presentBaselines = baselines.filter((part) => part !== null);
-  assert.equal(new Set(presentBaselines.map((part) => `${part.studentId}|${part.assessmentIndex}`)).size, 105);
-  assert.equal(presentBaselines.every((part) => part.warnings.length === 0), true);
-});
-
-test("assigns only revalidated deterministic candidates from an approved level pool", () => {
-  const criterion = "효와 우애의 의미를 이해하고 실천할 수 있는 일을 비교적 알고 있으며 가족을 소중히 여기는 마음을 전한다.";
-  const evidence = Array.from({ length: 21 }, (_, index) => ({
-    studentId: index + 1,
-    subject: "도덕",
-    items: [{
-      assessmentIndex: 1,
-      level: "중" as const,
-      criterion,
-      text: `가족 | 수준: 중 | 기준: ${criterion}`,
-    }],
-  }));
-  const [group] = buildCommentPoolGroups(evidence);
-  const pool = buildApprovedCommentPool(group);
-  assert.equal(pool.approvedCandidates.length >= 2, true);
-  assert.equal(pool.approvedCandidates.includes(pool.canonicalSentence), true);
-  const assigned = assignApprovedCommentPools(evidence);
-  assert.equal(assigned.length, 21);
-  assert.equal(new Set(assigned.map((part) => part.text)).size >= 2, true);
-  assert.equal(assigned.every((part) => pool.approvedCandidates.includes(part.text)), true);
-  assert.equal(assigned.every((part) => part.warnings.length === 0), true);
-});
-
-test("separates approved pools when the level or assessment criterion changes", () => {
-  const makeGroup = (level: "상" | "중", criterion: string) => buildCommentPoolGroups([{
-    studentId: 1,
-    subject: "수학",
-    items: [{ assessmentIndex: 0, level, criterion, text: `수와 연산 | 수준: ${level} | 기준: ${criterion}` }],
-  }])[0];
-  const middle = buildApprovedCommentPool(makeGroup("중", "계산 원리를 알고 문제를 해결할 수 있다."));
-  const high = buildApprovedCommentPool(makeGroup("상", "계산 원리를 정확히 설명하고 문제를 해결할 수 있다."));
-  assert.notEqual(middle.poolKey, high.poolKey);
-  assert.notDeepEqual(middle.approvedCandidates, high.approvedCandidates);
-});
-
-test("reuses the canonical sentence instead of leaving a failed pool blank", () => {
-  const assigned = assignApprovedCommentPools([1, 2, 3].map((studentId) => ({
-    studentId,
-    subject: "국어",
-    items: [{
-      assessmentIndex: 0,
-      level: "상",
-      criterion: "문장을 작성한다.",
-      text: "쓰기 | 수준: 상 | 기준: 문장을 작성한다.",
-    }],
-  })));
-  assert.equal(assigned.length, 3);
-  assert.deepEqual(assigned.map((part) => part.text), [
-    "문장을 작성함.",
-    "문장을 작성함.",
-    "문장을 작성함.",
-  ]);
 });
 
 test("derives the same common generation guide from any subject criterion", () => {
@@ -558,31 +448,6 @@ test("derives the same common generation guide from any subject criterion", () =
   assert.equal(process.rules.some((rule) => rule.includes("완료 수행으로 높이지 않음")), true);
 });
 
-test("builds a bounded shared pool and cycles it for larger classes", () => {
-  assert.equal(commentPoolCandidateCount(1), 5);
-  assert.equal(commentPoolCandidateCount(5), 5);
-  assert.equal(commentPoolCandidateCount(6), 6);
-  assert.equal(commentPoolCandidateCount(10), 10);
-  assert.equal(commentPoolCandidateCount(11), 11);
-  assert.equal(commentPoolCandidateCount(20), 20);
-  assert.equal(commentPoolCandidateCount(25), 20);
-  assert.equal(commentPoolCandidateCount(0), 0);
-});
-
-test("spreads approved candidates with different openings before assignment", () => {
-  assert.deepEqual(spreadCandidatesByOpening([
-    "작품 속 인물의 대화를 표현함.",
-    "작품 속 인물의 말투를 살려 표현함.",
-    "문장의 짜임을 파악함.",
-    "설명하는 글을 간추림.",
-  ]), [
-    "작품 속 인물의 대화를 표현함.",
-    "문장의 짜임을 파악함.",
-    "설명하는 글을 간추림.",
-    "작품 속 인물의 말투를 살려 표현함.",
-  ]);
-});
-
 test("rotates the first assessment area evenly across a class", () => {
   const parts = Array.from({ length: 5 }, (_, assessmentIndex) => ({ assessmentIndex, text: `영역 ${assessmentIndex + 1}.` }));
   const comments = Array.from({ length: 21 }, (_, index) => assembleRotatedComment(parts, index + 1));
@@ -591,16 +456,6 @@ test("rotates the first assessment area evenly across a class", () => {
   assert.equal(counts.size, 5);
   assert.equal(Math.max(...counts.values()), 5);
   assert.equal(comments[1], "영역 2. 영역 3. 영역 4. 영역 5. 영역 1.");
-});
-
-test("isolates each student and area during the final individual retries", () => {
-  const evidence = [1, 2, 3].map((studentId) => ({
-    studentId,
-    subject: "국어",
-    items: [{ assessmentIndex: 0, level: "중" as const, criterion: "자료의 내용을 표현할 수 있다.", text: "문법 | 수준: 중 | 기준: 자료의 내용을 표현할 수 있다." }],
-  }));
-  assert.equal(buildCommentPoolGroups(evidence).length, 1);
-  assert.equal(buildCommentPoolGroups(evidence, true).length, 3);
 });
 
 test("safely repairs duplicated nominal endings without guessing irregular verbs", () => {
@@ -744,61 +599,6 @@ test("recognizes collaboration when the criterion explicitly contains group evid
     ).filter((issue) => issue.includes("협력")),
     [],
   );
-});
-
-test("assigns only validated unique pool candidates and reports a shortage", () => {
-  const [group] = buildCommentPoolGroups([1, 2, 3].map((studentId) => ({
-    studentId,
-    subject: "국어",
-    items: [{ assessmentIndex: 0, level: "중" as const, criterion: "자료의 내용을 문장의 짜임에 맞게 일부 표현할 수 있다.", text: "1단원 | 문법 | 수준: 중 | 기준: 자료의 내용을 문장의 짜임에 맞게 일부 표현할 수 있다." }],
-  })));
-  const repeated = "자료의 내용을 문장의 짜임에 맞게 일부 표현하여 학습한 내용을 적용함.";
-  const result = assignUniquePoolCandidates(group, [
-    repeated,
-    repeated,
-    "문장의 짜임을 고려하여 자료에 담긴 내용을 일부 알맞게 표현함.",
-  ]);
-  assert.equal(result.candidates.length, 2);
-  assert.equal(result.issues.includes("완전히 같은 문장 후보 중복"), true);
-});
-
-test("does not replace a unique stored sentence with a candidate matching a fixed reference", () => {
-  const [group] = buildCommentPoolGroups([{
-    studentId: 1,
-    subject: "국어",
-    items: [{ assessmentIndex: 0, level: "중" as const, criterion: "자료의 내용을 문장의 짜임에 맞게 일부 표현할 수 있다.", text: "문법 | 수준: 중 | 기준: 자료의 내용을 문장의 짜임에 맞게 일부 표현할 수 있다." }],
-  }]);
-  const sentence = "자료의 내용을 문장의 짜임에 맞게 일부 표현하여 학습한 내용을 적용함.";
-  const result = assignUniquePoolCandidates(group, [sentence], [sentence]);
-  assert.equal(result.candidates.length, 0);
-  assert.equal(result.issues.includes("완전히 같은 문장 후보 중복"), true);
-});
-
-test("uses a grounded reference duplicate only when the final fallback is explicitly enabled", () => {
-  const [group] = buildCommentPoolGroups([{
-    studentId: 1,
-    subject: "국어",
-    items: [{ assessmentIndex: 0, level: "중" as const, criterion: "마음을 전하는 글을 쓰는 방법을 알고, 마음을 전하는 글을 쓰기 위해 노력한다.", text: "쓰기 | 수준: 중 | 기준: 마음을 전하는 글을 쓰는 방법을 알고, 마음을 전하는 글을 쓰기 위해 노력한다." }],
-  }]);
-  const sentence = "마음을 전하는 글을 쓰는 방법을 알고, 마음을 전하는 글을 쓰기 위해 노력함.";
-  const blocked = assignUniquePoolCandidates(group, [sentence], [sentence]);
-  const fallback = assignUniquePoolCandidates(group, [sentence], [sentence], true);
-  assert.equal(blocked.candidates.length, 0);
-  assert.deepEqual(fallback.candidates, [sentence]);
-  assert.equal(fallback.fallbackKeys.size, 1);
-});
-
-test("keeps grounded candidates even when their structures are similar", () => {
-  const [group] = buildCommentPoolGroups([1, 2].map((studentId) => ({
-    studentId,
-    subject: "국어",
-    items: [{ assessmentIndex: 0, level: "중" as const, criterion: "마음을 전하는 글을 쓰는 방법을 알고, 마음을 전하는 글을 쓰기 위해 노력한다.", text: "쓰기 | 수준: 중 | 기준: 마음을 전하는 글을 쓰는 방법을 알고, 마음을 전하는 글을 쓰기 위해 노력한다." }],
-  })));
-  const result = assignUniquePoolCandidates(group, [
-    "마음을 전하는 글을 쓰는 방법을 알고, 글을 쓰기 위해 노력함.",
-    "마음을 전하는 글의 작성 방법을 알고, 마음을 담아 글을 쓰기 위해 힘씀.",
-  ]);
-  assert.equal(result.candidates.length, 2);
 });
 
 test("groups missing comment evidence into at most ten areas per repair call", () => {
