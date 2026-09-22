@@ -98,6 +98,7 @@ export async function POST(request: Request) {
     for (let attempt = 0; attempt < maxAttempts && approved.length < COMMENT_POOL_TARGET; attempt += 1) {
       const requestCount = Math.max(3, COMMENT_POOL_TARGET - approved.length);
       const generated = await generateCandidates(batch.spec, approved, requestCount);
+      await recordAiUsage({ ownerId: job.owner_id, ownerEmail: job.owner_email, classId: Number(job.class_id), feature: `comment-pool-attempt-${attempt + 1}`, ...generated.usage });
       const review = approvePoolCandidates(generated.candidates, batch.spec, approved);
       review.rejectedIssues.forEach(issue => rejectionReasons.add(issue));
       if (!generated.candidates.length) rejectionReasons.add("AI 응답에 후보 문장이 없음");
@@ -111,7 +112,6 @@ export async function POST(request: Request) {
         })), "pool_version_id,normalized_sentence");
         approved = [...approved, ...selected].slice(0, COMMENT_POOL_TARGET);
       }
-      await recordAiUsage({ ownerId: job.owner_id, ownerEmail: job.owner_email, classId: Number(job.class_id), feature: `comment-pool-attempt-${attempt + 1}`, ...generated.usage });
     }
     const quality = commentPoolQuality(approved, batch.spec.canonicalSentence);
     const complete = commentPoolIsComplete(approved, batch.spec.canonicalSentence);
@@ -142,7 +142,7 @@ export async function POST(request: Request) {
         : `${batch.spec.subject} ${batch.spec.domain} ${batch.spec.level} 수준의 승인 문장을 확보하지 못해 기존 문장 풀을 유지했습니다. (${quality.issues.join(" · ")})`
       : `${batch.spec.subject} ${batch.spec.domain} ${batch.spec.level} 수준의 승인 문장을 확보하지 못했습니다.`;
   } catch (error) {
-    failed = batch.activateWhenReady ? true : approved.length === 0;
+    failed = true;
     errorMessage = error instanceof Error ? error.message : "AI 평어 제작 오류";
     await updateRows("comment_pool_versions", { id: eq(batch.poolVersionId) }, {
       status: approved.length ? "usable" : "failed", approved_count: approved.length, updated_at: new Date().toISOString(),

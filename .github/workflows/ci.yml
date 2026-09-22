@@ -52,6 +52,9 @@ jobs:
       - name: Test and build
         run: pnpm test
 
+      - name: Check generation storage failures
+        run: node --test tests/generation-save-failure.test.mjs
+
       - name: Check one-shot trial safety
         run: node --experimental-strip-types --test tests/comment-pool-trial.test.ts
 

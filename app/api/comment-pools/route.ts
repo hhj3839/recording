@@ -177,11 +177,11 @@ export async function GET(request: Request) {
     const detailVersion = detailSpec ? linkedVersionFor(detailSpec) : undefined;
     const sentences: Array<{ id: number; sentence: string }> = [];
     if (detailVersion) {
-      for (let offset = 0; sentences.length < COMMENT_POOL_TARGET; offset += 500) {
+      for (let offset = 0; ; offset += 500) {
         const rows = await selectRows<{ id: number; sentence: string }>("comment_pool_sentences", {
           pool_version_id: eq(detailVersion.id), status: eq("approved"), order: "id.asc", limit: 500, offset,
         });
-        sentences.push(...rows.filter(row => detailSpec && validatePoolCandidate(row.sentence, detailSpec).issues.length === 0).slice(0, COMMENT_POOL_TARGET - sentences.length));
+        sentences.push(...rows);
         if (rows.length < 500) break;
       }
     }
