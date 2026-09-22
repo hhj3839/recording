@@ -1034,8 +1034,9 @@ function PlanManager({ plan, onChanged, current }: { plan: AssessmentPlan[]; onC
         {poolStatusLoading ? <div className="ai-pool-loading" role="status"><i aria-hidden="true" /><span><b>AI 평어 상태를 확인하고 있습니다.</b><small>현재 평가계획의 승인 문장과 최신 검수 결과를 읽는 중입니다.</small></span></div> : <div className="ai-pool-summary">
           <span><b>{poolSummary.total}</b>개 영역·수준</span>
           {!(activePoolJob && poolJob?.freshOnly) && <span className="ready-count"><b>{poolSummary.ready}/{poolSummary.total}</b> 준비 완료</span>}
-          <span>{activePoolJob && poolJob?.freshOnly ? "이번 제작 " : ""}<b>{poolSummary.approved}</b>개 승인 문장</span>
-          {!(activePoolJob && poolJob?.freshOnly) && poolSummary.reviewCount > 0 && <span className="review-count">검수 제외 <b>{poolSummary.reviewCount}</b>문장</span>}
+          <span>{activePoolJob && poolJob?.freshOnly ? "이번 제작 " : ""}<b>{poolSummary.approved}</b>개 사용 가능 문장</span>
+          {!(activePoolJob && poolJob?.freshOnly) && poolSummary.reviewCount > 0 && <span className="review-count" title="저장된 후보 중 현재 검수를 통과하지 못한 문장입니다. 사용 가능 문장 수에는 포함되지 않으며 배정하지 않습니다.">재검토 필요 <b>{poolSummary.reviewCount}</b>문장</span>}
+          {!(activePoolJob && poolJob?.freshOnly) && poolSummary.needsGeneration > 0 && <span className="review-count">제작 부족 <b>{poolSummary.needsGeneration}</b>묶음</span>}
           {poolSummary.warningPools > 0 && <span className="diversity-warning">확인 필요</span>}
           {activePoolJob && poolJob ? <span className="pool-progress" role="status"><i aria-hidden="true" /> {poolJob.freshOnly ? "새 제작 " : ""}<b>{poolJob.completed}/{poolJob.total}</b> {poolJob.current ? `${poolJob.current.subject} · ${poolJob.current.domain} · ${poolJob.current.level} 제작·검수 중` : "제작 대기 중"}</span>
             : poolSummary.needsGeneration > 0 && !showPoolRecovery ? <button className="pool-continue" disabled={poolBusy || !plan.length} onClick={() => void startPoolProduction()}>{poolBusy ? "제작 준비 중…" : poolSummary.ready === 0 ? "AI 평어 제작" : `${poolSummary.needsGeneration}개 이어서 제작`}</button>

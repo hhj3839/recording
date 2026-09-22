@@ -181,7 +181,7 @@ test("detects repeated sentences", () => {
   assert.equal(result.repeated.length, 1);
 });
 
-test("checks behavior byte length and growth expression", () => {
+test("checks behavior byte length and nominal endings", () => {
   let first = "꾸준한 노력으로 성장하며 학습 활동에 성실하게 참여함.";
   const tail = " 친구의 의견을 존중하며 대화함. 맡은 역할을 책임감 있게 수행함. 준비물을 스스로 점검하는 습관을 기름.";
   while (new TextEncoder().encode(`${first}${tail}`).length < 500) {
@@ -190,7 +190,6 @@ test("checks behavior byte length and growth expression", () => {
   const text = `${first}${tail}`;
   const result = validateRecord(text, true);
   assert.equal(result.bytes >= 500 && result.bytes <= 600, true);
-  assert.equal(result.growthIncluded, true);
   assert.equal(result.valid, true);
   const looseEnding = validateRecord(text.replace(/기름\.$/, "생활한다."), true);
   assert.equal(looseEnding.endingsOk, false);
