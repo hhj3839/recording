@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
+import { useActionDialog } from "./action-dialog";
 import { FreshPoolDialog } from "./fresh-pool-dialog";
 import { PoolRecoveryNotice } from "./pool-recovery-notice";
 import { recordSimilarityDetails, validateBehaviorSource, validateRecord } from "./record-validation";
@@ -101,7 +102,7 @@ const navItems: { id: View; label: string; icon: string }[] = [
   { id: "students", label: "학생 관리", icon: "♙" },
   { id: "plans", label: "평가계획 관리", icon: "▤" },
   { id: "assessments", label: "평가 수준 입력", icon: "▦" },
-  { id: "comments", label: "교과 평어", icon: "✦" },
+  { id: "comments", label: "교과 평어", icon: "▤" },
   { id: "behavior", label: "행동특성", icon: "◎" },
 ];
 
@@ -129,7 +130,7 @@ function ReviewWarning({ issues, label = "오류", advisory = false }: { issues:
     setOpen(true);
   };
   return <div className="review-warning-wrap">
-    <button ref={warningRef} className={`review-warning${advisory ? " advisory" : ""}`} type="button" aria-expanded={open} onMouseEnter={show} onMouseLeave={() => { if (document.activeElement !== warningRef.current) setOpen(false); }} onFocus={show} onBlur={() => setOpen(false)} onClick={show}>⚠ {label} {issues.length}건</button>
+    <button ref={warningRef} className={`review-warning${advisory ? " advisory" : ""}`} type="button" aria-expanded={open} onMouseEnter={show} onMouseLeave={() => { if (document.activeElement !== warningRef.current) setOpen(false); }} onFocus={show} onBlur={() => setOpen(false)} onClick={show}>{label} {issues.length}건</button>
     {open && createPortal(<span className={`review-warning-tooltip${advisory ? " advisory" : ""}`} role="tooltip" style={{ left: position.left, top: position.top }}><strong>{advisory ? "교사 확인 권장 사항" : "검수 필요 사항"}</strong>{issues.map((issue, issueIndex) => <i key={issueIndex}>{issue}</i>)}</span>, document.body)}
   </div>;
 }
@@ -155,9 +156,9 @@ function Dashboard({ move, teacherName, classroom, studentCount, completedLevels
     { label: "행동특성", value: `${behaviorCount}명`, detail: `전체 ${studentCount}명`, tone: "violet" },
   ];
   const tasks = [
-    { title: "평가 수준 입력", detail: totalLevels ? `${Math.max(totalLevels - completedLevels, 0)}개 항목이 남았습니다.` : "평가계획과 학생 명단을 먼저 등록하세요.", action: levelProgress === 100 ? "확인하기" : "이어하기", view: "assessments" as View, progress: levelProgress },
-    { title: "교과 평어 작성", detail: expectedComments ? `${Math.max(expectedComments - commentCount, 0)}건의 평어가 남았습니다.` : "평가계획과 학생 명단을 먼저 등록하세요.", action: commentProgress === 100 ? "검토하기" : "작성하기", view: "comments" as View, progress: commentProgress },
-    { title: "행동특성 작성", detail: `${Math.max(studentCount - behaviorCount, 0)}명의 행동특성이 남았습니다.`, action: behaviorProgress === 100 ? "검토하기" : "기록하기", view: "behavior" as View, progress: behaviorProgress },
+    { title: "평가 수준 입력", detail: totalLevels ? `${Math.max(totalLevels - completedLevels, 0)}개 항목 남음` : "평가계획·학생 명단 등록 필요", action: levelProgress === 100 ? "확인" : "이어서 입력", view: "assessments" as View, progress: levelProgress },
+    { title: "교과 평어 작성", detail: expectedComments ? `${Math.max(expectedComments - commentCount, 0)}건 남음` : "평가계획·학생 명단 등록 필요", action: commentProgress === 100 ? "검토" : "작성", view: "comments" as View, progress: commentProgress },
+    { title: "행동특성 작성", detail: `${Math.max(studentCount - behaviorCount, 0)}명 남음`, action: behaviorProgress === 100 ? "검토" : "기록", view: "behavior" as View, progress: behaviorProgress },
   ];
   const pendingTasks = tasks.filter((task) => task.progress < 100);
 
@@ -166,8 +167,8 @@ function Dashboard({ move, teacherName, classroom, studentCount, completedLevels
       <section className="welcome">
         <div>
           <p className="eyebrow">학급 기록</p>
-          <h1>{teacherName} 선생님, 안녕하세요.</h1>
-          <p>오늘도 학생의 성장을 세심하게 기록해 볼까요?</p>
+          <h1>{teacherName} 선생님의 학급 기록</h1>
+          <p>평가 입력 · 교과 평어 · 행동특성</p>
         </div>
       </section>
       <ClassroomManager current={classroom} embedded />
@@ -190,7 +191,7 @@ function Dashboard({ move, teacherName, classroom, studentCount, completedLevels
           <div className="task-list">
             {pendingTasks.map((task) => (
               <article className="task-row" key={task.title}>
-                <div className="task-check">✓</div>
+                <div className="task-check"></div>
                 <div className="task-copy">
                   <strong>{task.title}</strong>
                   <span>{task.detail}</span>
@@ -199,7 +200,7 @@ function Dashboard({ move, teacherName, classroom, studentCount, completedLevels
                 <button onClick={() => move(task.view)}>{task.action}</button>
               </article>
             ))}
-            {!pendingTasks.length && <p className="dashboard-complete">현재 학급의 필수 작성 항목을 모두 완료했습니다.</p>}
+            {!pendingTasks.length && <p className="dashboard-complete">현재 학급 필수 항목 작성 완료</p>}
           </div>
         </section>
 
@@ -216,6 +217,7 @@ function Dashboard({ move, teacherName, classroom, studentCount, completedLevels
 type ManagedClassroom = ClassroomInfo & { id: number };
 
 function ClassroomManager({ current, embedded = false }: { current: ClassroomInfo | null; embedded?: boolean }) {
+  const ui = useActionDialog();
   const [classrooms, setClassrooms] = useState<ManagedClassroom[]>([]);
   const [form, setForm] = useState({
     schoolName: current?.schoolName ?? "",
@@ -279,7 +281,7 @@ function ClassroomManager({ current, embedded = false }: { current: ClassroomInf
   };
   const deleteClassroom = async (item: ManagedClassroom) => {
     const label = `${item.schoolName} ${item.schoolYear}학년도 ${item.semester}학기 ${item.grade}학년 ${item.classNumber}반`;
-    if (!window.confirm(`${label}과 연결된 학생·평가·생성 문장을 모두 영구 삭제할까요?\n\n삭제한 자료는 복구할 수 없습니다.`)) return;
+    if (!await ui.confirm(`${label}과 연결된 학생·평가·생성 문장 전체 영구 삭제\n\n삭제 자료 복구 불가`)) return;
     setBusy(true);
     setMessage("");
     try {
@@ -315,7 +317,7 @@ function ClassroomManager({ current, embedded = false }: { current: ClassroomInf
       <button className="class-switch-button" aria-expanded={open} onClick={() => setOpen((value) => !value)}>학급 전환 <span>{open ? "⌃" : "⌄"}</span></button>
     </section>
     {open && <div className="classroom-popover">
-      <div className="classroom-popover-heading"><div><strong>내 학급</strong><small>사용할 학급을 선택하세요.</small></div><button onClick={() => setShowCreate((value) => !value)}>{showCreate ? "추가 닫기" : "+ 새 학급"}</button></div>
+      <div className="classroom-popover-heading"><div><strong>내 학급</strong><small>학급 선택</small></div><button onClick={() => setShowCreate((value) => !value)}>{showCreate ? "추가 닫기" : "+ 새 학급"}</button></div>
       {message && <p className="student-message">{message}</p>}
       <div className="classroom-list">{classrooms.map((item) => {
         const active = item.id === current?.id;
@@ -336,9 +338,9 @@ function ClassroomManager({ current, embedded = false }: { current: ClassroomInf
     </div>}
   </div>;
   return <section>
-    <div className="page-heading"><div><p className="eyebrow">학급 설정</p><h1>학급 관리</h1><p>담당 학급을 1년 동안 사용하고 학기별 기록은 구분해 보관하세요.</p></div></div>
+    <div className="page-heading"><div><p className="eyebrow">학급 설정</p><h1>학급 관리</h1><p>학급별 관리 · 학기별 기록 보관</p></div></div>
     {message && <p className="student-message">{message}</p>}
-    <aside className="semester-retention-notice"><span aria-hidden="true">✓</span><div><strong>같은 반은 1년 동안 계속 사용할 수 있습니다.</strong><p>1학기와 2학기 기록은 서로 섞이지 않도록 구분해 저장합니다. 2학기 기록을 시작하거나 다른 반·새 학년도를 맡을 때만 아래에서 학급을 추가하세요.</p></div></aside>
+    <aside className="semester-retention-notice"><span aria-hidden="true"></span><div><strong>동일 학급 연간 사용</strong><p>학기별 기록 분리 보관 · 새 학기·담당 반 변경 시 학급 추가</p></div></aside>
     <div className="classroom-layout">
       <section className="classroom-list-panel">
         <div className="section-heading"><div><p className="eyebrow">현재 학급</p><h2>내 학급 · {classrooms.length}개</h2></div></div>
@@ -356,7 +358,7 @@ function ClassroomManager({ current, embedded = false }: { current: ClassroomInf
       </section>
       <section className="classroom-create-panel">
         <div className="section-heading"><div><p className="eyebrow">학급 추가</p><h2>다른 학기·학급 추가</h2></div></div>
-        <p>2학기 기록을 시작하거나 담당 반이 바뀔 때 사용하세요. 기존 학기의 자료는 그대로 유지됩니다.</p>
+        <p>새 학기·담당 반 추가 · 기존 학기 자료 유지</p>
         <form onSubmit={(event) => void createClassroom(event)}>
           <label className="wide"><span>학교명</span><input required value={form.schoolName} onChange={(event) => updateForm("schoolName", event.target.value)} /></label>
           <label><span>학년도</span><input type="number" min="2020" max="2100" required value={form.schoolYear} onChange={(event) => updateForm("schoolYear", event.target.value)} /></label>
@@ -377,6 +379,7 @@ function StudentManager({ roster, onAdded, onChanged, onDeleted, onImported }: {
   onDeleted: (id: number) => void;
   onImported: (students: Array<{ id: number; number: number; name: string }>) => void;
 }) {
+  const ui = useActionDialog();
   const [rosterText, setRosterText] = useState("");
   const [message, setMessage] = useState("");
   const [busy, setBusy] = useState(false);
@@ -468,7 +471,7 @@ function StudentManager({ roster, onAdded, onChanged, onDeleted, onImported }: {
     }
   }
   async function purgeStudent(student: { id: number; number: number; name: string }) {
-    if (!window.confirm(`${student.name} 학생과 연결된 평가·평어·행동특성 기록을 모두 영구 삭제할까요?\n\n이 작업은 복구할 수 없습니다.`)) return;
+    if (!await ui.confirm(`${student.name} 학생과 연결된 평가·평어·행동특성 기록 전체 영구 삭제\n\n삭제 자료 복구 불가`)) return;
     setBusy(true);
     setMessage("");
     try {
@@ -542,7 +545,7 @@ function StudentManager({ roster, onAdded, onChanged, onDeleted, onImported }: {
           <td><input aria-label={`${student.name} 이름`} value={draft.name} onChange={(event) => setDrafts((current) => ({ ...current, [student.id]: { ...draft, name: event.target.value } }))} /></td>
           <td><div className="student-row-actions"><span className="order-buttons"><button disabled={busy || index === 0} title="한 칸 위로" onClick={() => moveStudent(student.id, -1)}>↑</button><button disabled={busy || index === orderedRoster.length - 1} title="한 칸 아래로" onClick={() => moveStudent(student.id, 1)}>↓</button></span><button onClick={() => void saveStudent(student.id)}>저장</button><button className="danger-text" onClick={() => onDeleted(student.id)}>비활성화</button></div></td>
         </tr>;
-      }) : <tr><td colSpan={3} className="empty-cell">등록된 학생이 없습니다. 번호·이름 명단을 붙여넣어 주세요.</td></tr>}</tbody>
+      }) : <tr><td colSpan={3} className="empty-cell">등록 학생 없음 · 번호·이름 명단 붙여넣기</td></tr>}</tbody>
     </table></div>
     ) : (
       <div className="table-wrap student-table-wrap"><table className="students-table inactive-students-table">
@@ -550,13 +553,14 @@ function StudentManager({ roster, onAdded, onChanged, onDeleted, onImported }: {
         <tbody>{inactiveStudents.length ? inactiveStudents.map((student) => <tr key={student.id}>
           <td>{student.number}</td><td><strong>{student.name}</strong><small>평가·평어 기록 보관 중</small></td>
           <td><button disabled={busy} onClick={() => void restoreStudent(student)}>재학생 복귀</button><button disabled={busy} className="danger-text" onClick={() => void purgeStudent(student)}>영구 삭제</button></td>
-        </tr>) : <tr><td colSpan={3} className="empty-cell">전출·비활성 학생이 없습니다.</td></tr>}</tbody>
+        </tr>) : <tr><td colSpan={3} className="empty-cell">전출·비활성 학생 없음</td></tr>}</tbody>
       </table></div>
     )}
   </section>;
 }
 
 function PlanManager({ plan, onChanged, current }: { plan: AssessmentPlan[]; onChanged: (plan: AssessmentPlan[]) => void; current: ClassroomInfo | null }) {
+  const ui = useActionDialog();
   const [planSection, setPlanSection] = useState<"plan" | "ai">("plan");
   const [planText, setPlanText] = useState("");
   const [preview, setPreview] = useState<AssessmentPlan[]>([]);
@@ -670,7 +674,7 @@ function PlanManager({ plan, onChanged, current }: { plan: AssessmentPlan[]; onC
       let response = await requestUpdate();
       let result = await response.json() as { item?: AssessmentPlan; error?: string; requiresConfirmation?: boolean };
       if (response.status === 409 && result.requiresConfirmation) {
-        const confirmed = window.confirm(`${result.error}\n\n그래도 수정하시겠습니까? 기존 평가수준은 유지됩니다.`);
+        const confirmed = await ui.confirm(`${result.error}\n\n평가계획 수정 확인 · 기존 평가수준 유지`);
         if (!confirmed) {
           setMessage("평가계획 수정을 취소했습니다.");
           return;
@@ -686,7 +690,7 @@ function PlanManager({ plan, onChanged, current }: { plan: AssessmentPlan[]; onC
     } finally { setBusy(false); }
   };
   const deleteItem = async (item: AssessmentPlan) => {
-    if (!item.id || !window.confirm(`${item.subject} ${item.unit} 평가계획을 삭제할까요?`)) return;
+    if (!item.id || !await ui.confirm(`${item.subject} ${item.unit} 평가계획 삭제`)) return;
     const response = await fetch(`/api/assessment-plan?id=${item.id}`, { method: "DELETE" });
     const result = await readApiJson<{ ok?: boolean }>(response, "교과 평어를 초기화하지 못했습니다.");
     if (!response.ok) return setErrors([result.error || "삭제하지 못했습니다."]);
@@ -695,7 +699,7 @@ function PlanManager({ plan, onChanged, current }: { plan: AssessmentPlan[]; onC
   };
   const clearCurrentPlan = async () => {
     if (!plan.length) return;
-    const confirmation = window.prompt(
+    const confirmation = await ui.prompt(
       `현재 학급의 평가계획 ${plan.length}개와 연결된 평가수준·교과 평어를 삭제합니다.\n공동 평가계획과 버전 기록은 삭제되지 않습니다.\n\n계속하려면 평가계획삭제를 입력하세요.`,
     );
     if (confirmation !== "평가계획삭제") return;
@@ -731,7 +735,7 @@ function PlanManager({ plan, onChanged, current }: { plan: AssessmentPlan[]; onC
     }
   };
   const restoreVersion = async (version: { id: number; label: string; itemCount: number }) => {
-    if (!window.confirm(`‘${version.label}’ 버전의 평가계획 ${version.itemCount}개로 복원할까요?\n\n현재 계획은 복원 직전 상태로 다시 버전 보관됩니다.`)) return;
+    if (!await ui.confirm(`‘${version.label}’ 버전의 평가계획 ${version.itemCount}개 복원\n\n현재 계획의 복원 직전 버전 보관`)) return;
     setBusy(true);
     setErrors([]);
     try {
@@ -763,7 +767,7 @@ function PlanManager({ plan, onChanged, current }: { plan: AssessmentPlan[]; onC
     } catch (error) { setErrors([error instanceof Error ? error.message : "공동 평가계획을 불러오지 못했습니다."]); }
   };
   const publishSharedPlan = async () => {
-    const name = window.prompt("다른 교사가 알아볼 공동 평가계획 이름을 입력해 주세요.", `${current?.schoolYear ?? ""}학년도 ${current?.grade ?? ""}학년 ${current?.semester ?? ""}학기`);
+    const name = await ui.prompt("공동 평가계획 이름 입력", `${current?.schoolYear ?? ""}학년도 ${current?.grade ?? ""}학년 ${current?.semester ?? ""}학기`);
     if (!name?.trim()) return;
     setBusy(true);
     try {
@@ -778,7 +782,7 @@ function PlanManager({ plan, onChanged, current }: { plan: AssessmentPlan[]; onC
     finally { setBusy(false); }
   };
   const importSharedPlan = async (shared: (typeof sharedPlans)[number]) => {
-    if (!window.confirm(`‘${shared.name}’ ${shared.itemCount}개 항목으로 현재 평가계획을 교체할까요?\n기존 계획은 버전 기록에 보관됩니다.`)) return;
+    if (!await ui.confirm(`‘${shared.name}’ ${shared.itemCount}개 항목으로 현재 평가계획 교체\n기존 계획 버전 기록 보관`)) return;
     setBusy(true);
     try {
       const response = await fetch("/api/shared-assessment-plans", {
@@ -808,7 +812,7 @@ function PlanManager({ plan, onChanged, current }: { plan: AssessmentPlan[]; onC
     } finally { setBusy(false); }
   };
   const deleteSharedPlan = async (shared: (typeof sharedPlans)[number]) => {
-    if (!window.confirm(`공동 평가계획 ‘${shared.name}’을 삭제할까요?`)) return;
+    if (!await ui.confirm(`공동 평가계획 ‘${shared.name}’ 삭제`)) return;
     const response = await fetch("/api/shared-assessment-plans", {
       method: "DELETE", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ id: shared.id }),
     });
@@ -875,7 +879,7 @@ function PlanManager({ plan, onChanged, current }: { plan: AssessmentPlan[]; onC
   };
   const resetPoolLinks = async () => {
     if (!plan.length || poolBusy || poolSummary.usable === 0) return;
-    if (!window.confirm(`현재 평가계획의 AI 평어를 초기화할까요?\n\n제작된 AI 평어 목록만 비워집니다. 학생에게 이미 저장된 교과평어와 평가계획·평가수준, 공유 승인 문장 원문은 유지됩니다.`)) return;
+    if (!await ui.confirm(`현재 평가계획 AI 평어 초기화\n\n제작된 AI 평어 연결 목록만 초기화 · 기존 학생 평어·평가계획·평가수준·공유 승인 원문 유지`)) return;
     setPoolBusy(true);
     setErrors([]);
     try {
@@ -893,7 +897,7 @@ function PlanManager({ plan, onChanged, current }: { plan: AssessmentPlan[]; onC
   };
   const excludePoolSentence = async (row: { id: number; sentence: string }) => {
     if (poolBusy) return;
-    if (!window.confirm(`이 문장 후보를 현재 평가계획에서만 제외할까요?\n\n다른 학급의 문장 풀과 이미 저장된 학생 평어는 유지됩니다.`)) return;
+    if (!await ui.confirm(`현재 평가계획의 문장 후보 제외\n\n다른 학급 문장 풀·기존 학생 평어 유지`)) return;
     setPoolBusy(true);
     setErrors([]);
     try {
@@ -912,7 +916,7 @@ function PlanManager({ plan, onChanged, current }: { plan: AssessmentPlan[]; onC
   const excludeWarningPoolSentences = async () => {
     const warningRows = poolSentences.filter((row) => row.issues.length > 0 || (row.warnings?.length ?? 0) > 0);
     if (poolBusy || !warningRows.length) return;
-    if (!window.confirm(`선택한 AI 평어의 경고 문장 ${warningRows.length}개를 제거할까요?\n\n현재 평가계획에서만 제외되며 공용 원본과 기존 학생 평어는 유지됩니다.`)) return;
+    if (!await ui.confirm(`선택한 AI 평어의 경고 문장 ${warningRows.length}개 제거\n\n현재 평가계획에서만 제외 · 공용 원본·기존 학생 평어 유지`)) return;
     setPoolBusy(true);
     setErrors([]);
     try {
@@ -930,7 +934,7 @@ function PlanManager({ plan, onChanged, current }: { plan: AssessmentPlan[]; onC
   };
   const editPoolSentence = async (row: { id: number; sentence: string }) => {
     if (poolBusy) return;
-    const edited = window.prompt("문장을 수정해 주세요.", row.sentence);
+    const edited = await ui.prompt("문장 수정", row.sentence);
     if (edited === null || edited.trim() === row.sentence.trim()) return;
     if (!edited.trim()) {
       setErrors(["수정할 문장을 입력해 주세요."]);
@@ -1034,7 +1038,7 @@ function PlanManager({ plan, onChanged, current }: { plan: AssessmentPlan[]; onC
         </div>}
         {showPoolRecovery && poolJob && <PoolRecoveryNotice count={poolJob.failed} error={poolJob.error} busy={poolBusy} onRetry={() => void startPoolProduction(false, Boolean(poolJob.freshOnly && poolJob.status === "completed_with_errors"))} />}
         {!!poolGroups.length && <div className="ai-pool-browser">
-          <div className="ai-pool-selection-row"><label><span>과목·영역·수준</span><span className={`ai-pool-select-box${(selectedPoolGroup?.qualityWarnings.length || selectedPoolGroup?.reviewCount) ? " has-warning" : ""}`}><select value={selectedPoolFingerprint} onChange={(event) => setSelectedPoolFingerprint(event.target.value)}>{poolGroups.map((group) => <option value={group.fingerprint} key={group.fingerprint}>{group.subject} · {group.domain} · {group.level} ({group.approvedCount}/{group.targetCount}){group.qualityWarnings.length ? " · 확인 필요" : group.reviewCount ? ` · 검토 ${group.reviewCount}` : ""}</option>)}</select>{(selectedPoolGroup?.qualityWarnings.length || selectedPoolGroup?.reviewCount) > 0 && <button className="pool-warning-jump" type="button" disabled={poolSentencesLoading} onClick={() => firstPoolWarningRef.current?.scrollIntoView({ behavior: "smooth", block: "center" })}>⚠ {selectedPoolWarningSentenceCount > 0 ? `확인 필요 ${selectedPoolWarningSentenceCount}개` : "확인 필요 문장 있음"}</button>}</span></label></div>
+          <div className="ai-pool-selection-row"><label><span>과목·영역·수준</span><span className={`ai-pool-select-box${(selectedPoolGroup?.qualityWarnings.length || selectedPoolGroup?.reviewCount) ? " has-warning" : ""}`}><select value={selectedPoolFingerprint} onChange={(event) => setSelectedPoolFingerprint(event.target.value)}>{poolGroups.map((group) => <option value={group.fingerprint} key={group.fingerprint}>{group.subject} · {group.domain} · {group.level} ({group.approvedCount}/{group.targetCount}){group.qualityWarnings.length ? " · 확인 필요" : group.reviewCount ? ` · 검토 ${group.reviewCount}` : ""}</option>)}</select>{(selectedPoolGroup?.qualityWarnings.length || selectedPoolGroup?.reviewCount) > 0 && <button className="pool-warning-jump" type="button" disabled={poolSentencesLoading} onClick={() => firstPoolWarningRef.current?.scrollIntoView({ behavior: "smooth", block: "center" })}>{selectedPoolWarningSentenceCount > 0 ? `확인 필요 ${selectedPoolWarningSentenceCount}개` : "확인 필요 문장 있음"}</button>}</span></label></div>
           {selectedPoolGroup && <div className="ai-pool-quality" aria-label="선택 문장 풀 품질 지표">
             <span><small>고유 문장</small><b>{selectedPoolGroup.diversity.uniqueCount}/{selectedPoolGroup.approvedCount}</b></span>
             <span><small>서로 다른 첫머리</small><b>{selectedPoolGroup.diversity.openingCount}</b></span>
@@ -1045,7 +1049,7 @@ function PlanManager({ plan, onChanged, current }: { plan: AssessmentPlan[]; onC
           {!!selectedPoolGroup?.qualityWarnings.length && <p className="ai-pool-quality-note">다양성 확인: {selectedPoolGroup.qualityWarnings.join(" · ")}</p>}
           <div className="ai-pool-sentence-list">{poolSentencesLoading ? <p className="empty-cell" role="status">선택한 AI 평어를 불러오는 중입니다.</p> : orderedPoolSentences.length ? orderedPoolSentences.map((row, index) => {
             const reviewReasons = [...row.issues, ...(row.warnings ?? [])];
-            return <p ref={reviewReasons.length > 0 && index === 0 ? firstPoolWarningRef : undefined} className={reviewReasons.length ? "needs-review" : ""} key={row.id}><b>{index + 1}{reviewReasons.length > 0 && <i aria-label="확인 필요">⚠</i>}</b><span>{row.sentence}{reviewReasons.length > 0 && <small>확인 필요: {reviewReasons.map(poolSentenceReviewLabel).join(" · ")}</small>}</span>{reviewReasons.length > 0 && <span className="pool-sentence-actions"><button className="edit-pool-sentence" type="button" disabled={poolBusy} onClick={() => void editPoolSentence(row)} aria-label={`${index + 1}번 문장 수정`}>문장 수정</button><button className="exclude-pool-sentence" type="button" disabled={poolBusy} onClick={() => void excludePoolSentence(row)} aria-label={`${index + 1}번 문장 후보 제외`}>× 문장 후보 제외</button></span>}</p>;
+            return <p ref={reviewReasons.length > 0 && index === 0 ? firstPoolWarningRef : undefined} className={reviewReasons.length ? "needs-review" : ""} key={row.id}><b>{index + 1}{reviewReasons.length > 0 && <i aria-label="확인 필요">!</i>}</b><span>{row.sentence}{reviewReasons.length > 0 && <small>확인 필요: {reviewReasons.map(poolSentenceReviewLabel).join(" · ")}</small>}</span>{reviewReasons.length > 0 && <span className="pool-sentence-actions"><button className="edit-pool-sentence" type="button" disabled={poolBusy} onClick={() => void editPoolSentence(row)} aria-label={`${index + 1}번 문장 수정`}>문장 수정</button><button className="exclude-pool-sentence" type="button" disabled={poolBusy} onClick={() => void excludePoolSentence(row)} aria-label={`${index + 1}번 문장 후보 제외`}>문장 후보 제외</button></span>}</p>;
           }) : <p className="empty-cell">아직 제작된 승인 문장이 없습니다.</p>}</div>
         </div>}
       </>}
@@ -1068,7 +1072,7 @@ function PlanManager({ plan, onChanged, current }: { plan: AssessmentPlan[]; onC
             window.setTimeout(() => setPromptCopied(false), 2200);
           })
           .catch(() => setErrors(["프롬프트를 복사하지 못했습니다. 브라우저의 클립보드 권한을 확인해 주세요."]));
-      }}>{promptCopied ? "복사됨 ✓" : "변환 프롬프트 복사"}</button></div></div>
+      }}>{promptCopied ? "복사 완료" : "변환 프롬프트 복사"}</button></div></div>
       <div className="plan-paste-columns">과목 → 단원 → 평가목표 → 영역 → 평가유형 → 평가관점 → 상 → 중 → 하 → 유의점</div>
       <label className="plan-paste-label" htmlFor="assessment-plan-paste">평가계획 표</label>
       <textarea id="assessment-plan-paste" value={planText} onChange={(event) => setPlanText(event.target.value)} placeholder={"Excel, 한글 또는 ChatGPT에서 변환한 평가계획 표를 붙여넣으세요.\n\n국어\t1. 생생하게 표현해요\t상황에 알맞게 표현할 수 있다.\t듣기·말하기\t구술 평가\t상황에 맞게 표현하는가?\t정확하고 실감 나게 표현할 수 있다.\t알맞게 표현할 수 있다.\t도움을 받아 표현하기 위해 노력한다.\t다양한 표현을 고려한다."} />
@@ -1141,6 +1145,7 @@ function Assessments({ data, setData, plan, activeSubject, setActiveSubject, onS
   setActiveSubject: (subject: string) => void;
   onSave: () => Promise<string>;
 }) {
+  const ui = useActionDialog();
   const [lastSavedAt, setLastSavedAt] = useState<Date | null>(null);
   const [saving, setSaving] = useState(false);
   const [dirty, setDirty] = useState(false);
@@ -1190,8 +1195,8 @@ function Assessments({ data, setData, plan, activeSubject, setActiveSubject, onS
     setDirty(true);
     setMessage(`${activeSubject} 미입력 ${changed}칸에 '${bulkLevel}'을 적용했습니다.`);
   };
-  const clearAll = () => {
-    if (!window.confirm(`${activeSubject}의 현재 화면 평가수준을 모두 미입력으로 바꿀까요?`)) return;
+  const clearAll = async () => {
+    if (!await ui.confirm(`${activeSubject} 현재 화면 평가수준 전체 미입력 전환`)) return;
     setData((current) => current.map((student) => ({ ...student, assessments: student.assessments.map(() => "-") })));
     setDirty(true);
     setMessage(`${activeSubject} 평가수준을 모두 초기화했습니다.`);
@@ -1251,6 +1256,7 @@ function Assessments({ data, setData, plan, activeSubject, setActiveSubject, onS
 }
 
 function Comments({ assessmentDataBySubject, plan, roster }: { assessmentDataBySubject: Record<string, AssessmentStudent[]>; plan: AssessmentPlan[]; roster: AssessmentStudent[] }) {
+  const ui = useActionDialog();
   type CommentJob = { id: string; status: string; subject: string; totalItems: number; completedItems: number; failedItems: number; totalBatches: number; currentBatch: number; error?: string; completedAt?: string | null };
   type CommentSelection = { text: string; start: number; end: number };
   type CommentGenerationMode = "empty" | "modified" | "all";
@@ -1415,7 +1421,7 @@ function Comments({ assessmentDataBySubject, plan, roster }: { assessmentDataByS
   const clearSubjectComments = async () => {
     const count = roster.filter((student) => comments[`${student.id}|${selectedSubject}`]?.trim()).length;
     if (!count) return;
-    if (!window.confirm(`${selectedSubject} 평어 ${count}건을 초기화할까요?\n학생 명단·평가계획·평가수준은 유지됩니다.`)) return;
+    if (!await ui.confirm(`${selectedSubject} 평어 ${count}건 초기화\n학생 명단·평가계획·평가수준 유지`)) return;
     const response = await fetch("/api/generated-comments", {
       method: "DELETE", headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ subject: selectedSubject, confirmation: "평어초기화" }),
@@ -1520,8 +1526,8 @@ function Comments({ assessmentDataBySubject, plan, roster }: { assessmentDataByS
         <div><p className="eyebrow">작성 결과</p><h1>교과 평어</h1><p>평가수준 입력을 마친 과목부터 학생별 평어를 생성할 수 있습니다.</p></div>
         <div className="subject-generation-controls">
           <div><span>{formattedLastGeneratedAt ? `마지막 생성 ${formattedLastGeneratedAt}` : "생성 기록 없음"}</span><strong>{eligibleCount === 0 ? "평가수준을 먼저 입력하세요." : `${eligibleCount}명 중 ${completedCount}명 생성 완료`}</strong></div>
-          <button className="subject-generate-button" onClick={openSubjectGenerationDialog} disabled={loading || !eligibleCount}>{selectedSubjectIsGenerating ? generationProgress || `${selectedSubject} 생성 중…` : `✦ ${selectedSubject} 평어 생성`}</button>
-          <button className="secondary result-copy-button" onClick={() => void copySubjectComments()} disabled={!roster.some((student) => comments[`${student.id}|${selectedSubject}`])}>{copied ? "복사됨 ✓" : "평어만 복사하기"}</button>
+          <button className="subject-generate-button" onClick={openSubjectGenerationDialog} disabled={loading || !eligibleCount}>{selectedSubjectIsGenerating ? generationProgress || `${selectedSubject} 생성 중…` : `${selectedSubject} 평어 생성`}</button>
+          <button className="secondary result-copy-button" onClick={() => void copySubjectComments()} disabled={!roster.some((student) => comments[`${student.id}|${selectedSubject}`])}>{copied ? "복사 완료" : "평어 복사"}</button>
           <button className="subject-reset-button" title="학생 명단·평가계획·평가수준은 유지하고 현재 과목의 생성된 평어만 초기화합니다." onClick={() => void clearSubjectComments()} disabled={loading || !completedCount}><span aria-hidden="true">↺</span>{selectedSubject} 결과 초기화</button>
         </div>
       </div>
@@ -1555,7 +1561,7 @@ function Comments({ assessmentDataBySubject, plan, roster }: { assessmentDataByS
             {reviewAreaCount > 0 && <span className="review">교사 확인 권장 <b>{reviewAreaCount}영역</b></span>}
             {failedAreaCount > 0 && <span className="failed">생성 실패 <b>{failedAreaCount}영역</b></span>}
           </div>}
-          {selectedSubjectIsGenerating && <div className="comment-loading class-loading"><span>✦</span><p>{selectedSubject} 평어를 생성하고 있어요. 성공한 영역은 바로 저장되며 페이지를 이동해도 계속 진행됩니다.</p></div>}
+          {selectedSubjectIsGenerating && <div className="comment-loading class-loading"><span></span><p>{selectedSubject} 평어 생성 중 · 완료 영역 자동 저장 · 화면 이동 후에도 계속 진행</p></div>}
           <div className="comments-table-wrap">
             <table className="comments-table subject-comments-table">
               <thead><tr><th>번호</th><th>이름</th><th>평어</th><th>검수</th></tr></thead>
@@ -1619,6 +1625,7 @@ function Comments({ assessmentDataBySubject, plan, roster }: { assessmentDataByS
 }
 
 function Behavior({ roster }: { roster: AssessmentStudent[] }) {
+  const ui = useActionDialog();
   type BehaviorJob = { id: string; status: string; totalItems: number; completedItems: number; failedItems: number; error?: string; completedAt?: string | null };
   type BehaviorRecord = { characteristic: string; generatedCharacteristic: string; behavior: string };
   type BehaviorGenerationMode = "empty" | "modified" | "all";
@@ -1748,8 +1755,12 @@ function Behavior({ roster }: { roster: AssessmentStudent[] }) {
   const clearBehaviors = async () => {
     const filledCount = roster.filter((student) => records[student.id]?.behavior.trim()).length;
     if (!filledCount) return;
-    if (!window.confirm(`행동특성 생성 결과 ${filledCount}건을 초기화할까요?\n학생별로 입력한 특성은 유지됩니다.`)) return;
-    const removeSources = window.confirm("학생 특성 입력 내용도 함께 삭제할까요?\n\n확인: 특성과 결과 모두 삭제\n취소: 생성 결과만 삭제");
+    const scope = await ui.choose(`행동특성 ${filledCount}건 초기화 범위 선택\n\n결과만 초기화: 입력한 학생 특성 유지\n입력 내용까지 초기화: 학생 특성과 생성 결과 모두 삭제`, [
+      { value: "results", label: "결과만 초기화" },
+      { value: "all", label: "입력 내용까지 초기화" },
+    ]);
+    if (scope !== "results" && scope !== "all") return;
+    const removeSources = scope === "all";
     const response = await fetch("/api/student-behaviors", {
       method: "DELETE", headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ scope: removeSources ? "all" : "results", confirmation: "행동특성초기화" }),
@@ -1797,7 +1808,7 @@ function Behavior({ roster }: { roster: AssessmentStudent[] }) {
     <section>
       <div className="page-heading">
         <div><p className="eyebrow">행동 기록</p><h1>행동특성 작성</h1><p>왼쪽에 관찰한 키워드나 메모를 자유롭게 쓰고, 오른쪽에서 생성 결과를 바로 확인하세요.</p></div>
-        <div className="ai-generate-actions">{formattedLastGeneratedAt && <span>마지막 생성 {formattedLastGeneratedAt}</span>}<button onClick={openGenerationDialog} disabled={loading || inputIssueCount > 0}>{loading ? generationProgress || "전체 생성 중…" : inputIssueCount ? `입력 확인 ${inputIssueCount}명` : "✦ 행동특성 생성"}</button><button className="secondary result-copy-button" onClick={() => void copyBehaviors()} disabled={!roster.some((student) => records[student.id]?.behavior)}>{copied ? "복사됨 ✓" : "행동특성만 복사하기"}</button><button className="danger-text" onClick={() => void clearBehaviors()} disabled={loading || !roster.some((student) => records[student.id]?.behavior.trim())}>결과 초기화</button></div>
+        <div className="ai-generate-actions">{formattedLastGeneratedAt && <span>마지막 생성 {formattedLastGeneratedAt}</span>}<button onClick={openGenerationDialog} disabled={loading || inputIssueCount > 0}>{loading ? generationProgress || "전체 생성 중…" : inputIssueCount ? `입력 확인 ${inputIssueCount}명` : "행동특성 생성"}</button><button className="secondary result-copy-button" onClick={() => void copyBehaviors()} disabled={!roster.some((student) => records[student.id]?.behavior)}>{copied ? "복사 완료" : "행동특성 복사"}</button><button className="danger-text" onClick={() => void clearBehaviors()} disabled={loading || !roster.some((student) => records[student.id]?.behavior.trim())}>결과 초기화</button></div>
       </div>
       {generationDialogOpen && <div className="generation-dialog-backdrop" onMouseDown={(event) => { if (event.target === event.currentTarget) setGenerationDialogOpen(false); }}>
         <div className="generation-dialog" role="dialog" aria-modal="true" aria-labelledby="behavior-generation-title">
@@ -1818,7 +1829,7 @@ function Behavior({ roster }: { roster: AssessmentStudent[] }) {
       </div>}
       <div className="review-content behavior-table-content">
         {error && <p className="generation-error">! {error}</p>}
-        {loading && <div className="comment-loading class-loading"><span>✦</span><p>입력된 모든 학생의 행동특성을 생성하고 있어요.</p></div>}
+        {loading && <div className="comment-loading class-loading"><span></span><p>입력 학생 행동특성 생성 중</p></div>}
         <div className="behavior-work-area with-reference">
           <div className="comments-table-wrap">
             <table className="comments-table behavior-table behavior-split-table">
@@ -2028,6 +2039,7 @@ type PrivacySummary = {
 };
 
 function PrivacySettings({ currentName, onNameChanged }: { currentName: string; onNameChanged: (name: string) => void }) {
+  const ui = useActionDialog();
   const [summary, setSummary] = useState<PrivacySummary | null>(null);
   const [classConfirmation, setClassConfirmation] = useState("");
   const [accountConfirmation, setAccountConfirmation] = useState("");
@@ -2046,7 +2058,7 @@ function PrivacySettings({ currentName, onNameChanged }: { currentName: string; 
   }, []);
   const remove = async (scope: "class" | "account", confirmation: string) => {
     const label = scope === "class" ? "현재 학급의 모든 자료" : "계정과 모든 학급 자료";
-    if (!window.confirm(`${label}를 영구 삭제합니다. 이 작업은 되돌릴 수 없습니다. 계속할까요?`)) return;
+    if (!await ui.confirm(`${label} 영구 삭제 · 복구 불가`)) return;
     setBusy(true);
     setMessage("");
     try {
@@ -2150,6 +2162,7 @@ function PrivacySettings({ currentName, onNameChanged }: { currentName: string; 
 }
 
 export default function Home() {
+  const ui = useActionDialog();
   const [view, setView] = useState<View>("dashboard");
   const [currentUser, setCurrentUser] = useState("선생님");
   const [classroom, setClassroom] = useState<ClassroomInfo | null>(null);
@@ -2244,9 +2257,9 @@ export default function Home() {
   }, [view]);
   const deleteStudent = async (id: number) => {
     const student = roster.find((item) => item.id === id);
-    if (!student || !window.confirm(`${student.name} 학생을 전출·비활성 처리할까요?\n\n기존 평가와 생성 기록은 보존됩니다.`)) return;
+    if (!student || !await ui.confirm(`${student.name} 학생 전출·비활성 처리\n\n기존 평가·생성 기록 보존`)) return;
     const response = await fetch(`/api/students?id=${id}`, { method: "DELETE" });
-    if (!response.ok) return window.alert("학생을 삭제하지 못했습니다.");
+    if (!response.ok) return await ui.alert("학생 삭제 실패");
     setRoster((current) => current.filter((item) => item.id !== id));
     setAssessmentDataBySubject((current) => Object.fromEntries(Object.entries(current).map(([subject, data]) => [subject, data.filter((item) => item.id !== id)])));
   };
@@ -2280,7 +2293,7 @@ export default function Home() {
     });
     if (!response.ok) {
       const result = await response.json() as { error?: string };
-      window.alert(result.error || "평가수준을 저장하지 못했습니다.");
+      await ui.alert(result.error || "평가수준 저장 실패");
       throw new Error("Assessment level save failed");
     }
     const result = await response.json() as { updatedAt?: string };

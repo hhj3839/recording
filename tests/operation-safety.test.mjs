@@ -139,7 +139,7 @@ test("clears transient behavior repair diagnostics after every student succeeds"
 
 test("keeps the simplified teacher-facing guidance", () => {
   const page = readFileSync("app/page.tsx", "utf8");
-  assert.match(page, /같은 반은 1년 동안 계속 사용할 수 있습니다/);
+  assert.match(page, /동일 학급 연간 사용/);
   assert.match(page, /다른 학기·학급 추가/);
   assert.match(page, /변환 프롬프트 복사/);
   assert.match(page, />평가계획 표<\/label>/);
@@ -203,7 +203,7 @@ test("keeps the simplified plan, assessment, and behavior toolbars", () => {
   assert.doesNotMatch(page, /progress=\{\(subject\) => subject === activeSubject/);
   assert.doesNotMatch(page, /입력 완료 <strong>|미입력 \{Math\.max/);
   assert.doesNotMatch(page, /referenceOpen|setReferenceOpen|참고자료 닫기|참고자료 열기/);
-  assert.match(page, /행동특성 생성[\s\S]*행동특성만 복사하기[\s\S]*결과 초기화/);
+  assert.match(page, /행동특성 생성[\s\S]*행동특성 복사[\s\S]*결과 초기화/);
   assert.match(page, /className="page-heading comments-page-heading"[\s\S]*className="subject-generation-controls"/);
   assert.match(page, /className="workspace-toolbar comments-toolbar comments-subject-toolbar"[\s\S]*<SubjectNavigator/);
   assert.doesNotMatch(page, /behavior-generation-summary|생성 대상<\/small>|특성을 4개 이상 입력한 학생 자동 포함/);
@@ -285,7 +285,7 @@ test("resets only the current assessment plan pool links", () => {
   assert.doesNotMatch(resetRoute, /comment_pool_sentences["']/);
   assert.match(route, /const detailVersion = detailSpec \? linkedVersionFor\(detailSpec\) : undefined/);
   assert.match(page, /AI 평어 제작[\s\S]*AI 평어 초기화/);
-  assert.match(page, /학생에게 이미 저장된 교과평어와 평가계획·평가수준, 공유 승인 문장 원문은 유지됩니다/);
+  assert.match(page, /기존 학생 평어·평가계획·평가수준·공유 승인 원문 유지/);
   assert.match(page, /fetch\("\/api\/comment-pools", \{ method: "DELETE" \}\)/);
 });
 
@@ -391,7 +391,7 @@ test("keeps the pool summary in a loading state and exposes read-only quality re
   assert.match(page, /selectedPoolWarningSentenceCount/);
   assert.match(page, /firstPoolWarningRef\.current\?\.scrollIntoView/);
   assert.match(page, /첫머리가 다른 문장과 반복됨/);
-  assert.match(page, /× 문장 후보 제외/);
+  assert.match(page, /문장 후보 제외/);
   assert.match(page, /문장 수정/);
   assert.match(page, /diversity-warning">확인 필요/);
   assert.match(page, /경고 문장 제거/);
@@ -405,7 +405,7 @@ test("keeps the pool summary in a loading state and exposes read-only quality re
   const localEdit = readFileSync("app/comment-pool-local-edit.ts", "utf8");
   assert.match(localEdit, /source: "teacher_edited"/);
   assert.doesNotMatch(localEdit, /updateRows[^\n]*"comment_pool_sentences"/);
-  assert.match(page, /이미 저장된 학생 평어/);
+  assert.match(page, /기존 학생 평어 유지/);
   assert.match(route, /reviewCount: validations\.filter/);
   assert.match(route, /averageNearestSimilarity: quality\.averageNearestSimilarity/);
   assert.match(route, /detailValidations[\s\S]*validatePoolCandidate/);

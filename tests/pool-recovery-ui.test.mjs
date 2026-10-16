@@ -7,7 +7,7 @@ test('recovery notice keeps technical details collapsed and offers one clear act
   assert.match(notice, /<details><summary>오류 상세/);
   assert.doesNotMatch(notice, /<details open/);
   assert.match(notice, /확인 후 이어서 제작/);
-  assert.match(notice, /저장 응답이 지연돼 완료 여부를 확인하지 못했어요/);
+  assert.match(notice, /저장 응답 지연 · 완료 여부 확인 필요/);
   const page = read('../app/page.tsx');
   assert.match(page, /poolSummary.needsGeneration > 0 && !showPoolRecovery/);
   assert.match(page, /poolJob.freshOnly && poolJob.status === "completed_with_errors"/);
