@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { headers } from "next/headers";
 import "./globals.css";
+import { ActionDialogProvider } from "./action-dialog";
 
 export const dynamic = "force-dynamic";
 
@@ -33,7 +34,8 @@ export async function generateMetadata(): Promise<Metadata> {
 export default async function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {
   return (
     <html lang="ko">
-      <body>{children}</body>
+      <head><link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/static/pretendard.css" /></head>
+      <body><ActionDialogProvider>{children}</ActionDialogProvider></body>
     </html>
   );
 }

@@ -27,7 +27,7 @@ async function login(page: Page) {
   await page.getByLabel("이메일").fill(account.email);
   await page.getByLabel("비밀번호").fill(account.password);
   await page.locator("button.auth-submit").click();
-  await expect(page.getByRole("heading", { name: "안녕하세요" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: /선생님의 학급 기록/ })).toBeVisible();
 }
 
 async function navigate(page: Page, label: string, view: string) {
