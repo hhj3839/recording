@@ -587,6 +587,8 @@ function PlanManager({ plan, onChanged, current }: { plan: AssessmentPlan[]; onC
   const [poolSentences, setPoolSentences] = useState<Array<{ id: number; sentence: string; issues: string[]; warnings?: string[] }>>([]);
   const [poolSentencesLoading, setPoolSentencesLoading] = useState(false);
   const poolSentenceRequestRef = useRef(0);
+  const poolStatusRequestRef = useRef(0);
+  const poolStatusPendingRef = useRef(false);
   const firstPoolWarningRef = useRef<HTMLParagraphElement>(null);
   const [poolBusy, setPoolBusy] = useState(false);
   const [showFreshPoolConfirmation, setShowFreshPoolConfirmation] = useState(false);
@@ -822,16 +824,19 @@ function PlanManager({ plan, onChanged, current }: { plan: AssessmentPlan[]; onC
     await loadSharedPlans();
   };
   const loadPoolStatus = useCallback(async (fingerprint = "") => {
-    const requestId = fingerprint ? ++poolSentenceRequestRef.current : 0;
+    const requestRef = fingerprint ? poolSentenceRequestRef : poolStatusRequestRef;
+    const requestId = ++requestRef.current;
     if (fingerprint) {
       setPoolSentences([]);
       setPoolSentencesLoading(true);
     } else {
+      poolStatusPendingRef.current = true;
       setPoolStatusLoading(true);
     }
     try {
       const response = await fetch(`/api/comment-pools${fingerprint ? `?fingerprint=${encodeURIComponent(fingerprint)}` : ""}`, { cache: "no-store" });
       const result = await readApiJson<{ groups?: CommentPoolGroupView[]; summary?: typeof EMPTY_POOL_SUMMARY; activeJob?: PoolJobView | null; latestJob?: PoolJobView | null; sentences?: Array<{ id: number; sentence: string; issues: string[]; warnings?: string[] }> }>(response, "AI 평어 상태를 불러오지 못했습니다.");
+      if (requestId !== requestRef.current) return;
       if (!response.ok) throw new Error(result.error || "AI 평어 상태를 불러오지 못했습니다.");
       if (result.groups) {
         setPoolGroups(result.groups);
@@ -842,7 +847,10 @@ function PlanManager({ plan, onChanged, current }: { plan: AssessmentPlan[]; onC
       if (result.sentences && (!fingerprint || requestId === poolSentenceRequestRef.current)) setPoolSentences(result.sentences);
     } finally {
       if (fingerprint && requestId === poolSentenceRequestRef.current) setPoolSentencesLoading(false);
-      if (!fingerprint) setPoolStatusLoading(false);
+      if (!fingerprint && requestId === requestRef.current) {
+        poolStatusPendingRef.current = false;
+        setPoolStatusLoading(false);
+      }
     }
   }, []);
   const startPoolProduction = async (fullRefresh = false, retryFailed = false) => {
@@ -972,11 +980,17 @@ function PlanManager({ plan, onChanged, current }: { plan: AssessmentPlan[]; onC
   }, [selectedPoolFingerprint, planSection, loadPoolStatus]);
   useEffect(() => {
     if (!poolJob || !["queued", "running"].includes(poolJob.status)) return;
+    let disposed = false;
+    let inFlight = false;
+    const controller = new AbortController();
     const timer = window.setInterval(() => {
-      void fetch(`/api/comment-pools?jobId=${encodeURIComponent(poolJob.id)}`, { cache: "no-store" })
+      if (inFlight || poolStatusPendingRef.current) return;
+      inFlight = true;
+      const requestId = ++poolStatusRequestRef.current;
+      void fetch(`/api/comment-pools?jobId=${encodeURIComponent(poolJob.id)}`, { cache: "no-store", signal: controller.signal })
         .then((response) => readApiJson<{ job?: typeof poolJob }>(response, "AI 평어 제작 상태를 불러오지 못했습니다."))
         .then((result) => {
-          if (!result.job) return;
+          if (disposed || requestId !== poolStatusRequestRef.current || !result.job) return;
           setPoolJob(result.job);
           if (result.job.completed !== poolJob.completed || result.job.failed !== poolJob.failed) {
             void loadPoolStatus();
@@ -986,9 +1000,13 @@ function PlanManager({ plan, onChanged, current }: { plan: AssessmentPlan[]; onC
             window.clearInterval(timer);
             void loadPoolStatus();
           }
-        }).catch(() => undefined);
+        }).catch(() => undefined).finally(() => { inFlight = false; });
     }, 2500);
-    return () => window.clearInterval(timer);
+    return () => {
+      disposed = true;
+      controller.abort();
+      window.clearInterval(timer);
+    };
   }, [poolJob, loadPoolStatus, selectedPoolFingerprint]);
   const changePlan = (id: number | undefined, key: keyof AssessmentPlan, value: string) => {
     onChanged(plan.map((item) => item.id === id ? { ...item, [key]: value } : item));
