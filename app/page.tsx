@@ -1565,7 +1565,7 @@ function Comments({ assessmentDataBySubject, plan, roster }: { assessmentDataByS
           {notice && <p className="student-message" role="status">{notice}</p>}
           {(selectedSubjectIsGenerating || selectedSubjectParts.length > 0) && <div className="comment-generation-status" role="status">
             {selectedSubjectIsGenerating && <span className="running">자동 생성·보완 중 <b>{generationProgress || `${activeJob?.completedItems ?? 0}/${activeJob?.totalItems ?? 0}`}</b></span>}
-            {completedAreaCount > 0 && <span className="complete">영역 저장 <b>{completedAreaCount}/{requiredAreaCount}</b></span>}
+            {completedAreaCount > 0 && <span className="complete">저장 완료 <b>{completedAreaCount}/{requiredAreaCount}영역</b></span>}
             {reviewAreaCount > 0 && <span className="review">교사 확인 권장 <b>{reviewAreaCount}영역</b></span>}
             {failedAreaCount > 0 && <span className="failed">생성 실패 <b>{failedAreaCount}영역</b></span>}
           </div>}
