@@ -14,6 +14,13 @@ test('behavior prompt requests ham endings while retaining growth and diversity'
   assert.doesNotMatch(source, /‘향상됨\.’, ‘돋보임\.’처럼/);
 });
 
+test('growth expectations remain allowed without inventing observed actions', () => {
+  const source = readFileSync(new URL('../app/behavior-generation.ts', import.meta.url), 'utf8');
+  assert.match(source, /미래의 성장 기대는 표현할 수 있다/);
+  assert.match(source, /입력에 없는 구체적인 행동·사건·성과·개선 사례·변화 시점을 이미 관찰한 사실처럼 덧붙이지 않는다/);
+  assert.match(source, /기대를 이미 이루어진 행동이나 성과처럼 서술하지 않으며/);
+});
+
 test('generation and repair guidance agree with short draft persistence', () => {
   const source = readFileSync(new URL('../app/behavior-generation.ts', import.meta.url), 'utf8');
   const route = readFileSync(new URL('../app/api/behavior-jobs/route.ts', import.meta.url), 'utf8');
