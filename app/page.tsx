@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { useActionDialog } from "./action-dialog";
+import { commentCompletion } from "./comment-completion";
 import { FreshPoolDialog } from "./fresh-pool-dialog";
 import { PoolRecoveryNotice } from "./pool-recovery-notice";
 import { recordSimilarityDetails, validateBehaviorSource, validateRecord } from "./record-validation";
@@ -1510,8 +1511,15 @@ function Comments({ assessmentDataBySubject, plan, roster }: { assessmentDataByS
     .filter((student) => student.assessments.some((level) => ["상", "중", "하"].includes(level)))
     .map((student) => student.id));
   const eligibleCount = eligibleStudentIds.size;
-  const completedCount = roster.filter((student) =>
-    eligibleStudentIds.has(student.id) && Boolean(comments[`${student.id}|${selectedSubject}`])).length;
+  const completionByStudent = roster.map((student) => commentCompletion(
+    assessmentDataBySubject[selectedSubject]?.find((item) => item.id === student.id)?.assessments ?? [],
+    comments[`${student.id}|${selectedSubject}`] ?? "",
+    commentParts.filter((part) => part.studentId === student.id && part.subject === selectedSubject),
+    generatedLevels[`${student.id}|${selectedSubject}`] ?? [],
+  ));
+  const completedCount = completionByStudent.filter((item) => item.complete).length;
+  const savedCommentCount = roster.filter((student) => Boolean(comments[`${student.id}|${selectedSubject}`]?.trim())).length;
+  const requiredAreaCount = completionByStudent.reduce((sum, item) => sum + item.required, 0);
   const selectedSubjectIsGenerating = loading && activeJob?.subject === selectedSubject;
   const selectedSubjectParts = commentParts.filter((part) => part.subject === selectedSubject);
   const failedAreaCount = selectedSubjectParts.filter((part) =>
@@ -1519,7 +1527,7 @@ function Comments({ assessmentDataBySubject, plan, roster }: { assessmentDataByS
     && (part.issues.length === 0 || commentAreaIssuesForDisplay(part.status, part.issues).length > 0)).length;
   const reviewAreaCount = selectedSubjectParts.filter((part) =>
     part.status === "warning" && commentAreaIssuesForDisplay(part.status, part.issues).length > 0).length;
-  const completedAreaCount = selectedSubjectParts.filter((part) => ["complete", "warning"].includes(part.status)).length;
+  const completedAreaCount = completionByStudent.reduce((sum, item) => sum + item.saved, 0);
   return (
     <section>
       <div className="page-heading comments-page-heading">
@@ -1528,7 +1536,7 @@ function Comments({ assessmentDataBySubject, plan, roster }: { assessmentDataByS
           <div><span>{formattedLastGeneratedAt ? `마지막 생성 ${formattedLastGeneratedAt}` : "생성 기록 없음"}</span><strong>{eligibleCount === 0 ? "평가수준을 먼저 입력하세요." : `${eligibleCount}명 중 ${completedCount}명 생성 완료`}</strong></div>
           <button className="subject-generate-button" onClick={openSubjectGenerationDialog} disabled={loading || !eligibleCount}>{selectedSubjectIsGenerating ? generationProgress || `${selectedSubject} 생성 중…` : `${selectedSubject} 평어 생성`}</button>
           <button className="secondary result-copy-button" onClick={() => void copySubjectComments()} disabled={!roster.some((student) => comments[`${student.id}|${selectedSubject}`])}>{copied ? "복사 완료" : "평어 복사"}</button>
-          <button className="subject-reset-button" title="학생 명단·평가계획·평가수준은 유지하고 현재 과목의 생성된 평어만 초기화합니다." onClick={() => void clearSubjectComments()} disabled={loading || !completedCount}><span aria-hidden="true">↺</span>{selectedSubject} 결과 초기화</button>
+          <button className="subject-reset-button" title="학생 명단·평가계획·평가수준은 유지하고 현재 과목의 생성된 평어만 초기화합니다." onClick={() => void clearSubjectComments()} disabled={loading || !savedCommentCount}><span aria-hidden="true">↺</span>{selectedSubject} 결과 초기화</button>
         </div>
       </div>
       {generationDialogOpen && <div className="generation-dialog-backdrop" onMouseDown={(event) => { if (event.target === event.currentTarget) setGenerationDialogOpen(false); }}>
@@ -1544,7 +1552,7 @@ function Comments({ assessmentDataBySubject, plan, roster }: { assessmentDataByS
               <span><strong>{title}</strong><small>{description}</small></span><b>{subjectGenerationModeCount(mode)}명</b>
             </label>)}
           </div>
-          {generationMode === "all" && completedCount > 0 && <p className="generation-overwrite-warning">기존 {selectedSubject} 평어가 새 결과로 교체됩니다.</p>}
+          {generationMode === "all" && savedCommentCount > 0 && <p className="generation-overwrite-warning">기존 {selectedSubject} 평어가 새 결과로 교체됩니다.</p>}
           <div className="generation-dialog-actions"><button className="secondary" onClick={() => setGenerationDialogOpen(false)}>취소</button><button onClick={() => void generateSubjectComments(generationMode)} disabled={subjectGenerationModeCount(generationMode) === 0}>{subjectGenerationModeCount(generationMode)}명 생성하기</button></div>
         </div>
       </div>}
@@ -1557,7 +1565,7 @@ function Comments({ assessmentDataBySubject, plan, roster }: { assessmentDataByS
           {notice && <p className="student-message" role="status">{notice}</p>}
           {(selectedSubjectIsGenerating || selectedSubjectParts.length > 0) && <div className="comment-generation-status" role="status">
             {selectedSubjectIsGenerating && <span className="running">자동 생성·보완 중 <b>{generationProgress || `${activeJob?.completedItems ?? 0}/${activeJob?.totalItems ?? 0}`}</b></span>}
-            {completedAreaCount > 0 && <span className="complete">저장 완료 <b>{completedAreaCount}영역</b></span>}
+            {completedAreaCount > 0 && <span className="complete">저장 완료 <b>{completedAreaCount}/{requiredAreaCount}영역</b></span>}
             {reviewAreaCount > 0 && <span className="review">교사 확인 권장 <b>{reviewAreaCount}영역</b></span>}
             {failedAreaCount > 0 && <span className="failed">생성 실패 <b>{failedAreaCount}영역</b></span>}
           </div>}
