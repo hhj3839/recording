@@ -36,7 +36,7 @@ export async function PUT(request: Request) {
     if (!Number.isInteger(studentId) || !subject) return Response.json({ error: "평어 정보를 확인해 주세요." }, { status: 400 });
     const confirmed = body.confirmed === true;
     const discardPrevious = body.discardPrevious === true;
-    const generationLevels = Array.isArray(body.generationLevels)
+    let generationLevels = Array.isArray(body.generationLevels)
       ? body.generationLevels.flatMap((item) => {
           if (!item || typeof item !== "object") return [];
           const row = item as { assessmentIndex?: unknown; level?: unknown };
@@ -48,7 +48,7 @@ export async function PUT(request: Request) {
     const validation = validateRecord(comment);
     const { user, classId } = await getDataScope();
     await requireOwnedStudentIds([studentId], user.id, classId);
-    const existing = (await selectRows<{ comment: string }>("generated_comments", {
+    const existing = (await selectRows<{ comment: string; generation_levels?: Array<{ assessmentIndex: number; level: string }> }>("generated_comments", {
       owner_id: eq(user.id), class_id: eq(classId), student_id: eq(studentId), subject: eq(subject), limit: 1,
     }))[0];
     const contentChanged = (existing?.comment ?? "") !== comment;
@@ -60,6 +60,16 @@ export async function PUT(request: Request) {
       if (issue) return Response.json(issue, { status: issue.status });
     }
     if (contentChanged) {
+      // A generation snapshot includes attempted areas, not only successful ones.
+      // Preserve actual coverage before manual editing removes the area records.
+      const parts = await selectRows<{ assessment_index: number; status: string; sentence: string }>("generated_comment_parts", {
+        owner_id: eq(user.id), class_id: eq(classId), student_id: eq(studentId), subject: eq(subject),
+      });
+      if (parts.length) {
+        const saved = new Set(parts.filter((part) => ["complete", "warning"].includes(part.status) && part.sentence.trim())
+          .map((part) => Number(part.assessment_index)));
+        generationLevels = (generationLevels ?? existing?.generation_levels ?? []).filter((item) => saved.has(item.assessmentIndex));
+      }
       if (!discardPrevious) {
       await archiveComment({ ownerId: user.id, ownerEmail: user.email, classId, studentId, subject, nextContent: comment, source: confirmed ? "confirmation" : "manual-edit" });
       }

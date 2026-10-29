@@ -1,8 +1,15 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
 import { commentCompletion } from "../app/comment-completion.ts";
 
 const part = (assessmentIndex: number, status = "complete", sentence = "표현함.") => ({ assessmentIndex, status, sentence });
+test("manual save filters attempted coverage before deleting parts", () => {
+  const route = readFileSync(new URL("../app/api/generated-comments/route.ts", import.meta.url), "utf8");
+  assert.match(route, /generationLevels = \(generationLevels \?\? existing\?\.generation_levels \?\? \[\]\)\.filter/);
+  assert.ok(route.indexOf("saved.has(item.assessmentIndex)") < route.indexOf('method: "DELETE"'));
+  assert.deepEqual(commentCompletion(["상", "중", "하"], "수정함.", [], [{assessmentIndex: 0, level: "상"}]), {required: 3, saved: 1, complete: false});
+});
 test("partial paragraphs do not count as completed students", () => {
   assert.deepEqual(commentCompletion(["상", "중", "하"], "표현함.", [part(0)], []), { required: 3, saved: 1, complete: false });
 });
