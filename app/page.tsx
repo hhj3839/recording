@@ -1664,6 +1664,7 @@ function Behavior({ roster }: { roster: AssessmentStudent[] }) {
   type BehaviorGenerationMode = "empty" | "modified" | "all";
   const emptyBehaviorRecord = (): BehaviorRecord => ({ characteristic: "", generatedCharacteristic: "", behavior: "" });
   const [records, setRecords] = useState<Record<number, BehaviorRecord>>({});
+  const [behaviorLoadState, setBehaviorLoadState] = useState<"loading" | "ready" | "error">("loading");
   const [loading, setLoading] = useState(false);
   const [generationProgress, setGenerationProgress] = useState("");
   const [activeJob, setActiveJob] = useState<BehaviorJob | null>(null);
@@ -1675,14 +1676,16 @@ function Behavior({ roster }: { roster: AssessmentStudent[] }) {
   const [generationDialogOpen, setGenerationDialogOpen] = useState(false);
   const [generationMode, setGenerationMode] = useState<BehaviorGenerationMode>("modified");
   const loadBehaviors = async () => {
+    setBehaviorLoadState("loading");
     try {
       const response = await fetch("/api/student-behaviors", { cache: "no-store" });
       const result = await response.json() as { behaviors?: Array<{ studentId: number; characteristic: string; generatedCharacteristic: string; behavior: string; confirmed: boolean; updatedAt: string }> };
-      if (!response.ok || !result.behaviors) return;
+      if (!response.ok || !Array.isArray(result.behaviors)) throw new Error("행동특성 조회 실패");
       setRecords(Object.fromEntries(result.behaviors.map((item) => [item.studentId, { characteristic: item.characteristic, generatedCharacteristic: item.generatedCharacteristic, behavior: item.behavior }])));
       setLastGeneratedAt(result.behaviors.map((item) => item.updatedAt).sort().at(-1) ?? "");
+      setBehaviorLoadState("ready");
     } catch {
-      setError("저장된 행동특성을 불러오지 못했습니다.");
+      setBehaviorLoadState("error");
     }
   };
   useEffect(() => {
@@ -1747,12 +1750,14 @@ function Behavior({ roster }: { roster: AssessmentStudent[] }) {
     ? emptyGenerationCount
     : mode === "modified" ? modifiedGenerationCount : generationCandidates.length;
   const openGenerationDialog = () => {
+    if (behaviorLoadState !== "ready") return;
     if (!generationCandidates.length) return setError("한 명 이상의 특성을 입력해 주세요.");
     setGenerationMode(modifiedGenerationCount ? "modified" : emptyGenerationCount ? "empty" : "all");
     setGenerationDialogOpen(true);
     setError("");
   };
   const generateAll = async (mode: BehaviorGenerationMode) => {
+    if (behaviorLoadState !== "ready") return;
     let inputs = roster.map((student) => ({ studentId: student.id, characteristic: records[student.id]?.characteristic ?? "" })).filter((item) => item.characteristic.trim());
     if (mode === "empty") inputs = inputs.filter((item) => !records[item.studentId]?.behavior.trim());
     if (mode === "modified") inputs = inputs.filter((item) => {
@@ -1837,6 +1842,11 @@ function Behavior({ roster }: { roster: AssessmentStudent[] }) {
     return characteristic && !validateBehaviorSource(characteristic).valid;
   }).length;
   const inputIssueCount = blockedSourceCount;
+  if (behaviorLoadState !== "ready") return <section>
+    <div className="page-heading"><div><p className="eyebrow">행동 기록</p><h1>행동특성 작성</h1></div></div>
+    <p role="status">{behaviorLoadState === "error" ? "저장 결과 조회 실패" : "저장 결과 확인 중"}</p>
+    {behaviorLoadState === "error" && <button className="secondary" onClick={() => void loadBehaviors()}>다시 불러오기</button>}
+  </section>;
   return (
     <section>
       <div className="page-heading">
