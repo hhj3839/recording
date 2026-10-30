@@ -4,6 +4,19 @@ import { readFileSync } from "node:fs";
 
 const source = readFileSync(new URL("../app/page.tsx", import.meta.url), "utf8");
 
+test("dashboard hides placeholder counts and completion notices until loaded", () => {
+  const dashboard = source.slice(source.indexOf("function Dashboard("), source.indexOf("type ManagedClassroom"));
+  assert.match(dashboard, /loadState === "loading" \? "확인 중" : "조회 실패"/);
+  assert.match(dashboard, /loadState === "ready" \? card.value : statusText/);
+  assert.match(dashboard, /loadState === "ready" \? card.detail/);
+  assert.match(dashboard, /loadState === "ready" && pendingTasks.map/);
+  assert.match(dashboard, /loadState === "ready" && !pendingTasks.length/);
+  assert.match(source, /classLoadState, setClassLoadState.*\("loading"\)/);
+  assert.match(source, /countsLoadState, setCountsLoadState.*\("loading"\)/);
+  assert.match(source, /setClassLoadState\("error"\)/);
+  assert.match(source, /if \(!cancelled\) setCountsLoadState\("error"\)/);
+});
+
 test("behavior loading and failures cannot expose editable empty results", () => {
   const behavior = source.slice(source.indexOf("function Behavior("));
   assert.match(behavior, /behaviorLoadState, setBehaviorLoadState.*useState<"loading" \| "ready" \| "error">\("loading"\)/);

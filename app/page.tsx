@@ -136,7 +136,8 @@ function ReviewWarning({ issues, label = "오류", advisory = false }: { issues:
   </div>;
 }
 
-function Dashboard({ move, teacherName, classroom, studentCount, completedLevels, totalLevels, commentCount, expectedComments, behaviorCount }: {
+function Dashboard({ move, teacherName, classroom, studentCount, completedLevels, totalLevels, commentCount, expectedComments, behaviorCount, loadState }: {
+  loadState: "loading" | "ready" | "error";
   move: (view: View) => void;
   teacherName: string;
   classroom: ClassroomInfo | null;
@@ -162,6 +163,7 @@ function Dashboard({ move, teacherName, classroom, studentCount, completedLevels
     { title: "행동특성 작성", detail: `${Math.max(studentCount - behaviorCount, 0)}명 남음`, action: behaviorProgress === 100 ? "검토" : "기록", view: "behavior" as View, progress: behaviorProgress },
   ];
   const pendingTasks = tasks.filter((task) => task.progress < 100);
+  const statusText = loadState === "loading" ? "확인 중" : "조회 실패";
 
   return (
     <>
@@ -174,12 +176,12 @@ function Dashboard({ move, teacherName, classroom, studentCount, completedLevels
       </section>
       <ClassroomManager current={classroom} embedded />
 
-      <section className="stats-grid" aria-label="학급 진행 현황">
+      <section className="stats-grid" aria-label="학급 진행 현황" aria-busy={loadState === "loading"}>
         {cards.map((card) => (
           <article className={`stat-card ${card.tone}`} key={card.label}>
             <div className="stat-top"><span>{card.label}</span></div>
-            <strong>{card.value}</strong>
-            <small>{card.detail}</small>
+            <strong>{loadState === "ready" ? card.value : statusText}</strong>
+            <small>{loadState === "ready" ? card.detail : "학급 현황"}</small>
           </article>
         ))}
       </section>
@@ -190,7 +192,8 @@ function Dashboard({ move, teacherName, classroom, studentCount, completedLevels
             <div><p className="eyebrow">진행 안내</p><h2>지금 할 일</h2></div>
           </div>
           <div className="task-list">
-            {pendingTasks.map((task) => (
+            {loadState !== "ready" && <p role="status">{statusText}</p>}
+            {loadState === "ready" && pendingTasks.map((task) => (
               <article className="task-row" key={task.title}>
                 <div className="task-check"></div>
                 <div className="task-copy">
@@ -201,7 +204,7 @@ function Dashboard({ move, teacherName, classroom, studentCount, completedLevels
                 <button onClick={() => move(task.view)}>{task.action}</button>
               </article>
             ))}
-            {!pendingTasks.length && <p className="dashboard-complete">현재 학급 필수 항목 작성 완료</p>}
+            {loadState === "ready" && !pendingTasks.length && <p className="dashboard-complete">현재 학급 필수 항목 작성 완료</p>}
           </div>
         </section>
 
@@ -2215,6 +2218,8 @@ export default function Home() {
   const [activeSubject, setActiveSubject] = useState("");
   const [generatedComments, setGeneratedComments] = useState<Array<{ studentId: number; subject: string; comment: string }>>([]);
   const [generatedBehaviors, setGeneratedBehaviors] = useState<Array<{ studentId: number; behavior: string }>>([]);
+  const [classLoadState, setClassLoadState] = useState<"loading" | "ready" | "error">("loading");
+  const [countsLoadState, setCountsLoadState] = useState<"loading" | "ready" | "error">("loading");
   useEffect(() => {
     const idleLimitMs = 30 * 60 * 1000;
     let lastActivity = Date.now();
@@ -2251,7 +2256,7 @@ export default function Home() {
         };
         const commentResult = await commentResponse.json() as { comments?: Array<{ studentId: number; subject: string; comment: string }> };
         const behaviorResult = await behaviorResponse.json() as { behaviors?: Array<{ studentId: number; behavior: string }> };
-        if (!planResponse.ok || !classResponse.ok) return;
+        if (!planResponse.ok || !classResponse.ok || !commentResponse.ok || !behaviorResponse.ok) throw new Error("학급 현황 조회 실패");
         const loadedPlan = planResult.plan ?? [];
         const loadedRoster: AssessmentStudent[] = classResponse.ok && classResult.students?.length
           ? classResult.students.map((student) => ({ id: student.id, number: student.number, name: student.name, assessments: [], status: "미생성", note: "" }))
@@ -2274,15 +2279,18 @@ export default function Home() {
               savedLevels.get(`${student.id}|${subject}|${assessmentIndex}`) ?? "-"),
           }))];
         })));
+        setClassLoadState("ready");
       } catch {
-        // 배포 초기화 중에는 내장 기본 평가계획을 유지함.
+        setClassLoadState("error");
       }
     };
     void loadClassData();
   }, []);
   useEffect(() => {
     if (view !== "dashboard") return;
+    let cancelled = false;
     const refreshGeneratedCounts = async () => {
+      setCountsLoadState("loading");
       try {
         const [commentResponse, behaviorResponse] = await Promise.all([
           fetch("/api/generated-comments", { cache: "no-store" }),
@@ -2290,13 +2298,17 @@ export default function Home() {
         ]);
         const commentResult = await commentResponse.json() as { comments?: Array<{ studentId: number; subject: string; comment: string }> };
         const behaviorResult = await behaviorResponse.json() as { behaviors?: Array<{ studentId: number; behavior: string }> };
-        if (commentResponse.ok) setGeneratedComments(commentResult.comments ?? []);
-        if (behaviorResponse.ok) setGeneratedBehaviors(behaviorResult.behaviors ?? []);
+        if (cancelled) return;
+        if (!commentResponse.ok || !behaviorResponse.ok) throw new Error("학급 집계 조회 실패");
+        setGeneratedComments(commentResult.comments ?? []);
+        setGeneratedBehaviors(behaviorResult.behaviors ?? []);
+        setCountsLoadState("ready");
       } catch {
-        // 대시보드 집계 실패는 작성 기능을 막지 않음.
+        if (!cancelled) setCountsLoadState("error");
       }
     };
     void refreshGeneratedCounts();
+    return () => { cancelled = true; };
   }, [view]);
   const deleteStudent = async (id: number) => {
     const student = roster.find((item) => item.id === id);
@@ -2378,7 +2390,7 @@ export default function Home() {
       <main id="main-content" tabIndex={-1}>
         <header className="mobile-header"><button className="brand" onClick={() => setView("dashboard")}><span>기록</span>샘</button><select aria-label="화면 이동" value={view} onChange={(e) => setView(e.target.value as View)}>{navItems.map((item) => <option value={item.id} key={item.id}>{item.label}</option>)}<option value="settings">개인정보·설정</option></select></header>
         <div className="content">
-          {view === "dashboard" && <Dashboard move={setView} teacherName={currentUser} classroom={classroom} studentCount={roster.length} completedLevels={completedLevels} totalLevels={totalLevels} commentCount={generatedCommentCount} expectedComments={roster.length * new Set(plan.map((item) => item.subject)).size} behaviorCount={generatedBehaviorCount} />}
+          {view === "dashboard" && <Dashboard loadState={classLoadState === "error" || countsLoadState === "error" ? "error" : classLoadState === "loading" || countsLoadState === "loading" ? "loading" : "ready"} move={setView} teacherName={currentUser} classroom={classroom} studentCount={roster.length} completedLevels={completedLevels} totalLevels={totalLevels} commentCount={generatedCommentCount} expectedComments={roster.length * new Set(plan.map((item) => item.subject)).size} behaviorCount={generatedBehaviorCount} />}
           {view === "students" && <StudentManager roster={roster} onAdded={mergeStudentIntoState} onChanged={mergeStudentIntoState} onDeleted={(id) => void deleteStudent(id)} onImported={mergeImportedStudents} />}
           {view === "plans" && <PlanManager plan={plan} onChanged={applyPlanChange} current={classroom} />}
           {view === "assessments" && <Assessments data={assessmentDataBySubject[activeSubject] ?? []} setData={(updater) => setAssessmentDataBySubject((current) => ({ ...current, [activeSubject]: typeof updater === "function" ? updater(current[activeSubject] ?? []) : updater }))} plan={plan} activeSubject={activeSubject} setActiveSubject={setActiveSubject} onSave={saveAssessmentLevels} />}
