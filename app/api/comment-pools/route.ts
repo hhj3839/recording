@@ -84,7 +84,7 @@ export async function GET(request: Request) {
         id: eq(jobId), owner_id: eq(user.id), job_type: eq("comment-pools"), limit: 1,
       }))[0];
       if (!job) return Response.json({ error: "AI 평어 제작 작업을 찾을 수 없습니다." }, { status: 404 });
-      if (["queued", "running"].includes(String(job.status))) queueRunner(request, jobId);
+      // Polling (including audits) only observes work; POST and the pump resume it.
       if (params.get("audit") === "1") {
         if (!user.email.toLowerCase().endsWith("@giroksam.test")) {
           return Response.json({ error: "제한 품질 감사는 실험실 계정에서만 확인할 수 있습니다." }, { status: 403 });
@@ -125,7 +125,7 @@ export async function GET(request: Request) {
     const activeJob = (await selectRows<Record<string, unknown>>("generation_jobs", {
       owner_id: eq(user.id), class_id: eq(classId), job_type: eq("comment-pools"), status: "in.(queued,running)", order: "updated_at.desc", limit: 1,
     }))[0];
-    if (activeJob) queueRunner(request, String(activeJob.id));
+    // Loading the AI panel must not dispatch a generation runner.
     const freshBatches = activeJob && Array.isArray(activeJob.batches) && activeJob.batches.length > 0
       && activeJob.batches.every((batch: { freshOnly?: boolean }) => batch.freshOnly)
       ? activeJob.batches as Array<{ spec: CommentPoolSpec; poolVersionId: number }> : null;

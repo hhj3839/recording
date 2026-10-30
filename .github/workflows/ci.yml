@@ -56,7 +56,7 @@ jobs:
         run: node --test tests/generation-save-failure.test.mjs
 
       - name: Check saved-result loading UI regressions
-        run: node --test tests/comment-loading-ui.test.mjs
+        run: node --test tests/comment-loading-ui.test.mjs tests/comment-status-safety.test.mjs
 
       - name: Check one-shot trial safety
         run: node --experimental-strip-types --test tests/comment-pool-trial.test.ts
