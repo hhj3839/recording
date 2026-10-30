@@ -1,8 +1,31 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
+import { stripTypeScriptTypes } from "node:module";
 
 const source = readFileSync(new URL("../app/page.tsx", import.meta.url), "utf8");
+
+test("level comparison ignores object key and area order without mutating inputs", () => {
+  const start = source.indexOf("const sameLevelSnapshot =");
+  const end = source.indexOf("const subjectEligibleIds =", start);
+  assert.ok(start >= 0 && end > start);
+  const compare = new Function(`${stripTypeScriptTypes(source.slice(start, end))}; return sameLevelSnapshot;`)();
+  const saved = Object.freeze([
+    Object.freeze({ level: "중", assessmentIndex: 1 }),
+    Object.freeze({ level: "상", assessmentIndex: 0 }),
+  ]);
+  const current = Object.freeze([
+    Object.freeze({ assessmentIndex: 0, level: "상" }),
+    Object.freeze({ assessmentIndex: 1, level: "중" }),
+  ]);
+  assert.equal(compare(saved, current), true);
+  assert.equal(compare([], []), true);
+  assert.equal(compare(saved, [{ assessmentIndex: 0, level: "하" }, current[1]]), false);
+  assert.equal(compare(saved, [current[0], { assessmentIndex: 2, level: "중" }]), false);
+  assert.equal(compare(saved, [current[0]]), false);
+  assert.equal(compare(saved, [...current, { assessmentIndex: 2, level: "하" }]), false);
+  assert.equal(compare(saved, []), false);
+});
 
 test("dashboard task text uses the flexible column without an empty icon slot", () => {
   const css = readFileSync(new URL("../app/globals.css", import.meta.url), "utf8");
