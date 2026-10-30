@@ -4,6 +4,16 @@ import { readFileSync } from "node:fs";
 
 const source = readFileSync(new URL("../app/page.tsx", import.meta.url), "utf8");
 
+test("core class initialization is independent of generated count failures", () => {
+  const core = source.slice(source.indexOf("const loadClassData ="), source.indexOf("const refreshGeneratedCounts ="));
+  assert.match(core, /fetch\("\/api\/assessment-plan"\)/);
+  assert.match(core, /fetch\("\/api\/class-data"\)/);
+  assert.doesNotMatch(core, /generated-comments|student-behaviors|commentResponse|behaviorResponse|setGeneratedComments|setGeneratedBehaviors/);
+  assert.match(core, /setPlan\(loadedPlan\)/);
+  assert.match(core, /setRoster\(loadedRoster\)/);
+  assert.match(core, /setClassLoadState\("ready"\)/);
+});
+
 test("dashboard hides placeholder counts and completion notices until loaded", () => {
   const dashboard = source.slice(source.indexOf("function Dashboard("), source.indexOf("type ManagedClassroom"));
   assert.match(dashboard, /loadState === "loading" \? "확인 중" : "조회 실패"/);

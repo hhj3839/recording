@@ -2241,11 +2241,9 @@ export default function Home() {
   useEffect(() => {
     const loadClassData = async () => {
       try {
-        const [planResponse, classResponse, commentResponse, behaviorResponse] = await Promise.all([
+        const [planResponse, classResponse] = await Promise.all([
           fetch("/api/assessment-plan"),
           fetch("/api/class-data"),
-          fetch("/api/generated-comments", { cache: "no-store" }),
-          fetch("/api/student-behaviors", { cache: "no-store" }),
         ]);
         const planResult = await planResponse.json() as { plan?: AssessmentPlan[] };
         const classResult = await classResponse.json() as {
@@ -2254,9 +2252,7 @@ export default function Home() {
           user?: { displayName: string };
           classroom?: ClassroomInfo;
         };
-        const commentResult = await commentResponse.json() as { comments?: Array<{ studentId: number; subject: string; comment: string }> };
-        const behaviorResult = await behaviorResponse.json() as { behaviors?: Array<{ studentId: number; behavior: string }> };
-        if (!planResponse.ok || !classResponse.ok || !commentResponse.ok || !behaviorResponse.ok) throw new Error("학급 현황 조회 실패");
+        if (!planResponse.ok || !classResponse.ok) throw new Error("학급 현황 조회 실패");
         const loadedPlan = planResult.plan ?? [];
         const loadedRoster: AssessmentStudent[] = classResponse.ok && classResult.students?.length
           ? classResult.students.map((student) => ({ id: student.id, number: student.number, name: student.name, assessments: [], status: "미생성", note: "" }))
@@ -2264,8 +2260,6 @@ export default function Home() {
         const savedLevels = new Map((classResult.levels ?? []).map((item) => [`${item.studentId}|${item.subject}|${item.assessmentIndex}`, item.level]));
         setPlan(loadedPlan);
         setRoster(loadedRoster);
-        setGeneratedComments(commentResult.comments ?? []);
-        setGeneratedBehaviors(behaviorResult.behaviors ?? []);
         if (classResult.user?.displayName) setCurrentUser(classResult.user.displayName);
         if (classResult.classroom) setClassroom(classResult.classroom);
         const firstSubject = loadedPlan[0]?.subject ?? "";
