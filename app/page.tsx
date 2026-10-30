@@ -195,7 +195,6 @@ function Dashboard({ move, teacherName, classroom, studentCount, completedLevels
             {loadState !== "ready" && <p role="status">{statusText}</p>}
             {loadState === "ready" && pendingTasks.map((task) => (
               <article className="task-row" key={task.title}>
-                <div className="task-check"></div>
                 <div className="task-copy">
                   <strong>{task.title}</strong>
                   <span>{task.detail}</span>

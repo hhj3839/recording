@@ -4,6 +4,13 @@ import { readFileSync } from "node:fs";
 
 const source = readFileSync(new URL("../app/page.tsx", import.meta.url), "utf8");
 
+test("dashboard task text uses the flexible column without an empty icon slot", () => {
+  const css = readFileSync(new URL("../app/globals.css", import.meta.url), "utf8");
+  assert.doesNotMatch(source, /className="task-check"/);
+  assert.match(css, /\.task-row\s*\{[^}]*grid-template-columns:\s*minmax\(0, 1fr\) auto/);
+  assert.match(css, /\.task-copy\s*\{[^}]*min-width:\s*0;[^}]*word-break:\s*keep-all/);
+});
+
 test("core class initialization is independent of generated count failures", () => {
   const core = source.slice(source.indexOf("const loadClassData ="), source.indexOf("const refreshGeneratedCounts ="));
   assert.match(core, /fetch\("\/api\/assessment-plan"\)/);
