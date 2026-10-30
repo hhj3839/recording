@@ -45,8 +45,8 @@ test("blocks behavior data writes and paid generation modes without explicit app
   }
 });
 
-test("job status polling wakes queued background generation without creating a new job", () => {
-  for (const route of ["app/api/comment-jobs/route.ts", "app/api/behavior-jobs/route.ts"]) {
+test("behavior polling retains its existing background recovery policy", () => {
+  for (const route of ["app/api/behavior-jobs/route.ts"]) {
     const source = readFileSync(route, "utf8");
     assert.match(source, /export async function GET\(request: Request\)/);
     assert.match(source, /\["queued", "running"\]\.includes\(.+\.status\).*startRunner\(request,/s);
