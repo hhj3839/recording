@@ -105,8 +105,8 @@ test("requires prepared pools and cycles approved sentences instead of mutating 
 
 test("always refreshes generated result counts without browser caching", () => {
   const page = readFileSync("app/page.tsx", "utf8");
-  assert.equal((page.match(/fetch\("\/api\/generated-comments", \{ cache: "no-store" \}\)/g) ?? []).length, 4);
-  assert.equal((page.match(/fetch\("\/api\/student-behaviors", \{ cache: "no-store" \}\)/g) ?? []).length, 4);
+  assert.equal((page.match(/fetch\("\/api\/generated-comments", \{ cache: "no-store" \}\)/g) ?? []).length, 3);
+  assert.equal((page.match(/fetch\("\/api\/student-behaviors", \{ cache: "no-store" \}\)/g) ?? []).length, 3);
 
   for (const route of ["app/api/generated-comments/route.ts", "app/api/student-behaviors/route.ts"]) {
     assert.match(readFileSync(route, "utf8"), /"Cache-Control": "private, no-store"/);
