@@ -1380,8 +1380,8 @@ function Comments({ assessmentDataBySubject, plan, roster }: { assessmentDataByS
       ["상", "중", "하"].includes(level) ? [{ assessmentIndex, level }] : []);
   };
   const sameLevelSnapshot = (left: GeneratedLevel[], right: GeneratedLevel[]) =>
-    JSON.stringify([...left].sort((a, b) => a.assessmentIndex - b.assessmentIndex))
-      === JSON.stringify([...right].sort((a, b) => a.assessmentIndex - b.assessmentIndex));
+    JSON.stringify([...left].sort((a, b) => a.assessmentIndex - b.assessmentIndex).map(({ assessmentIndex, level }) => [assessmentIndex, level]))
+      === JSON.stringify([...right].sort((a, b) => a.assessmentIndex - b.assessmentIndex).map(({ assessmentIndex, level }) => [assessmentIndex, level]));
   const subjectEligibleIds = (assessmentDataBySubject[selectedSubject] ?? [])
     .filter((student) => student.assessments.some((level) => ["상", "중", "하"].includes(level)))
     .map((student) => student.id);
