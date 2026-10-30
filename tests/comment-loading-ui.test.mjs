@@ -4,6 +4,19 @@ import { readFileSync } from "node:fs";
 
 const source = readFileSync(new URL("../app/page.tsx", import.meta.url), "utf8");
 
+test("behavior loading and failures cannot expose editable empty results", () => {
+  const behavior = source.slice(source.indexOf("function Behavior("));
+  assert.match(behavior, /behaviorLoadState, setBehaviorLoadState.*useState<"loading" \| "ready" \| "error">\("loading"\)/);
+  assert.match(behavior, /if \(!response.ok \|\| !Array.isArray\(result.behaviors\)\) throw/);
+  assert.match(behavior, /catch \{\s*setBehaviorLoadState\("error"\)/);
+  assert.match(behavior, /if \(behaviorLoadState !== "ready"\) return <section>/);
+  assert.match(behavior, /onClick=\{\(\) => void loadBehaviors\(\)\}>다시 불러오기/);
+  for (const name of ["openGenerationDialog", "generateAll"]) {
+    const handler = behavior.slice(behavior.indexOf(`const ${name} =`));
+    assert.match(handler.slice(0, 200), /if \(behaviorLoadState !== "ready"\) return;/);
+  }
+});
+
 test("saved comments must load before generation targets are selectable", () => {
   assert.match(source, /useState<"loading" \| "ready" \| "error">\("loading"\)/);
   for (const name of ["openSubjectGenerationDialog", "generateSubjectComments"]) {
