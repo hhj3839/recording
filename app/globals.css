@@ -477,6 +477,10 @@ button, [role="tab"] { white-space: nowrap; }
 button:focus:not(:focus-visible), a:focus:not(:focus-visible) { outline: none; }
 button:focus-visible, a:focus-visible, input:focus-visible, textarea:focus-visible, select:focus-visible, summary:focus-visible, [tabindex]:focus-visible { outline: 2px solid var(--primary); outline-offset: 3px; }
 input, textarea, .ai-pool-sentence-list { user-select: text; }
+.ai-pool-sentence-list p.empty-cell { display: block; }
+@media (max-width:600px) {
+  .plan-list > .section-heading { flex-direction: column; align-items: stretch; gap: 12px; }
+}
 .action-dialog { width: min(480px, calc(100vw - 32px)); max-height: calc(100dvh - 48px); overflow: auto; padding: 24px; border: 1px solid var(--line); border-radius: var(--radius-md); background: #fff; color: var(--ink); box-shadow: 0 16px 48px #18212f26; }
 .action-dialog::backdrop { background: #18212f66; }
 .action-dialog h2 { margin: 0 0 16px; font-size: 18px; }
