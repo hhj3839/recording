@@ -1283,6 +1283,8 @@ function Comments({ assessmentDataBySubject, plan, roster }: { assessmentDataByS
   const subjects = [...new Set(plan.map((item) => item.subject))];
   const [selectedSubject, setSelectedSubject] = useState(subjects[0] ?? "국어");
   const [comments, setComments] = useState<Record<string, string>>({});
+  const [commentsLoadState, setCommentsLoadState] = useState<"loading" | "ready" | "error">("loading");
+  const commentsReady = commentsLoadState === "ready";
   const [generatedLevels, setGeneratedLevels] = useState<Record<string, GeneratedLevel[]>>({});
   const [commentParts, setCommentParts] = useState<Array<{ studentId: number; subject: string; assessmentIndex: number; sentence: string; status: string; issues: string[] }>>([]);
   const [loading, setLoading] = useState(false);
@@ -1297,13 +1299,14 @@ function Comments({ assessmentDataBySubject, plan, roster }: { assessmentDataByS
   const [generationDialogOpen, setGenerationDialogOpen] = useState(false);
   const [generationMode, setGenerationMode] = useState<CommentGenerationMode>("modified");
   const loadGeneratedComments = useCallback(async () => {
+    setCommentsLoadState("loading");
     try {
       const response = await fetch("/api/generated-comments", { cache: "no-store" });
       const result = await readApiJson<{
         comments?: Array<{ studentId: number; subject: string; comment: string; candidates: string[]; generationLevels: GeneratedLevel[]; confirmed: boolean; updatedAt: string }>;
         parts?: Array<{ studentId: number; subject: string; assessmentIndex: number; sentence: string; status: string; issues: string[] }>;
       }>(response, "저장된 교과 평어를 불러오지 못했습니다.");
-      if (!response.ok) return;
+      if (!response.ok) throw new Error("저장된 교과 평어 조회 실패");
       setCommentParts(result.parts ?? []);
       setComments(Object.fromEntries((result.comments ?? []).map((item) => [`${item.studentId}|${item.subject}`, item.comment])));
       setGeneratedLevels(Object.fromEntries((result.comments ?? []).map((item) => [`${item.studentId}|${item.subject}`, item.generationLevels ?? []])));
@@ -1311,8 +1314,9 @@ function Comments({ assessmentDataBySubject, plan, roster }: { assessmentDataByS
         if (!latest[item.subject] || latest[item.subject] < item.updatedAt) latest[item.subject] = item.updatedAt;
         return latest;
       }, {}));
+      setCommentsLoadState("ready");
     } catch {
-      // 저장된 결과를 불러오지 못해도 새 생성은 계속 사용할 수 있음.
+      setCommentsLoadState("error");
     }
   }, []);
   useEffect(() => {
@@ -1387,6 +1391,7 @@ function Comments({ assessmentDataBySubject, plan, roster }: { assessmentDataByS
   const subjectGenerationModeCount = (mode: CommentGenerationMode) => mode === "empty"
     ? emptySubjectIds.length : mode === "modified" ? modifiedSubjectIds.length : subjectEligibleIds.length;
   const openSubjectGenerationDialog = () => {
+    if (!commentsReady) return;
     if (!roster.length) return setError("등록된 학생이 없습니다.");
     if (!subjectEligibleIds.length) return setError(`${selectedSubject}에서 상·중·하 평가수준이 입력된 학생이 없습니다.`);
     setGenerationMode(modifiedSubjectIds.length ? "modified" : emptySubjectIds.length ? "empty" : "all");
@@ -1394,6 +1399,7 @@ function Comments({ assessmentDataBySubject, plan, roster }: { assessmentDataByS
     setError("");
   };
   const generateSubjectComments = async (mode: CommentGenerationMode) => {
+    if (!commentsReady) return;
     if (!roster.length) return setError("등록된 학생이 없습니다.");
     const subjectStudents = assessmentDataBySubject[selectedSubject] ?? [];
     const eligibleIds = subjectEligibleIds;
@@ -1551,13 +1557,13 @@ function Comments({ assessmentDataBySubject, plan, roster }: { assessmentDataByS
       <div className="page-heading comments-page-heading">
         <div><p className="eyebrow">작성 결과</p><h1>교과 평어</h1><p>평가수준 입력을 마친 과목부터 학생별 평어를 생성할 수 있습니다.</p></div>
         <div className="subject-generation-controls">
-          <div><span>{formattedLastGeneratedAt ? `마지막 생성 ${formattedLastGeneratedAt}` : "생성 기록 없음"}</span><strong>{eligibleCount === 0 ? "평가수준을 먼저 입력하세요." : `${eligibleCount}명 중 ${completedCount}명 생성 완료`}</strong></div>
-          <button className="subject-generate-button" onClick={openSubjectGenerationDialog} disabled={loading || !eligibleCount}>{selectedSubjectIsGenerating ? generationProgress || `${selectedSubject} 생성 중…` : `${selectedSubject} 평어 생성`}</button>
-          <button className="secondary result-copy-button" onClick={() => void copySubjectComments()} disabled={!roster.some((student) => comments[`${student.id}|${selectedSubject}`])}>{copied ? "복사 완료" : "평어 복사"}</button>
-          <button className="subject-reset-button" title="학생 명단·평가계획·평가수준은 유지하고 현재 과목의 생성된 평어만 초기화합니다." onClick={() => void clearSubjectComments()} disabled={loading || !savedCommentCount}><span aria-hidden="true">↺</span>{selectedSubject} 결과 초기화</button>
+          <div role="status">{commentsReady ? <><span>{formattedLastGeneratedAt ? `마지막 생성 ${formattedLastGeneratedAt}` : "생성 기록 없음"}</span><strong>{eligibleCount === 0 ? "평가수준을 먼저 입력하세요." : `${eligibleCount}명 중 ${completedCount}명 생성 완료`}</strong></> : <strong>{commentsLoadState === "error" ? "저장 결과 조회 실패" : "저장 결과 확인 중"}</strong>}</div>
+          <button className="subject-generate-button" onClick={openSubjectGenerationDialog} disabled={!commentsReady || loading || !eligibleCount}>{selectedSubjectIsGenerating ? generationProgress || `${selectedSubject} 생성 중…` : `${selectedSubject} 평어 생성`}</button>
+          <button className="secondary result-copy-button" onClick={() => void copySubjectComments()} disabled={!commentsReady || !roster.some((student) => comments[`${student.id}|${selectedSubject}`])}>{copied ? "복사 완료" : "평어 복사"}</button>
+          <button className="subject-reset-button" title="학생 명단·평가계획·평가수준은 유지하고 현재 과목의 생성된 평어만 초기화합니다." onClick={() => void clearSubjectComments()} disabled={!commentsReady || loading || !savedCommentCount}><span aria-hidden="true">↺</span>{selectedSubject} 결과 초기화</button>
         </div>
       </div>
-      {generationDialogOpen && <div className="generation-dialog-backdrop" onMouseDown={(event) => { if (event.target === event.currentTarget) setGenerationDialogOpen(false); }}>
+      {commentsReady && generationDialogOpen && <div className="generation-dialog-backdrop" onMouseDown={(event) => { if (event.target === event.currentTarget) setGenerationDialogOpen(false); }}>
         <div className="generation-dialog" role="dialog" aria-modal="true" aria-labelledby="comment-generation-title">
           <div><p className="eyebrow">AI 생성</p><h2 id="comment-generation-title">{selectedSubject} 평어 생성 대상 선택</h2><p>생성할 학생 범위를 선택하세요. 기존 결과는 선택한 범위에 따라서만 교체됩니다.</p></div>
           <div className="generation-options">
@@ -1588,7 +1594,8 @@ function Comments({ assessmentDataBySubject, plan, roster }: { assessmentDataByS
             {failedAreaCount > 0 && <span className="failed">생성 실패 <b>{failedAreaCount}영역</b></span>}
           </div>}
           {selectedSubjectIsGenerating && <div className="comment-loading class-loading"><span></span><p>{selectedSubject} 평어 생성 중 · 완료 영역 자동 저장 · 화면 이동 후에도 계속 진행</p></div>}
-          <div className="comments-table-wrap">
+          {!commentsReady && <div role="status"><p>{commentsLoadState === "error" ? "저장 결과 확인 필요" : "저장 결과 확인 중"}</p>{commentsLoadState === "error" && <button className="secondary" onClick={() => void loadGeneratedComments()}>다시 불러오기</button>}</div>}
+          {commentsReady && <div className="comments-table-wrap">
             <table className="comments-table subject-comments-table">
               <thead><tr><th>번호</th><th>이름</th><th>평어</th><th>검수</th></tr></thead>
               <tbody>{roster.map((student, index) => {
@@ -1643,7 +1650,7 @@ function Comments({ assessmentDataBySubject, plan, roster }: { assessmentDataByS
                 </tr>;
               })}</tbody>
             </table>
-          </div>
+          </div>}
         </div>
       </div>
     </section>
