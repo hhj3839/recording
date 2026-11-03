@@ -56,7 +56,7 @@ jobs:
         run: node --test tests/generation-save-failure.test.mjs
 
       - name: Check saved-result loading UI regressions
-        run: node --test tests/comment-loading-ui.test.mjs tests/job-status-read-only.test.mjs tests/login-loading.test.mjs tests/request-timing.test.mjs tests/data-scope.test.mjs
+        run: node --test tests/comment-loading-ui.test.mjs tests/job-status-read-only.test.mjs tests/login-loading.test.mjs tests/request-timing.test.mjs tests/data-scope.test.mjs tests/login-comment-latency.test.mjs
 
       - name: Install regression browser
         run: pnpm exec playwright install --with-deps chromium

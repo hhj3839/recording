@@ -26,12 +26,15 @@ async function fillLogin(page: Page) {
 }
 
 test("login click reaches a populated dashboard", async ({ page }, info) => {
+  const summaryRequest = page.waitForRequest(request => new URL(request.url()).pathname === "/api/generated-comments"
+    && new URL(request.url()).searchParams.get("summary") === "1");
   await fillLogin(page);
   const started = Date.now();
   await page.locator(".auth-submit").click();
   await expect(page.getByRole("heading", { name: /검증교사 선생님의 학급 기록/ })).toBeVisible();
   await expect(page.getByLabel("학급 진행 현황")).toContainText("1명");
   await expect(page.getByLabel("학급 진행 현황")).toHaveAttribute("aria-busy", "false");
+  await summaryRequest;
   await info.attach("fixture-login-duration", { body: JSON.stringify({ elapsedMs: Date.now() - started, scope: "local mocked API, not production latency" }), contentType: "application/json" });
 });
 
@@ -86,7 +89,7 @@ for (const endpoint of ["/api/class-data", "/api/assessment-plan", "/api/generat
   test(`stalled ${endpoint} stops loading and retries without reload`, async ({ page }) => {
     await page.clock.install();
     let calls = 0;
-    await page.route(`**${endpoint}`, async route => {
+    await page.route(`**${endpoint}*`, async route => {
       calls++;
       if (calls > 1) await route.fulfill({ json: fixtures[endpoint] });
     });
@@ -125,7 +128,7 @@ test("retrying failed counts does not reload successful assessment state", async
     planCalls++;
     return route.fulfill({ json: fixtures["/api/assessment-plan"] });
   });
-  await page.route("**/api/generated-comments", route => ++countCalls === 1
+  await page.route("**/api/generated-comments*", route => ++countCalls === 1
     ? route.fulfill({ status: 503, json: { error: "unavailable" } })
     : route.fulfill({ json: fixtures["/api/generated-comments"] }));
   await page.goto("/");

@@ -5,21 +5,26 @@ import { dataError, getDataScope, requireOwnedStudentIds } from "../../data-scop
 import { validateRecord } from "../../record-validation";
 import { archiveComment } from "../../record-revisions";
 
-export async function GET() {
-  return withRequestTiming("generated-comments", readInitialData);
+export async function GET(request: Request) {
+  return withRequestTiming("generated-comments", () => readInitialData(new URL(request.url).searchParams.get("summary") === "1"));
 }
 
-async function readInitialData() {
+async function readInitialData(summary: boolean) {
   try {
     const { user, classId } = await getDataScope();
     const [rows, partRows] = await Promise.all([
       selectRows<Record<string, string | number>>("generated_comments", {
+        select: summary ? "student_id,subject,comment" : "student_id,subject,comment,candidates,generation_levels,confirmed,confirmed_at,updated_at",
         owner_id: eq(user.id), class_id: eq(classId), order: "student_id.asc,subject.asc",
       }),
-      selectRows<Record<string, string | number | string[]>>("generated_comment_parts", {
+      summary ? Promise.resolve([]) : selectRows<Record<string, string | number | string[]>>("generated_comment_parts", {
+        select: "student_id,subject,assessment_index,sentence,status,issues",
         owner_id: eq(user.id), class_id: eq(classId), order: "student_id.asc,subject.asc,assessment_index.asc",
       }),
     ]);
+    if (summary) return Response.json({
+      comments: rows.map(row => ({ studentId: row.student_id, subject: row.subject, comment: row.comment })),
+    }, { headers: { "Cache-Control": "private, no-store" } });
     return Response.json({
       comments: rows.map((row) => ({ studentId: row.student_id, subject: row.subject, comment: row.comment, candidates: row.candidates ?? [], generationLevels: row.generation_levels ?? [], confirmed: Boolean(row.confirmed), confirmedAt: row.confirmed_at, updatedAt: row.updated_at })),
       parts: partRows.map((row) => ({

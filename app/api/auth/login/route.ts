@@ -47,14 +47,18 @@ async function login(request: NextRequest) {
       { status: attempts >= 5 ? 429 : 401 },
     );
   }
-  await supabaseRequest("auth_login_attempts", { method: "DELETE", query: { attempt_key: eq(attemptKey) } });
+  // Both are required before issuing cookies, but neither depends on the other.
+  const lastId = Number(data.user?.user_metadata?.last_class_id);
+  const [, rememberedRows] = await Promise.all([
+    supabaseRequest("auth_login_attempts", { method: "DELETE", query: { attempt_key: eq(attemptKey) } }),
+    Number.isSafeInteger(lastId) && lastId > 0
+      ? selectRows<{ id: number }>("classrooms", { id: eq(lastId), owner_id: eq(data.user.id), limit: 1 })
+      : Promise.resolve([]),
+  ]);
+  const remembered = rememberedRows[0];
   const response = NextResponse.json({ returnTo: safeReturnTo(body.returnTo) });
   response.cookies.set(ACCESS_COOKIE, data.session.access_token, authCookieOptions(data.session.expires_in));
   response.cookies.set(REFRESH_COOKIE, data.session.refresh_token, authCookieOptions(60 * 60 * 24 * 30));
-  const lastId = Number(data.user?.user_metadata?.last_class_id);
-  const remembered = Number.isSafeInteger(lastId) && lastId > 0
-    ? (await selectRows<{ id: number }>("classrooms", { id: eq(lastId), owner_id: eq(data.user.id), limit: 1 }))[0]
-    : undefined;
   if (remembered) response.cookies.set(ACTIVE_CLASS_COOKIE, String(remembered.id), authCookieOptions(60 * 60 * 24 * 365));
   else response.cookies.delete(ACTIVE_CLASS_COOKIE);
   return response;
