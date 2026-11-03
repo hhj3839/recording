@@ -112,3 +112,27 @@ test("initial HTML error exposes retry instead of empty successful data", async 
   await page.getByRole("button", { name: "학급 현황 다시 불러오기", exact: true }).click();
   await expect(page.getByLabel("학급 진행 현황")).toContainText("1명");
 });
+
+test("retrying failed counts does not reload successful assessment state", async ({ page }) => {
+  let classCalls = 0;
+  let planCalls = 0;
+  let countCalls = 0;
+  await page.route("**/api/class-data", route => {
+    classCalls++;
+    return route.fulfill({ json: fixtures["/api/class-data"] });
+  });
+  await page.route("**/api/assessment-plan", route => {
+    planCalls++;
+    return route.fulfill({ json: fixtures["/api/assessment-plan"] });
+  });
+  await page.route("**/api/generated-comments", route => ++countCalls === 1
+    ? route.fulfill({ status: 503, json: { error: "unavailable" } })
+    : route.fulfill({ json: fixtures["/api/generated-comments"] }));
+  await page.goto("/");
+  await expect(page.getByRole("heading", { name: /검증교사 선생님의 학급 기록/ })).toBeVisible();
+  await page.getByRole("button", { name: "학급 현황 다시 불러오기", exact: true }).click();
+  await expect(page.getByLabel("학급 진행 현황")).toHaveAttribute("aria-busy", "false");
+  expect(classCalls).toBe(1);
+  expect(planCalls).toBe(1);
+  expect(countCalls).toBe(2);
+});

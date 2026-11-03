@@ -2219,7 +2219,8 @@ export default function Home() {
   const [activeSubject, setActiveSubject] = useState("");
   const [generatedComments, setGeneratedComments] = useState<Array<{ studentId: number; subject: string; comment: string }>>([]);
   const [generatedBehaviors, setGeneratedBehaviors] = useState<Array<{ studentId: number; behavior: string }>>([]);
-  const [initialLoadAttempt, setInitialLoadAttempt] = useState(0);
+  const [classLoadAttempt, setClassLoadAttempt] = useState(0);
+  const [countsLoadAttempt, setCountsLoadAttempt] = useState(0);
   const [classLoadState, setClassLoadState] = useState<"loading" | "ready" | "error">("loading");
   const [countsLoadState, setCountsLoadState] = useState<"loading" | "ready" | "error">("loading");
   useEffect(() => {
@@ -2289,7 +2290,7 @@ export default function Home() {
     };
     void loadClassData();
     return () => { cancelled = true; controller.abort(); window.clearTimeout(timer); };
-  }, [initialLoadAttempt]);
+  }, [classLoadAttempt]);
   useEffect(() => {
     if (view !== "dashboard") return;
     let cancelled = false;
@@ -2317,7 +2318,7 @@ export default function Home() {
     };
     void refreshGeneratedCounts();
     return () => { cancelled = true; controller.abort(); window.clearTimeout(timer); };
-  }, [view, initialLoadAttempt]);
+  }, [view, countsLoadAttempt]);
   const deleteStudent = async (id: number) => {
     const student = roster.find((item) => item.id === id);
     if (!student || !await ui.confirm(`${student.name} 학생 전출·비활성 처리\n\n기존 평가·생성 기록 보존`)) return;
@@ -2398,7 +2399,7 @@ export default function Home() {
       <main id="main-content" tabIndex={-1}>
         <header className="mobile-header"><button className="brand" onClick={() => setView("dashboard")}><span>기록</span>샘</button><select aria-label="화면 이동" value={view} onChange={(e) => setView(e.target.value as View)}>{navItems.map((item) => <option value={item.id} key={item.id}>{item.label}</option>)}<option value="settings">개인정보·설정</option></select></header>
         <div className="content">
-          {view === "dashboard" && <Dashboard retry={() => setInitialLoadAttempt((attempt) => attempt + 1)} loadState={classLoadState === "error" || countsLoadState === "error" ? "error" : classLoadState === "loading" || countsLoadState === "loading" ? "loading" : "ready"} move={setView} teacherName={currentUser} classroom={classroom} studentCount={roster.length} completedLevels={completedLevels} totalLevels={totalLevels} commentCount={generatedCommentCount} expectedComments={roster.length * new Set(plan.map((item) => item.subject)).size} behaviorCount={generatedBehaviorCount} />}
+          {view === "dashboard" && <Dashboard retry={() => { if (classLoadState === "error") setClassLoadAttempt((attempt) => attempt + 1); if (countsLoadState === "error") setCountsLoadAttempt((attempt) => attempt + 1); }} loadState={classLoadState === "error" || countsLoadState === "error" ? "error" : classLoadState === "loading" || countsLoadState === "loading" ? "loading" : "ready"} move={setView} teacherName={currentUser} classroom={classroom} studentCount={roster.length} completedLevels={completedLevels} totalLevels={totalLevels} commentCount={generatedCommentCount} expectedComments={roster.length * new Set(plan.map((item) => item.subject)).size} behaviorCount={generatedBehaviorCount} />}
           {view === "students" && <StudentManager roster={roster} onAdded={mergeStudentIntoState} onChanged={mergeStudentIntoState} onDeleted={(id) => void deleteStudent(id)} onImported={mergeImportedStudents} />}
           {view === "plans" && <PlanManager plan={plan} onChanged={applyPlanChange} current={classroom} />}
           {view === "assessments" && <Assessments data={assessmentDataBySubject[activeSubject] ?? []} setData={(updater) => setAssessmentDataBySubject((current) => ({ ...current, [activeSubject]: typeof updater === "function" ? updater(current[activeSubject] ?? []) : updater }))} plan={plan} activeSubject={activeSubject} setActiveSubject={setActiveSubject} onSave={saveAssessmentLevels} />}
