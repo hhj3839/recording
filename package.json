@@ -19,6 +19,7 @@
     "test:actions": "node scripts/check-workflow-action-pins.mjs",
     "test:secrets": "node scripts/check-tracked-secrets.mjs",
     "test:e2e": "playwright test",
+    "test:loading-browser": "playwright test --config playwright.loading.config.ts",
     "test:load-comments": "node scripts/load-test-comments.mjs",
     "test:load-comments:preflight": "node scripts/load-test-comments.mjs preflight",
     "test:load-behaviors": "node scripts/load-test-behaviors.mjs",

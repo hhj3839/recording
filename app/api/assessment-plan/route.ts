@@ -1,3 +1,4 @@
+import { withRequestTiming } from "../../request-timing";
 import { eq, selectRows, supabaseRequest, updateRows, upsertRows } from "../../../db/supabase";
 import { dataError, getDataScope } from "../../data-scope";
 import { snapshotAssessmentPlan } from "../../assessment-plan-versions";
@@ -56,6 +57,10 @@ const present = (row: Record<string, unknown>) => ({
 });
 
 export async function GET() {
+  return withRequestTiming("assessment-plan", readInitialData);
+}
+
+async function readInitialData() {
   try {
     const { user, classId } = await getDataScope();
     const rows = await selectRows<Record<string, unknown>>("assessment_plans", {
