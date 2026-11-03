@@ -72,7 +72,7 @@ export async function POST(request: Request) {
   const jobId = typeof body.jobId === "string" ? body.jobId : "";
   const signature = typeof body.signature === "string" ? body.signature : "";
   if (!jobId || !verifyCommentJob(jobId, signature)) return Response.json({ error: "허용되지 않은 작업 요청입니다." }, { status: 403 });
-  const job = (await selectRows<JobRow>("generation_jobs", { id: eq(jobId), limit: 1 }))[0];
+  const job = (await selectRows<JobRow>("generation_jobs", { id: eq(jobId), job_type: eq("comment-pools"), limit: 1 }))[0];
   if (!job) return Response.json({ ok: true, terminal: true });
   if (job.status !== "queued") return Response.json({ ok: true, terminal: false, busy: job.status === "running" });
   const batchIndex = Number(job.current_batch);
