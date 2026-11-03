@@ -24,13 +24,13 @@ function startRunner(request: Request, jobId: string) {
   }).catch(() => undefined));
 }
 
-export async function GET(request: Request) {
+export async function GET() {
   try {
     const { user, classId } = await getDataScope();
     const rows = await selectRows<JobRow>("generation_jobs", {
       owner_id: eq(user.id), class_id: eq(classId), job_type: eq("behaviors"), order: "created_at.desc", limit: 1,
     });
-    if (rows[0] && ["queued", "running"].includes(rows[0].status)) startRunner(request, rows[0].id);
+    // Status polling must not restart work. POST and the runner own execution.
     return Response.json({ job: rows[0] ? present(rows[0]) : null });
   } catch (error) {
     return dataError(error, "행동특성 생성 상태를 불러오지 못했습니다.");
