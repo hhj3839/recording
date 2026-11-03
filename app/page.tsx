@@ -136,8 +136,9 @@ function ReviewWarning({ issues, label = "오류", advisory = false }: { issues:
   </div>;
 }
 
-function Dashboard({ move, teacherName, classroom, studentCount, completedLevels, totalLevels, commentCount, expectedComments, behaviorCount, loadState }: {
+function Dashboard({ move, teacherName, classroom, studentCount, completedLevels, totalLevels, commentCount, expectedComments, behaviorCount, loadState, retry }: {
   loadState: "loading" | "ready" | "error";
+  retry: () => void;
   move: (view: View) => void;
   teacherName: string;
   classroom: ClassroomInfo | null;
@@ -175,6 +176,7 @@ function Dashboard({ move, teacherName, classroom, studentCount, completedLevels
         </div>
       </section>
       <ClassroomManager current={classroom} embedded />
+      {loadState === "error" && <p role="alert">학급 현황을 불러오지 못했습니다. 연결 상태를 확인한 뒤 다시 시도해 주세요. <button onClick={retry}>학급 현황 다시 불러오기</button></p>}
 
       <section className="stats-grid" aria-label="학급 진행 현황" aria-busy={loadState === "loading"}>
         {cards.map((card) => (
@@ -2217,6 +2219,8 @@ export default function Home() {
   const [activeSubject, setActiveSubject] = useState("");
   const [generatedComments, setGeneratedComments] = useState<Array<{ studentId: number; subject: string; comment: string }>>([]);
   const [generatedBehaviors, setGeneratedBehaviors] = useState<Array<{ studentId: number; behavior: string }>>([]);
+  const [classLoadAttempt, setClassLoadAttempt] = useState(0);
+  const [countsLoadAttempt, setCountsLoadAttempt] = useState(0);
   const [classLoadState, setClassLoadState] = useState<"loading" | "ready" | "error">("loading");
   const [countsLoadState, setCountsLoadState] = useState<"loading" | "ready" | "error">("loading");
   useEffect(() => {
@@ -2238,11 +2242,15 @@ export default function Home() {
     };
   }, []);
   useEffect(() => {
+    let cancelled = false;
+    const controller = new AbortController();
+    const timer = window.setTimeout(() => controller.abort(), 20_000);
     const loadClassData = async () => {
+      setClassLoadState("loading");
       try {
         const [planResponse, classResponse] = await Promise.all([
-          fetch("/api/assessment-plan"),
-          fetch("/api/class-data"),
+          fetch("/api/assessment-plan", { signal: controller.signal }),
+          fetch("/api/class-data", { signal: controller.signal }),
         ]);
         const planResult = await planResponse.json() as { plan?: AssessmentPlan[] };
         const classResult = await classResponse.json() as {
@@ -2251,6 +2259,7 @@ export default function Home() {
           user?: { displayName: string };
           classroom?: ClassroomInfo;
         };
+        if (cancelled) return;
         if (!planResponse.ok || !classResponse.ok) throw new Error("학급 현황 조회 실패");
         const loadedPlan = planResult.plan ?? [];
         const loadedRoster: AssessmentStudent[] = classResponse.ok && classResult.students?.length
@@ -2274,20 +2283,25 @@ export default function Home() {
         })));
         setClassLoadState("ready");
       } catch {
-        setClassLoadState("error");
+        if (!cancelled) setClassLoadState("error");
+      } finally {
+        window.clearTimeout(timer);
       }
     };
     void loadClassData();
-  }, []);
+    return () => { cancelled = true; controller.abort(); window.clearTimeout(timer); };
+  }, [classLoadAttempt]);
   useEffect(() => {
     if (view !== "dashboard") return;
     let cancelled = false;
+    const controller = new AbortController();
+    const timer = window.setTimeout(() => controller.abort(), 20_000);
     const refreshGeneratedCounts = async () => {
       setCountsLoadState("loading");
       try {
         const [commentResponse, behaviorResponse] = await Promise.all([
-          fetch("/api/generated-comments", { cache: "no-store" }),
-          fetch("/api/student-behaviors", { cache: "no-store" }),
+          fetch("/api/generated-comments", { cache: "no-store", signal: controller.signal }),
+          fetch("/api/student-behaviors", { cache: "no-store", signal: controller.signal }),
         ]);
         const commentResult = await commentResponse.json() as { comments?: Array<{ studentId: number; subject: string; comment: string }> };
         const behaviorResult = await behaviorResponse.json() as { behaviors?: Array<{ studentId: number; behavior: string }> };
@@ -2298,11 +2312,13 @@ export default function Home() {
         setCountsLoadState("ready");
       } catch {
         if (!cancelled) setCountsLoadState("error");
+      } finally {
+        window.clearTimeout(timer);
       }
     };
     void refreshGeneratedCounts();
-    return () => { cancelled = true; };
-  }, [view]);
+    return () => { cancelled = true; controller.abort(); window.clearTimeout(timer); };
+  }, [view, countsLoadAttempt]);
   const deleteStudent = async (id: number) => {
     const student = roster.find((item) => item.id === id);
     if (!student || !await ui.confirm(`${student.name} 학생 전출·비활성 처리\n\n기존 평가·생성 기록 보존`)) return;
@@ -2383,7 +2399,7 @@ export default function Home() {
       <main id="main-content" tabIndex={-1}>
         <header className="mobile-header"><button className="brand" onClick={() => setView("dashboard")}><span>기록</span>샘</button><select aria-label="화면 이동" value={view} onChange={(e) => setView(e.target.value as View)}>{navItems.map((item) => <option value={item.id} key={item.id}>{item.label}</option>)}<option value="settings">개인정보·설정</option></select></header>
         <div className="content">
-          {view === "dashboard" && <Dashboard loadState={classLoadState === "error" || countsLoadState === "error" ? "error" : classLoadState === "loading" || countsLoadState === "loading" ? "loading" : "ready"} move={setView} teacherName={currentUser} classroom={classroom} studentCount={roster.length} completedLevels={completedLevels} totalLevels={totalLevels} commentCount={generatedCommentCount} expectedComments={roster.length * new Set(plan.map((item) => item.subject)).size} behaviorCount={generatedBehaviorCount} />}
+          {view === "dashboard" && <Dashboard retry={() => { if (classLoadState === "error") setClassLoadAttempt((attempt) => attempt + 1); if (countsLoadState === "error") setCountsLoadAttempt((attempt) => attempt + 1); }} loadState={classLoadState === "error" || countsLoadState === "error" ? "error" : classLoadState === "loading" || countsLoadState === "loading" ? "loading" : "ready"} move={setView} teacherName={currentUser} classroom={classroom} studentCount={roster.length} completedLevels={completedLevels} totalLevels={totalLevels} commentCount={generatedCommentCount} expectedComments={roster.length * new Set(plan.map((item) => item.subject)).size} behaviorCount={generatedBehaviorCount} />}
           {view === "students" && <StudentManager roster={roster} onAdded={mergeStudentIntoState} onChanged={mergeStudentIntoState} onDeleted={(id) => void deleteStudent(id)} onImported={mergeImportedStudents} />}
           {view === "plans" && <PlanManager plan={plan} onChanged={applyPlanChange} current={classroom} />}
           {view === "assessments" && <Assessments data={assessmentDataBySubject[activeSubject] ?? []} setData={(updater) => setAssessmentDataBySubject((current) => ({ ...current, [activeSubject]: typeof updater === "function" ? updater(current[activeSubject] ?? []) : updater }))} plan={plan} activeSubject={activeSubject} setActiveSubject={setActiveSubject} onSave={saveAssessmentLevels} />}

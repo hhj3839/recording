@@ -1,3 +1,4 @@
+import { timedPhase, withRequestTiming } from "../../../request-timing";
 import { NextRequest, NextResponse } from "next/server";
 import { createHash } from "node:crypto";
 import { ACTIVE_CLASS_COOKIE } from "../../../data-scope";
@@ -11,6 +12,13 @@ import {
 } from "../../../supabase-auth";
 
 export async function POST(request: NextRequest) {
+  return withRequestTiming("login", async () => {
+    try { return await login(request); }
+    catch { return NextResponse.json({ error: "로그인 서버가 잠시 응답하지 않습니다. 잠시 후 다시 시도해 주세요." }, { status: 503 }); }
+  });
+}
+
+async function login(request: NextRequest) {
   const body = await request.json().catch(() => ({}));
   const email = String(body.email ?? "").trim();
   const password = String(body.password ?? "");
@@ -23,7 +31,7 @@ export async function POST(request: NextRequest) {
   if (existing?.blocked_until && Date.parse(existing.blocked_until) > now) {
     return NextResponse.json({ error: "로그인 시도가 너무 많습니다. 15분 후 다시 시도해 주세요." }, { status: 429 });
   }
-  const { data, error } = await createAuthClient().auth.signInWithPassword({ email, password });
+  const { data, error } = await timedPhase("auth", () => createAuthClient().auth.signInWithPassword({ email, password }));
   if (error || !data.session) {
     const withinWindow = existing && now - Date.parse(existing.window_started_at) < 15 * 60 * 1000;
     const attempts = withinWindow ? Number(existing.attempts) + 1 : 1;

@@ -1,3 +1,4 @@
+import { withRequestTiming } from "../../request-timing";
 import { eq, selectRows, supabaseRequest, updateRows, upsertRows } from "../../../db/supabase";
 import { confirmationIssue } from "../../record-confirmation";
 import { dataError, getDataScope, requireOwnedStudentIds } from "../../data-scope";
@@ -5,6 +6,10 @@ import { validateRecord } from "../../record-validation";
 import { archiveBehavior } from "../../record-revisions";
 
 export async function GET() {
+  return withRequestTiming("student-behaviors", readInitialData);
+}
+
+async function readInitialData() {
   try {
     const { user, classId } = await getDataScope();
     const rows = await selectRows<Record<string, string | number>>("student_behaviors", {

@@ -1,3 +1,4 @@
+import { withRequestTiming } from "../../request-timing";
 import { eq, selectRows, supabaseRequest, upsertRows } from "../../../db/supabase";
 import { confirmationIssue } from "../../record-confirmation";
 import { dataError, getDataScope, requireOwnedStudentIds } from "../../data-scope";
@@ -5,6 +6,10 @@ import { validateRecord } from "../../record-validation";
 import { archiveComment } from "../../record-revisions";
 
 export async function GET() {
+  return withRequestTiming("generated-comments", readInitialData);
+}
+
+async function readInitialData() {
   try {
     const { user, classId } = await getDataScope();
     const [rows, partRows] = await Promise.all([

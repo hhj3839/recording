@@ -36,8 +36,8 @@ test("dashboard task text uses the flexible column without an empty icon slot", 
 
 test("core class initialization is independent of generated count failures", () => {
   const core = source.slice(source.indexOf("const loadClassData ="), source.indexOf("const refreshGeneratedCounts ="));
-  assert.match(core, /fetch\("\/api\/assessment-plan"\)/);
-  assert.match(core, /fetch\("\/api\/class-data"\)/);
+  assert.match(core, /fetch\("\/api\/assessment-plan",/);
+  assert.match(core, /fetch\("\/api\/class-data",/);
   assert.doesNotMatch(core, /generated-comments|student-behaviors|commentResponse|behaviorResponse|setGeneratedComments|setGeneratedBehaviors/);
   assert.match(core, /setPlan\(loadedPlan\)/);
   assert.match(core, /setRoster\(loadedRoster\)/);

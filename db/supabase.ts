@@ -1,3 +1,5 @@
+import { timedPhase } from "../app/request-timing.ts";
+
 type QueryValue = string | number | boolean;
 
 function configuration() {
@@ -16,19 +18,20 @@ export async function supabaseRequest<T>(
     prefer?: string;
   } = {},
 ): Promise<T> {
-  const { url, key } = configuration();
-  const search = new URLSearchParams();
-  for (const [name, value] of Object.entries(options.query ?? {})) search.set(name, String(value));
-  const response = await fetch(`${url}/rest/v1/${table}${search.size ? `?${search}` : ""}`, {
-    method: options.method ?? "GET",
-    headers: {
-      apikey: key,
-      Authorization: `Bearer ${key}`,
-      "Content-Type": "application/json",
-      "User-Agent": "giroksam-server/1.0",
-      ...(options.prefer ? { Prefer: options.prefer } : {}),
-    },
-    body: options.body === undefined ? undefined : JSON.stringify(options.body),
+  return timedPhase("database", async () => {
+    const { url, key } = configuration();
+    const search = new URLSearchParams();
+    for (const [name, value] of Object.entries(options.query ?? {})) search.set(name, String(value));
+    const response = await fetch(`${url}/rest/v1/${table}${search.size ? `?${search}` : ""}`, {
+      method: options.method ?? "GET",
+      headers: {
+        apikey: key,
+        Authorization: `Bearer ${key}`,
+        "Content-Type": "application/json",
+        "User-Agent": "giroksam-server/1.0",
+        ...(options.prefer ? { Prefer: options.prefer } : {}),
+      },
+      body: options.body === undefined ? undefined : JSON.stringify(options.body),
   });
   if (!response.ok) {
     const detail = await response.text();
@@ -37,6 +40,7 @@ export async function supabaseRequest<T>(
   if (response.status === 204) return undefined as T;
   const text = await response.text();
   return (text ? JSON.parse(text) : undefined) as T;
+  });
 }
 
 export const eq = (value: QueryValue) => `eq.${value}`;

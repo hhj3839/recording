@@ -1,3 +1,4 @@
+import { timedPhase } from "./request-timing";
 import { createClient } from "@supabase/supabase-js";
 import { cookies } from "next/headers";
 
@@ -31,6 +32,10 @@ export function createAuthClient() {
 }
 
 export async function getAuthUser(): Promise<AuthUser | null> {
+  return timedPhase("auth", readAuthUser);
+}
+
+async function readAuthUser(): Promise<AuthUser | null> {
   const cookieStore = await cookies();
   let token = cookieStore.get(ACCESS_COOKIE)?.value;
   if (!token) return null;

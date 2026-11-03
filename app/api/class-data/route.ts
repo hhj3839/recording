@@ -1,7 +1,12 @@
+import { withRequestTiming } from "../../request-timing";
 import { eq, selectRows } from "../../../db/supabase";
 import { dataError, getDataScope } from "../../data-scope";
 
 export async function GET() {
+  return withRequestTiming("class-data", readInitialData);
+}
+
+async function readInitialData() {
   try {
     const { user, classId, classroom } = await getDataScope();
     const [studentRows, levelRows] = await Promise.all([

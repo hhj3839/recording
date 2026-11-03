@@ -56,7 +56,13 @@ jobs:
         run: node --test tests/generation-save-failure.test.mjs
 
       - name: Check saved-result loading UI regressions
-        run: node --test tests/comment-loading-ui.test.mjs tests/job-status-read-only.test.mjs tests/login-loading.test.mjs
+        run: node --test tests/comment-loading-ui.test.mjs tests/job-status-read-only.test.mjs tests/login-loading.test.mjs tests/request-timing.test.mjs
+
+      - name: Install regression browser
+        run: pnpm exec playwright install --with-deps chromium
+
+      - name: Check login and initial loading in browser
+        run: pnpm exec playwright test --config playwright.loading.config.ts
 
       - name: Check one-shot trial safety
         run: node --experimental-strip-types --test tests/comment-pool-trial.test.ts
