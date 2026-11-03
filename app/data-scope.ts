@@ -23,27 +23,18 @@ export async function getDataScope() {
   const user = await getAuthUser();
   if (!user) throw new AuthenticationRequiredError("로그인이 필요합니다.");
 
-  const now = new Date().toISOString();
-  await upsertRows("teachers", [{
-    email: user.email,
-    user_id: user.id,
-    display_name: user.displayName,
-    created_at: now,
-  }], "email");
-
   const cookieStore = await cookies();
   const preferredClassId = Number(cookieStore.get(ACTIVE_CLASS_COOKIE)?.value);
-  let classroom = Number.isInteger(preferredClassId)
-    ? (await selectRows<SupabaseClassroom>("classrooms", {
-        id: eq(preferredClassId), owner_id: eq(user.id), limit: 1,
-      }))[0]
-    : undefined;
-
-  if (!classroom && Number.isSafeInteger(user.lastClassId) && Number(user.lastClassId) > 0) {
-    classroom = (await selectRows<SupabaseClassroom>("classrooms", {
-      id: eq(user.lastClassId!), owner_id: eq(user.id), limit: 1,
-    }))[0];
-  }
+  // No cross-request cache: switching classes and ownership changes stay fresh.
+  const candidateIds = [...new Set([preferredClassId, user.lastClassId]
+    .filter((id): id is number => Number.isSafeInteger(id) && Number(id) > 0))];
+  const candidates = candidateIds.length
+    ? await selectRows<SupabaseClassroom>("classrooms", {
+        id: `in.(${candidateIds.join(",")})`, owner_id: eq(user.id),
+      })
+    : [];
+  // Preserve cookie > last-class priority regardless of database row order.
+  let classroom = candidateIds.map(id => candidates.find(row => Number(row.id) === id)).find(Boolean);
 
   if (!classroom) {
     classroom = (await selectRows<SupabaseClassroom>("classrooms", {
@@ -57,6 +48,12 @@ export async function getDataScope() {
   }
 
   if (!classroom) {
+    // Only provisioning writes the teacher parent. Profile edits have their own endpoint.
+    const now = new Date().toISOString();
+    await upsertRows("teachers", [{
+      email: user.email, user_id: user.id, display_name: user.displayName,
+      created_at: now,
+    }], "email");
     classroom = (await upsertRows<SupabaseClassroom>("classrooms", [{
       owner_id: user.id,
       owner_email: user.email,
