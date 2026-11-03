@@ -551,7 +551,7 @@ test("remembers owned classroom choices across login without trusting metadata a
   const classes = readFileSync("app/api/classrooms/route.ts", "utf8");
   const login = readFileSync("app/api/auth/login/route.ts", "utf8");
   const auth = readFileSync("app/supabase-auth.ts", "utf8");
-  assert.match(scope, /id: eq\(user\.lastClassId!\), owner_id: eq\(user\.id\)/);
+  assert.match(scope, /candidateIds\.join\(","\).*owner_id: eq\(user\.id\)/);
   assert.ok(scope.indexOf("user.lastClassId") < scope.indexOf("school_year: eq(user.schoolYear)"));
   assert.match(login, /id: eq\(lastId\), owner_id: eq\(data\.user\.id\)/);
   assert.match(login, /else response\.cookies\.delete\(ACTIVE_CLASS_COOKIE\)/);
