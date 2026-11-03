@@ -1,6 +1,6 @@
 "use client";
 
-import { FormEvent, useState } from "react";
+import { FormEvent, useRef, useState } from "react";
 import { useSearchParams } from "next/navigation";
 
 export default function LoginPage() {
@@ -9,23 +9,45 @@ export default function LoginPage() {
   const [message, setMessage] = useState("");
   const [busy, setBusy] = useState(false);
   const [accepted, setAccepted] = useState(false);
+  const submitPending = useRef(false);
 
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
+    if (submitPending.current) return;
+    submitPending.current = true;
     setBusy(true);
     setMessage("");
-    const values = Object.fromEntries(new FormData(event.currentTarget));
-    const endpoint = mode === "forgot" ? "forgot-password" : mode;
-    const response = await fetch(`/api/auth/${endpoint}`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ ...values, termsAccepted: mode === "signup" ? accepted : undefined, returnTo: params.get("returnTo") ?? "/" }),
-    });
-    const result = await response.json();
-    setBusy(false);
-    if (!response.ok) return setMessage(result.error ?? "처리하지 못했습니다.");
-    if (mode === "login") window.location.href = result.returnTo ?? "/";
-    else setMessage(result.message);
+    const controller = new AbortController();
+    // Keep the deadline active until the response body has also been read.
+    const timer = setTimeout(() => controller.abort(), 20_000);
+    try {
+      const values = Object.fromEntries(new FormData(event.currentTarget));
+      const endpoint = mode === "forgot" ? "forgot-password" : mode;
+      const response = await fetch(`/api/auth/${endpoint}`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        signal: controller.signal,
+        body: JSON.stringify({ ...values, termsAccepted: mode === "signup" ? accepted : undefined, returnTo: params.get("returnTo") ?? "/" }),
+      });
+      const result = await response.json();
+      if (!result || typeof result !== "object" || Array.isArray(result)) throw new Error("Invalid response");
+      if (!response.ok) return setMessage(typeof result.error === "string" ? result.error : "처리하지 못했습니다. 잠시 후 다시 시도해 주세요.");
+      if (mode === "login") {
+        if (typeof result.returnTo !== "string" || !result.returnTo.startsWith("/") || result.returnTo.startsWith("//") || result.returnTo.includes("\\")) throw new Error("Invalid destination");
+        window.location.href = result.returnTo;
+      } else {
+        if (typeof result.message !== "string") throw new Error("Invalid response");
+        setMessage(result.message);
+      }
+    } catch {
+      setMessage(controller.signal.aborted
+        ? "서버 응답 시간이 초과되었습니다. 잠시 후 다시 시도해 주세요."
+        : "서버에 연결하지 못했거나 응답을 확인할 수 없습니다. 잠시 후 다시 시도해 주세요.");
+    } finally {
+      clearTimeout(timer);
+      submitPending.current = false;
+      setBusy(false);
+    }
   }
 
   return (
@@ -35,8 +57,8 @@ export default function LoginPage() {
         <h1>{mode === "login" ? "교사 로그인" : mode === "signup" ? "교사 회원가입" : "비밀번호 찾기"}</h1>
         <p>학급 자료는 로그인한 교사 계정별로 안전하게 분리됩니다.</p>
         <div className="auth-tabs">
-          <button className={mode === "login" ? "active" : ""} onClick={() => setMode("login")}>로그인</button>
-          <button className={mode === "signup" ? "active" : ""} onClick={() => setMode("signup")}>회원가입</button>
+          <button disabled={busy} className={mode === "login" ? "active" : ""} onClick={() => setMode("login")}>로그인</button>
+          <button disabled={busy} className={mode === "signup" ? "active" : ""} onClick={() => setMode("signup")}>회원가입</button>
         </div>
         <form className="auth-form" onSubmit={submit}>
           {mode === "signup" && <>
@@ -56,8 +78,8 @@ export default function LoginPage() {
           {mode === "signup" && <label className="auth-consent"><input type="checkbox" checked={accepted} onChange={(event) => setAccepted(event.target.checked)} required /><span><a href="/terms" target="_blank">서비스 이용약관</a>과 <a href="/privacy" target="_blank">개인정보 처리방침</a>을 확인했으며 필수 개인정보 처리에 동의합니다.</span></label>}
           {message && <p className="auth-message" role="status">{message}</p>}
           <button className="auth-submit" disabled={busy || (mode === "signup" && !accepted)}>{busy ? "처리 중..." : mode === "login" ? "로그인" : mode === "signup" ? "인증 메일 받기" : "재설정 메일 받기"}</button>
-          {mode === "login" && <button type="button" className="auth-link" onClick={() => setMode("forgot")}>비밀번호를 잊으셨나요?</button>}
-          {mode === "forgot" && <button type="button" className="auth-link" onClick={() => setMode("login")}>로그인으로 돌아가기</button>}
+          {mode === "login" && <button type="button" disabled={busy} className="auth-link" onClick={() => setMode("forgot")}>비밀번호를 잊으셨나요?</button>}
+          {mode === "forgot" && <button type="button" disabled={busy} className="auth-link" onClick={() => setMode("login")}>로그인으로 돌아가기</button>}
         </form>
         <footer className="auth-legal"><a href="/privacy">개인정보 처리방침</a><a href="/terms">서비스 이용약관</a></footer>
       </section>
