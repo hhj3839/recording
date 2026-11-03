@@ -5,6 +5,7 @@ import { createPortal } from "react-dom";
 import { useActionDialog } from "./action-dialog";
 import { commentCompletion } from "./comment-completion";
 import { FreshPoolDialog } from "./fresh-pool-dialog";
+import { JobResumeNotice } from "./job-resume-notice";
 import { PoolRecoveryNotice } from "./pool-recovery-notice";
 import { recordSimilarityDetails, validateBehaviorSource, validateRecord } from "./record-validation";
 import { parseStudentRosterText } from "./student-roster-parser";
@@ -597,7 +598,7 @@ function PlanManager({ plan, onChanged, current }: { plan: AssessmentPlan[]; onC
   const [poolBusy, setPoolBusy] = useState(false);
   const [showFreshPoolConfirmation, setShowFreshPoolConfirmation] = useState(false);
   const [poolStartError, setPoolStartError] = useState("");
-  type PoolJobView = { id: string; status: string; completed: number; total: number; failed: number; error: string; freshOnly?: boolean; current: { subject: string; domain: string; level: string } | null };
+  type PoolJobView = { canResume?: boolean; id: string; status: string; completed: number; total: number; failed: number; error: string; freshOnly?: boolean; current: { subject: string; domain: string; level: string } | null };
   const [poolJob, setPoolJob] = useState<PoolJobView | null>(null);
   const columns: Array<[keyof AssessmentPlan, string]> = [
     ["subject", "과목"], ["unit", "단원"], ["goal", "평가목표"], ["domain", "영역"],
@@ -1046,6 +1047,7 @@ function PlanManager({ plan, onChanged, current }: { plan: AssessmentPlan[]; onC
       <div className="section-heading"><div><p className="eyebrow">평가계획용 문장 풀</p><h2>AI 평어</h2><p>학생에게 배정하기 전, 평가영역·수준별로 서로 다른 평어 20개를 제작하고 검수합니다.</p></div><div className="ai-pool-heading-actions"><button className="secondary" disabled={poolBusy || poolStatusLoading || !plan.length || activePoolJob} onClick={() => { setPoolStartError(""); setShowFreshPoolConfirmation(true); }}>전체 새로 제작</button><button className="danger-text" disabled={poolBusy || !plan.length || poolSummary.usable === 0 || activePoolJob} onClick={() => void resetPoolLinks()}>AI 평어 초기화</button></div></div>
       {showFreshPoolConfirmation && <FreshPoolDialog count={poolSummary.total} busy={poolBusy} disabled={poolStatusLoading || activePoolJob || !plan.length} error={poolStartError} onCancel={() => setShowFreshPoolConfirmation(false)} onStart={() => void startPoolProduction(true)} />}
       {poolStartError && <div className="ai-pool-job-error" role="alert"><b>AI 평어 제작 시작 실패</b><span>{poolStartError}</span></div>}
+      <JobResumeNotice key={poolJob?.id} job={poolJob} />
       {!plan.length ? <p className="empty-cell">평가계획을 먼저 저장해 주세요.</p> : <>
         {poolStatusLoading ? <div className="ai-pool-loading" role="status"><i aria-hidden="true" /><span><b>AI 평어 상태를 확인하고 있습니다.</b><small>현재 평가계획의 승인 문장과 최신 검수 결과를 읽는 중입니다.</small></span></div> : <div className="ai-pool-summary">
           <span><b>{poolSummary.total}</b>개 영역·수준</span>
@@ -1059,6 +1061,7 @@ function PlanManager({ plan, onChanged, current }: { plan: AssessmentPlan[]; onC
               : poolSummary.needsGeneration === 0 ? <span className="all-ready">전체 준비 완료</span> : null}
           {selectedPoolWarningSentenceCount > 0 && !activePoolJob && <button className="pool-remove-warnings" type="button" disabled={poolBusy || poolSentencesLoading} onClick={() => void excludeWarningPoolSentences()}>경고 문장 제거</button>}
         </div>}
+
         {showPoolRecovery && poolJob && <PoolRecoveryNotice count={poolJob.failed} error={poolJob.error} busy={poolBusy} onRetry={() => void startPoolProduction(false, Boolean(poolJob.freshOnly && poolJob.status === "completed_with_errors"))} />}
         {!!poolGroups.length && <div className="ai-pool-browser">
           <div className="ai-pool-selection-row"><label><span>과목·영역·수준</span><span className={`ai-pool-select-box${(selectedPoolGroup?.qualityWarnings.length || selectedPoolGroup?.reviewCount) ? " has-warning" : ""}`}><select value={selectedPoolFingerprint} onChange={(event) => setSelectedPoolFingerprint(event.target.value)}>{poolGroups.map((group) => <option value={group.fingerprint} key={group.fingerprint}>{group.subject} · {group.domain} · {group.level} ({group.approvedCount}/{group.targetCount}){group.qualityWarnings.length ? " · 확인 필요" : group.reviewCount ? ` · 검토 ${group.reviewCount}` : ""}</option>)}</select>{(selectedPoolGroup?.qualityWarnings.length || selectedPoolGroup?.reviewCount) > 0 && <button className="pool-warning-jump" type="button" disabled={poolSentencesLoading} onClick={() => firstPoolWarningRef.current?.scrollIntoView({ behavior: "smooth", block: "center" })}>{selectedPoolWarningSentenceCount > 0 ? `확인 필요 ${selectedPoolWarningSentenceCount}개` : "확인 필요 문장 있음"}</button>}</span></label></div>
@@ -1280,7 +1283,7 @@ function Assessments({ data, setData, plan, activeSubject, setActiveSubject, onS
 
 function Comments({ assessmentDataBySubject, plan, roster }: { assessmentDataBySubject: Record<string, AssessmentStudent[]>; plan: AssessmentPlan[]; roster: AssessmentStudent[] }) {
   const ui = useActionDialog();
-  type CommentJob = { id: string; status: string; subject: string; totalItems: number; completedItems: number; failedItems: number; totalBatches: number; currentBatch: number; error?: string; completedAt?: string | null };
+  type CommentJob = { canResume?: boolean; id: string; status: string; subject: string; totalItems: number; completedItems: number; failedItems: number; totalBatches: number; currentBatch: number; error?: string; completedAt?: string | null };
   type CommentSelection = { text: string; start: number; end: number };
   type CommentGenerationMode = "empty" | "modified" | "all";
   type GeneratedLevel = { assessmentIndex: number; level: string };
@@ -1567,6 +1570,7 @@ function Comments({ assessmentDataBySubject, plan, roster }: { assessmentDataByS
           <button className="subject-reset-button" title="학생 명단·평가계획·평가수준은 유지하고 현재 과목의 생성된 평어만 초기화합니다." onClick={() => void clearSubjectComments()} disabled={!commentsReady || loading || !savedCommentCount}><span aria-hidden="true">↺</span>{selectedSubject} 결과 초기화</button>
         </div>
       </div>
+      <JobResumeNotice key={activeJob?.id} job={activeJob} />
       {commentsReady && generationDialogOpen && <div className="generation-dialog-backdrop" onMouseDown={(event) => { if (event.target === event.currentTarget) setGenerationDialogOpen(false); }}>
         <div className="generation-dialog" role="dialog" aria-modal="true" aria-labelledby="comment-generation-title">
           <div><p className="eyebrow">AI 생성</p><h2 id="comment-generation-title">{selectedSubject} 평어 생성 대상 선택</h2><p>생성할 학생 범위를 선택하세요. 기존 결과는 선택한 범위에 따라서만 교체됩니다.</p></div>
@@ -1663,7 +1667,7 @@ function Comments({ assessmentDataBySubject, plan, roster }: { assessmentDataByS
 
 function Behavior({ roster }: { roster: AssessmentStudent[] }) {
   const ui = useActionDialog();
-  type BehaviorJob = { id: string; status: string; totalItems: number; completedItems: number; failedItems: number; error?: string; completedAt?: string | null };
+  type BehaviorJob = { canResume?: boolean; id: string; status: string; totalItems: number; completedItems: number; failedItems: number; error?: string; completedAt?: string | null };
   type BehaviorRecord = { characteristic: string; generatedCharacteristic: string; behavior: string };
   type BehaviorGenerationMode = "empty" | "modified" | "all";
   const emptyBehaviorRecord = (): BehaviorRecord => ({ characteristic: "", generatedCharacteristic: "", behavior: "" });
@@ -1857,6 +1861,7 @@ function Behavior({ roster }: { roster: AssessmentStudent[] }) {
         <div><p className="eyebrow">행동 기록</p><h1>행동특성 작성</h1><p>왼쪽에 관찰한 키워드나 메모를 자유롭게 쓰고, 오른쪽에서 생성 결과를 바로 확인하세요.</p></div>
         <div className="ai-generate-actions">{formattedLastGeneratedAt && <span>마지막 생성 {formattedLastGeneratedAt}</span>}<button onClick={openGenerationDialog} disabled={loading || inputIssueCount > 0}>{loading ? generationProgress || "전체 생성 중…" : inputIssueCount ? `입력 확인 ${inputIssueCount}명` : "행동특성 생성"}</button><button className="secondary result-copy-button" onClick={() => void copyBehaviors()} disabled={!roster.some((student) => records[student.id]?.behavior)}>{copied ? "복사 완료" : "행동특성 복사"}</button><button className="danger-text" onClick={() => void clearBehaviors()} disabled={loading || !roster.some((student) => records[student.id]?.behavior.trim())}>결과 초기화</button></div>
       </div>
+      <JobResumeNotice key={activeJob?.id} job={activeJob} />
       {generationDialogOpen && <div className="generation-dialog-backdrop" onMouseDown={(event) => { if (event.target === event.currentTarget) setGenerationDialogOpen(false); }}>
         <div className="generation-dialog" role="dialog" aria-modal="true" aria-labelledby="behavior-generation-title">
           <div><p className="eyebrow">AI 생성</p><h2 id="behavior-generation-title">행동특성 생성 대상 선택</h2><p>생성할 학생 범위를 선택하세요. 기존 결과는 선택한 범위에 따라서만 교체됩니다.</p></div>

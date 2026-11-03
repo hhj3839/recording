@@ -47,7 +47,7 @@ export async function POST(request: Request) {
     return Response.json({ error: "허용되지 않은 작업 요청입니다." }, { status: 403 });
   }
 
-  const job = (await selectRows<JobRow>("generation_jobs", { id: eq(jobId), limit: 1 }))[0];
+  const job = (await selectRows<JobRow>("generation_jobs", { id: eq(jobId), job_type: eq("comments"), limit: 1 }))[0];
   if (!job) return Response.json({ ok: true, terminal: true });
   const lockAge = Date.now() - Date.parse(job.updated_at);
   if (job.status === "running" && lockAge < 360_000) {

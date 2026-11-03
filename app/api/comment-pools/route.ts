@@ -1,3 +1,4 @@
+import { canResumeJob } from "../../job-resume-policy";
 import { waitUntil } from "@vercel/functions";
 import { createHash } from "node:crypto";
 import { eq, insertRows, selectRows, supabaseRequest, upsertRows } from "../../../db/supabase";
@@ -67,6 +68,7 @@ function publicJob(job: Record<string, unknown>) {
   const batches = Array.isArray(job.batches) ? job.batches as Array<{ freshOnly?: boolean; spec?: { subject?: string; domain?: string; level?: string } }> : [];
   const current = batches[Math.max(0, Number(job.current_batch) || 0)]?.spec;
   return {
+    canResume: canResumeJob(job),
     id: String(job.id), status: String(job.status), completed: Number(job.completed_items), total: Number(job.total_items),
     failed: Number(job.failed_items), error: String(job.error_message ?? ""),
     freshOnly: batches.length > 0 && batches.every(batch => batch.freshOnly),

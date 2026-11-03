@@ -139,3 +139,98 @@ test("retrying failed counts does not reload successful assessment state", async
   expect(planCalls).toBe(1);
   expect(countCalls).toBe(2);
 });
+
+for (const [path, label] of [["comment-jobs", "교과 평어"], ["behavior-jobs", "행동특성"]]) {
+  test(`stalled ${path} requires explicit resume and sends only existing ID`, async ({ page }) => {
+    await page.clock.install();
+    let posts = 0;
+    let status = "queued";
+    await page.route(`**/api/${path}`, route => {
+      if (route.request().method() !== "GET") { posts++; return route.fulfill({ status: 500, json: {} }); }
+      return route.fulfill({ json: { job: { id: "existing", status, canResume: status === "queued", subject: "국어", completedItems: 1, totalItems: 2, failedItems: 0, currentBatch: 1, totalBatches: 2 } } });
+    });
+    let release: (() => void) | undefined;
+    await page.route("**/api/generation-jobs/resume", async route => {
+      posts++;
+      expect(route.request().postDataJSON()).toEqual({ jobId: "existing" });
+      await new Promise<void>(resolve => { release = resolve; });
+      status = "completed";
+      await route.fulfill({ status: 202, json: { accepted: true, jobId: "existing" } });
+    });
+    await page.goto("/");
+    await page.getByRole("button", { name: label, exact: true }).click();
+    const button = page.getByRole("button", { name: "기존 작업 재개", exact: true });
+    await expect(button).toBeVisible();
+    await page.clock.fastForward(10_000);
+    expect(posts).toBe(0);
+    await button.click();
+    await expect.poll(() => posts).toBe(1);
+    await expect(page.getByRole("button", { name: "재개 요청 중…" })).toBeDisabled();
+    release!();
+    await page.clock.fastForward(3_100);
+    await expect(page.getByRole("button", { name: /기존 작업.*재개/ })).toHaveCount(0);
+    expect(posts).toBe(1);
+  });
+}
+
+test("resume network failure recovers button without automatic retry", async ({ page }) => {
+  await page.clock.install();
+  let posts = 0;
+  await page.route("**/api/behavior-jobs", route => route.fulfill({ json: { job: { id: "existing", status: "queued", canResume: true, completedItems: 1, totalItems: 2 } } }));
+  await page.route("**/api/generation-jobs/resume", route => { posts++; return route.abort(); });
+  await page.goto("/");
+  await page.getByRole("button", { name: "행동특성", exact: true }).click();
+  const button = page.getByRole("button", { name: "기존 작업 재개", exact: true });
+  await button.click();
+  await expect(button).toBeEnabled();
+  await page.clock.fastForward(10_000);
+  expect(posts).toBe(1);
+  await button.click();
+  await expect.poll(() => posts).toBe(2);
+});
+
+test("pool status polling does not resume until the explicit button click", async ({ page }) => {
+  await page.clock.install();
+  let posts = 0;
+  const job = { id: "pool-existing", status: "queued", canResume: true, completed: 1, total: 2, failed: 0, error: "", current: null };
+  await page.route("**/api/comment-pools*", route => route.fulfill({ json: { job, activeJob: job, groups: [], summary: { total: 2, usable: 0, needsGeneration: 2 } } }));
+  await page.route("**/api/generation-jobs/resume", route => {
+    posts++;
+    expect(route.request().postDataJSON()).toEqual({ jobId: "pool-existing" });
+    return route.fulfill({ status: 202, json: { accepted: true, jobId: "pool-existing" } });
+  });
+  await page.goto("/");
+  await page.getByRole("button", { name: "평가계획 관리", exact: true }).click();
+  await page.getByRole("tab", { name: /AI 평어/ }).click();
+  await page.clock.fastForward(500);
+  const button = page.getByRole("button", { name: "기존 작업 재개", exact: true });
+  await expect(button).toBeVisible();
+  await page.clock.fastForward(10_000);
+  expect(posts).toBe(0);
+  await button.click();
+  await expect.poll(() => posts).toBe(1);
+});
+
+for (const failure of ["timeout", "html", "conflict"]) {
+  test(`resume ${failure} restores controls without auto-dispatch`, async ({ page }) => {
+    await page.clock.install();
+    let posts = 0;
+    await page.route("**/api/behavior-jobs", route => route.fulfill({ json: { job: { id: "existing", status: "queued", canResume: true, completedItems: 1, totalItems: 2 } } }));
+    await page.route("**/api/generation-jobs/resume", route => {
+      posts++;
+      if (failure === "timeout") return;
+      return failure === "html"
+        ? route.fulfill({ status: 502, contentType: "text/html", body: "gateway unavailable" })
+        : route.fulfill({ status: 409, json: { error: "busy" } });
+    });
+    await page.goto("/");
+    await page.getByRole("button", { name: "행동특성", exact: true }).click();
+    await page.getByRole("button", { name: "기존 작업 재개", exact: true }).click();
+    await expect.poll(() => posts).toBe(1);
+    if (failure === "timeout") await page.clock.fastForward(20_001);
+    await expect(page.getByRole("button", { name: "기존 작업 재개", exact: true })).toBeEnabled();
+    await expect(page.getByText(failure === "timeout" ? /응답 시간이 초과됐습니다/ : failure === "conflict" ? /작업 상태가 변경됐습니다/ : /재개 요청을 보내지 못했습니다/)).toBeVisible();
+    await page.clock.fastForward(10_000);
+    expect(posts).toBe(1);
+  });
+}

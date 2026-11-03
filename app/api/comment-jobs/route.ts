@@ -1,3 +1,4 @@
+import { canResumeJob } from "../../job-resume-policy";
 import { waitUntil } from "@vercel/functions";
 import { linkedCommentPools } from "../../linked-comment-pools";
 import { eq, insertRows, selectRows, supabaseRequest } from "../../../db/supabase";
@@ -10,6 +11,7 @@ import { dataError, getDataScope, requireOwnedStudentIds } from "../../data-scop
 type Level = "상" | "중" | "하" | "미응시" | "평가 예정" | "-";
 type ScoreStudent = { studentId: number; levels: Level[] };
 type JobRow = {
+  updated_at: string;
   id: string;
   status: string;
   current_batch: number;
@@ -24,6 +26,7 @@ type JobRow = {
 };
 
 const present = (row: JobRow) => ({
+  canResume: canResumeJob(row),
   id: row.id,
   status: row.status,
   currentBatch: Number(row.current_batch),
@@ -60,7 +63,7 @@ export async function GET() {
       limit: 1,
     });
     // Status polling must not restart work. POST and the runner own execution.
-    return Response.json({ job: jobs[0] ? present(jobs[0]) : null });
+    return Response.json({ job: jobs[0] ? present(jobs[0]) : null }, { headers: { "Cache-Control": "private, no-store" } });
   } catch (error) {
     return dataError(error, "교과 평어 생성 상태를 불러오지 못했습니다.");
   }

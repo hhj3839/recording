@@ -1,3 +1,4 @@
+import { canResumeJob } from "../../job-resume-policy";
 import { waitUntil } from "@vercel/functions";
 import { eq, insertRows, selectRows } from "../../../db/supabase";
 import { getAiUsage, MONTHLY_AI_LIMIT } from "../../ai-usage";
@@ -9,10 +10,12 @@ import { dataError, getDataScope, requireOwnedStudentIds } from "../../data-scop
 import { validateBehaviorSource } from "../../record-validation";
 
 type JobRow = {
+  updated_at: string;
   id: string; status: string; current_batch: number; total_batches: number; total_items: number;
   completed_items: number; failed_items: number; error_message: string; created_at: string; completed_at: string | null;
 };
 const present = (row: JobRow) => ({
+  canResume: canResumeJob(row),
   id: row.id, status: row.status, currentBatch: Number(row.current_batch), totalBatches: Number(row.total_batches),
   totalItems: Number(row.total_items), completedItems: Number(row.completed_items), failedItems: Number(row.failed_items),
   error: row.error_message, createdAt: row.created_at, completedAt: row.completed_at,
@@ -31,7 +34,7 @@ export async function GET() {
       owner_id: eq(user.id), class_id: eq(classId), job_type: eq("behaviors"), order: "created_at.desc", limit: 1,
     });
     // Status polling must not restart work. POST and the runner own execution.
-    return Response.json({ job: rows[0] ? present(rows[0]) : null });
+    return Response.json({ job: rows[0] ? present(rows[0]) : null }, { headers: { "Cache-Control": "private, no-store" } });
   } catch (error) {
     return dataError(error, "행동특성 생성 상태를 불러오지 못했습니다.");
   }

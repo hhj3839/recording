@@ -10,6 +10,7 @@ function loadRoute(kind, job, effects) {
     compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 },
   }).outputText;
   const dependencies = {
+    '../../job-resume-policy': { canResumeJob: () => false },
     '@vercel/functions': { waitUntil: () => effects.push('schedule') },
     '../../../db/supabase': {
       eq: value => `eq.${value}`,
