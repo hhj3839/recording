@@ -1,6 +1,7 @@
 import { readFile } from "node:fs/promises";
 
-// One login and two rounds of the four initial GETs. Never print credentials,
+// One login and two rounds of four initial GETs plus the full comments read.
+// Never print credentials,
 // cookies, response bodies, student data, or arbitrary upstream error messages.
 const base = "https://giroksam-recording.vercel.app";
 const credentialPath = process.argv[2];
@@ -30,7 +31,7 @@ const login = await measure("/api/auth/login", {
 if (login?.status === 200) {
   const cookie = login.headers.getSetCookie().map(value => value.split(";", 1)[0]).join("; ");
   for (const round of [1, 2]) await Promise.all([
-    "/api/assessment-plan", "/api/class-data", "/api/generated-comments", "/api/student-behaviors",
+    "/api/assessment-plan", "/api/class-data", "/api/generated-comments?summary=1", "/api/student-behaviors", "/api/generated-comments",
   ].map(path => measure(path, { headers: { Cookie: cookie }, cache: "no-store" }, round)));
 }
 console.log(JSON.stringify({ measuredAt: new Date().toISOString(), scope: "production lab account, current sample only", measurements }, null, 2));

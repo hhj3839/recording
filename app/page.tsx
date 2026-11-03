@@ -2300,7 +2300,7 @@ export default function Home() {
       setCountsLoadState("loading");
       try {
         const [commentResponse, behaviorResponse] = await Promise.all([
-          fetch("/api/generated-comments", { cache: "no-store", signal: controller.signal }),
+          fetch("/api/generated-comments?summary=1", { cache: "no-store", signal: controller.signal }),
           fetch("/api/student-behaviors", { cache: "no-store", signal: controller.signal }),
         ]);
         const commentResult = await commentResponse.json() as { comments?: Array<{ studentId: number; subject: string; comment: string }> };

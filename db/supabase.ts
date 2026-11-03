@@ -1,4 +1,4 @@
-import { timedPhase } from "../app/request-timing.ts";
+import { timedPhase, type Phase } from "../app/request-timing.ts";
 
 type QueryValue = string | number | boolean;
 
@@ -18,7 +18,12 @@ export async function supabaseRequest<T>(
     prefer?: string;
   } = {},
 ): Promise<T> {
-  return timedPhase("database", async () => {
+  const detail: Phase | undefined = table === "auth_login_attempts"
+    ? options.method === "DELETE" ? "login_reset" : !options.method || options.method === "GET" ? "login_check" : undefined
+    : table === "classrooms" && (!options.method || options.method === "GET") ? "classroom_lookup"
+    : table === "generated_comments" && (!options.method || options.method === "GET") ? "comment_rows"
+    : table === "generated_comment_parts" && (!options.method || options.method === "GET") ? "comment_parts" : undefined;
+  const execute = async (): Promise<T> => {
     const { url, key } = configuration();
     const search = new URLSearchParams();
     for (const [name, value] of Object.entries(options.query ?? {})) search.set(name, String(value));
@@ -40,7 +45,8 @@ export async function supabaseRequest<T>(
   if (response.status === 204) return undefined as T;
   const text = await response.text();
   return (text ? JSON.parse(text) : undefined) as T;
-  });
+  };
+  return timedPhase("database", () => detail ? timedPhase(detail, execute) : execute());
 }
 
 export const eq = (value: QueryValue) => `eq.${value}`;

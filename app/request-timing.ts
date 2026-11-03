@@ -1,6 +1,6 @@
 import { AsyncLocalStorage } from "node:async_hooks";
 
-type Phase = "auth" | "database";
+export type Phase = "auth" | "database" | "login_check" | "login_reset" | "classroom_lookup" | "comment_rows" | "comment_parts";
 type Route = "login" | "class-data" | "assessment-plan" | "generated-comments" | "student-behaviors";
 const timing = new AsyncLocalStorage<Map<Phase, { duration: number; count: number }>>();
 
