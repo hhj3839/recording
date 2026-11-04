@@ -22,7 +22,7 @@ function setup({ user = owner, cookie = '1', rows = [{ id: 1, owner_id: 'owner' 
         assert.equal(query.owner_id, `eq.${user.id}`);
         return query.id ? rows : fallback;
       },
-      upsertRows: async (table, values) => {
+      insertRowsIfAbsent: async (table, values) => {
         calls.push({ table, values });
         return [{ ...values[0], id: 3, owner_id: provisionOwner }];
       },
@@ -77,7 +77,7 @@ test('unauthenticated request performs no database access', async () => {
 test('unexpected foreign row and conflicting provision both fail closed', async () => {
   for (const options of [{ rows: [{ id: 1, owner_id: 'foreign' }] }, { rows: [], provisionOwner: 'foreign' }]) {
     const h = setup(options);
-    await assert.rejects(h.getDataScope(), h.AuthorizationError);
+    await assert.rejects(h.getDataScope(), options.provisionOwner ? h.OwnershipConflictError : h.AuthorizationError);
   }
 });
 test('class switch reauthenticates and resolves fresh ownership without shared cache', async () => {

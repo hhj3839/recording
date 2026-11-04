@@ -557,7 +557,8 @@ test("remembers owned classroom choices across login without trusting metadata a
   assert.match(login, /else response\.cookies\.delete\(ACTIVE_CLASS_COOKIE\)/);
   assert.match(auth, /updateUser\(\{ data: \{ last_class_id: classId \} \}\)/);
   assert.equal((classes.match(/await rememberClassroom/g) ?? []).length, 3);
-  assert.ok(classes.indexOf('선택할 수 없는 학급입니다.') < classes.indexOf('await rememberClassroom(Number(classroom.id))'));
+  const switchRoute = classes.slice(classes.indexOf('export async function PUT'), classes.indexOf('export async function DELETE'));
+  assert.ok(switchRoute.indexOf('선택할 수 없는 학급입니다.') < switchRoute.indexOf('await rememberClassroom(Number(classroom.id))'));
 });
 
 test("retries only incomplete owned fresh batches from the latest classroom job", () => {

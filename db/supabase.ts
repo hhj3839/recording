@@ -75,6 +75,14 @@ export function insertRows<T>(table: string, rows: unknown[]) {
   });
 }
 
+// Atomic INSERT ... ON CONFLICT DO NOTHING: never merge ownership on an email key.
+export function insertRowsIfAbsent<T>(table: string, rows: unknown[], onConflict: string) {
+  return supabaseRequest<T[]>(table, {
+    method: "POST", query: { on_conflict: onConflict }, body: rows,
+    prefer: "resolution=ignore-duplicates,return=representation",
+  });
+}
+
 export function updateRows<T>(table: string, query: Record<string, QueryValue>, values: unknown) {
   return supabaseRequest<T[]>(table, {
     method: "PATCH",

@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
-import { eq, selectRows, supabaseRequest, upsertRows } from "../../../db/supabase";
-import { ACTIVE_CLASS_COOKIE, AuthenticationRequiredError, dataError } from "../../data-scope";
+import { eq, selectRows, supabaseRequest } from "../../../db/supabase";
+import { ACTIVE_CLASS_COOKIE, AuthenticationRequiredError, createOwnedClassroom, dataError } from "../../data-scope";
 import { getAuthUser, rememberClassroom } from "../../supabase-auth";
 import { CLASS_DATA_TABLES } from "../../class-data-tables";
 
@@ -54,7 +54,7 @@ export async function POST(request: Request) {
     if (!schoolName || schoolYear < 2020 || schoolYear > 2100 || ![1, 2].includes(semester) || grade < 1 || grade > 6 || classNumber < 1 || classNumber > 30) {
       return Response.json({ error: "학교·학년도·학기·학년·반 정보를 확인해 주세요." }, { status: 400 });
     }
-    const rows = await upsertRows<ClassroomRow>("classrooms", [{
+    const classroom = await createOwnedClassroom({
       owner_id: user.id,
       owner_email: user.email,
       school_name: schoolName,
@@ -63,10 +63,10 @@ export async function POST(request: Request) {
       grade,
       class_number: classNumber,
       created_at: new Date().toISOString(),
-    }], "owner_email,school_year,semester,grade,class_number");
-    await rememberClassroom(Number(rows[0].id));
-    const response = NextResponse.json({ classroom: present(rows[0]) });
-    response.cookies.set(ACTIVE_CLASS_COOKIE, String(rows[0].id), {
+    });
+    await rememberClassroom(Number(classroom.id));
+    const response = NextResponse.json({ classroom: present(classroom) });
+    response.cookies.set(ACTIVE_CLASS_COOKIE, String(classroom.id), {
       httpOnly: true, secure: process.env.NODE_ENV === "production", sameSite: "lax", path: "/", maxAge: 60 * 60 * 24 * 365,
     });
     return response;
