@@ -12,7 +12,7 @@ const MAX_GENERATION_ATTEMPTS = 4;
 type JobRow = {
   id: string; owner_id: string; owner_email: string; class_id: number; status: string; batches: BehaviorInput[][];
   current_batch: number; total_batches: number; completed_items: number; failed_items: number; error_message: string; started_at: string | null;
-  updated_at: string;
+  updated_at: string; behavior_save_receipts?: Record<string, boolean>;
 };
 function queueNext(request: Request, jobId: string) {
   waitUntil(fetch(new URL("/api/behavior-jobs/run", request.url), {
@@ -26,7 +26,9 @@ export async function POST(request: Request) {
   const jobId = typeof body.jobId === "string" ? body.jobId : "";
   const signature = typeof body.signature === "string" ? body.signature : "";
   if (!jobId || !verifyCommentJob(jobId, signature)) return Response.json({ error: "허용되지 않은 작업 요청입니다." }, { status: 403 });
-  const job = (await selectRows<JobRow>("generation_jobs", { id: eq(jobId), job_type: eq("behaviors"), limit: 1 }))[0];
+  const job = (await selectRows<JobRow>("generation_jobs", {
+    select: "id,owner_id,owner_email,class_id,status,batches,current_batch,total_batches,completed_items,failed_items,error_message,started_at,updated_at,behavior_save_receipts",
+    id: eq(jobId), job_type: eq("behaviors"), limit: 1 }))[0];
   if (!job || !["queued", "running"].includes(job.status)) return Response.json({ ok: true, terminal: true });
   const lockAge = Date.now() - Date.parse(job.updated_at);
   if (job.status === "running" && lockAge < 360_000) {
@@ -48,7 +50,11 @@ export async function POST(request: Request) {
   if (!claimed[0]) return Response.json({ ok: true, terminal: false, busy: true });
   let behaviors: GeneratedBehavior[] = [];
   let errorMessage = "";
-  let pending = batch;
+  const lease = claimed[0].updated_at;
+  const savedIds = new Set(batch.filter(item =>
+    claimed[0].behavior_save_receipts?.[batchIndex + ":" + item.studentId] === true
+  ).map(item => item.studentId));
+  let pending = batch.filter(item => !savedIds.has(item.studentId));
   const batchStudentIds = new Set(batch.map((item) => item.studentId));
   const existingBehaviors = await selectRows<{ student_id: number; behavior: string }>("student_behaviors", {
     owner_id: eq(job.owner_id), class_id: eq(job.class_id),
@@ -63,6 +69,7 @@ export async function POST(request: Request) {
       errorMessage = `월 AI 요청 한도 ${MONTHLY_AI_LIMIT}회를 사용하여 남은 학생의 자동 재시도를 중단했습니다.`;
       break;
     }
+    let saving = false;
     try {
       const groups = attempt === 0 ? [pending] : pending.map((item) => [item]);
       for (const group of groups) {
@@ -75,9 +82,11 @@ export async function POST(request: Request) {
         const known = new Set(behaviors.map((item) => item.studentId));
         const newBehaviors = generated.behaviors.filter((item) => !known.has(item.studentId));
         if (newBehaviors.length) {
+          saving = true;
           await saveGeneratedBehaviors({
-            ownerId: job.owner_id, ownerEmail: job.owner_email, classId: Number(job.class_id), behaviors: newBehaviors,
+            ownerId: job.owner_id, classId: Number(job.class_id), jobId, batchIndex, lease, behaviors: newBehaviors,
           });
+          saving = false;
           behaviors = [...behaviors, ...newBehaviors];
         }
         for (const failure of generated.failures) {
@@ -102,6 +111,8 @@ export async function POST(request: Request) {
       }
     }
     catch (error) {
+      // A lost acknowledgement may already have committed. Resume reads the receipt.
+      if (saving) throw error;
       errorMessage = error instanceof Error ? error.message : "AI 생성 오류";
     }
   }
@@ -109,7 +120,7 @@ export async function POST(request: Request) {
   if (cancelledBeforeSave) {
     return Response.json({ ok: true, terminal: true, cancelled: true });
   }
-  const returned = new Set(behaviors.map((item) => item.studentId));
+  const returned = new Set([...savedIds, ...behaviors.map((item) => item.studentId)]);
   const failedInBatch = batch.filter((item) => !returned.has(item.studentId)).length;
   if (failedInBatch) {
     const detail = `행동특성 배치 ${batchIndex + 1}: ${failedInBatch}명이 검수를 통과하지 못해 미완료입니다. 저장된 다른 학생 결과는 유지됩니다.`;
@@ -117,18 +128,19 @@ export async function POST(request: Request) {
   }
   const nextBatch = batchIndex + 1;
   const failedItems = Number(job.failed_items) + failedInBatch;
-  const completedItems = Number(job.completed_items) + behaviors.length;
+  const completedItems = Number(job.completed_items) + returned.size;
   const terminal = nextBatch >= Number(job.total_batches);
   const latestStatus = (await selectRows<{ status: string }>("generation_jobs", { id: eq(jobId), limit: 1 }))[0]?.status;
   if (latestStatus === "cancelled") {
     return Response.json({ ok: true, terminal: true, cancelled: true, completedItems, failedItems });
   }
-  await updateRows("generation_jobs", { id: eq(jobId) }, {
+  const advanced = await updateRows("generation_jobs", { id: eq(jobId), status: eq("running"), current_batch: eq(batchIndex), updated_at: eq(lease) }, {
     status: terminal ? (failedItems ? "completed_with_errors" : "completed") : "queued",
     current_batch: nextBatch, completed_items: completedItems, failed_items: failedItems,
     error_message: failedItems ? (errorMessage || job.error_message) : "",
     completed_at: terminal ? new Date().toISOString() : null, updated_at: new Date().toISOString(),
   });
+  if (!advanced.length) return Response.json({ ok: true, terminal: false, busy: true });
   if (!terminal) queueNext(request, jobId);
   return Response.json({ ok: true, terminal, completedItems, failedItems });
 }

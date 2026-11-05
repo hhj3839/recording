@@ -1,6 +1,6 @@
-import { upsertRows } from "../db/supabase";
+import { supabaseRequest } from "../db/supabase";
 import { BehaviorVariation } from "./behavior-variation";
-import { archiveBehavior } from "./record-revisions";
+
 import { validateBehaviorSource, validateRecord } from "./record-validation";
 import { primaryAiModel } from "./ai-model-policy";
 import { AiTokenUsage } from "./ai-usage";
@@ -115,27 +115,18 @@ export async function generateBehaviorBatch(inputs: BehaviorInput[], avoidBehavi
 }
 
 export async function saveGeneratedBehaviors(input: {
-  ownerId: string;
-  ownerEmail: string;
-  classId: number;
+  ownerId: string; classId: number; jobId: string; batchIndex: number; lease: string;
   behaviors: GeneratedBehavior[];
 }) {
   assertStrictGeneratedBehaviors(input.behaviors);
-  const updatedAt = new Date().toISOString();
-  await Promise.all(input.behaviors.map((item) => archiveBehavior({
-    ownerId: input.ownerId, ownerEmail: input.ownerEmail, classId: input.classId, studentId: item.studentId,
-    nextContent: item.behavior, nextCharacteristic: item.characteristic, source: "ai-regeneration",
-  })));
-  await upsertRows("student_behaviors", input.behaviors.map((item) => ({
-    student_id: item.studentId,
-    characteristic: item.characteristic,
-    generated_characteristic: item.characteristic,
-    behavior: item.behavior,
-    confirmed: false,
-    confirmed_at: null,
-    updated_at: updatedAt,
-    owner_email: input.ownerEmail,
-    owner_id: input.ownerId,
-    class_id: input.classId,
-  })), "class_id,student_id");
+  await supabaseRequest("rpc/save_behavior_job_results", {
+    method: "POST",
+    body: {
+      p_job: input.jobId, p_owner: input.ownerId, p_class: input.classId,
+      p_batch: input.batchIndex, p_lease: input.lease,
+      p_results: input.behaviors.map(item => ({
+        student_id: item.studentId, characteristic: item.characteristic, behavior: item.behavior,
+      })),
+    },
+  });
 }

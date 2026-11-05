@@ -19,27 +19,42 @@ function harness(options = {}) {
     current_batch: 0, total_batches: 2, total_items: 2, completed_items: 0, failed_items: 0, error_message: "",
     batches: [[{ studentId: 1 }], [{ studentId: 2 }]], ...options.job };
   const work = [], dispatches = [], generations = [], saves = [], writes = [];
+  const results = new Map(options.initialResults ?? []);
   let rejectDispatch = options.rejectDispatch ?? false;
-  const match = q => Object.entries(q).every(([k,v]) => ["limit","order"].includes(k) || String(v) === "eq."+String(job[k]));
+  const match = q => Object.entries(q).every(([k,v]) => ["limit","order","select"].includes(k) || String(v) === "eq."+String(job[k]));
   const db = {
     eq: v => "eq."+v,
-    selectRows: async (table,q) => table === "generation_jobs" && match(q) ? [structuredClone(job)] : [],
+    selectRows: async (table,q) => table === "student_behaviors" ? [...results].map(([student_id, behavior]) => ({student_id, behavior})) : table === "generation_jobs" && match(q) ? [structuredClone(job)] : [],
     updateRows: async (table,q,values) => {
       assert.equal(table, "generation_jobs");
       if(!match(q)) return [];
-      writes.push(structuredClone(values)); job = {...job,...values}; return [structuredClone(job)];
+      writes.push(structuredClone(values)); job = {...job,...values};
+      if (values.current_batch !== undefined) await options.boundary?.("cursor-saved");
+      return [structuredClone(job)];
     },
     insertRows: () => { throw new Error("Resume must never create a job"); },
   };
   const signature = { signCommentJob: id => "signed:"+id, verifyCommentJob: (id,sig) => sig==="signed:"+id };
-  const worker = load("app/api/behavior-jobs/run/route.ts", {
+  const worker = options.worker?.(db, signature) ?? load("app/api/behavior-jobs/run/route.ts", {
     "@vercel/functions": { waitUntil: p => work.push(p) },
     "../../../ability-statement-policy": { ABILITY_STATEMENT_ISSUE: "issue" },
     "../../../../db/supabase": db,
     "../../../ai-usage": { getAiUsage: async()=>({monthly:0}), MONTHLY_AI_LIMIT:null, recordAiUsage:async()=>{} },
     "../../../behavior-generation": {
-      generateBehaviorBatch: async batch => { generations.push(batch.map(x=>x.studentId)); return { behaviors:batch.map(x=>({studentId:x.studentId,behavior:"fixture"})),failures:[],usage:{} }; },
-      saveGeneratedBehaviors: async x => saves.push(x.behaviors.map(b=>b.studentId)),
+      generateBehaviorBatch: async batch => { generations.push(batch.map(x=>x.studentId)); return { behaviors:batch.map(x=>({studentId:x.studentId,behavior:"fixture-call-"+generations.length})),failures:[],usage:{} }; },
+      saveGeneratedBehaviors: async x => {
+        await options.boundary?.("before-save");
+        assert.equal(x.jobId,job.id);
+        assert.equal(x.batchIndex,job.current_batch);
+        assert.equal(x.lease,job.updated_at);
+        job.behavior_save_receipts ??= {};
+        for (const b of x.behaviors) {
+          results.set(b.studentId,b.behavior);
+          job.behavior_save_receipts[x.batchIndex+":"+b.studentId]=true;
+        }
+        saves.push(x.behaviors.map(b=>b.studentId));
+        await options.boundary?.("after-save");
+      },
     },
     "../../../behavior-repair-policy": {}, "../../../comment-generation": signature,
     "../../../ai-model-policy": { generationModel: () => "fixture" },
@@ -58,7 +73,7 @@ function harness(options = {}) {
     if(options.runWorker) return worker.POST(new Request(url,init));
     return Response.json({ok:true});
   } });
-  return {route,worker,dispatches,generations,saves,writes,get job(){return job;},age:()=>{job.updated_at=old();},
+  return {route,worker,results,dispatches,generations,saves,writes,get job(){return job;},age:()=>{job.updated_at=old();},
     reject: value=>{rejectDispatch=value;}, drain: async()=>{while(work.length) await Promise.all(work.splice(0));}};
 }
 const resume = h => h.route.POST(new Request("https://example.test/api/generation-jobs/resume",{method:"POST",body:JSON.stringify({jobId:"existing"})}));
@@ -120,4 +135,190 @@ test("duplicate signed worker deliveries execute a batch only once", async()=>{
  await h.drain();
  assert.equal(responses.length,2); assert.deepEqual(h.generations,[[1]]); assert.deepEqual(h.saves,[[1]]);
  assert.equal(h.job.current_batch,1);
+});
+
+for (const stop of ["before-save", "after-save", "cursor-saved"]) {
+  test("interrupted behavior worker: " + stop, { timeout: 5000 }, async () => {
+    // The interrupted invocation never returns to the runner's catch/retry loop.
+    // Durable state survives; after expiry only the explicit resume route runs.
+    const crash = oneCrash(stop);
+    const h = harness({
+      runWorker: true,
+      initialResults: [[1, "previous-batch"], [2, "pre-existing-draft"]],
+      job: { batches: [[{studentId:1}], [{studentId:2}], [{studentId:3}]],
+        current_batch: 1, completed_items: 1, total_batches: 3, total_items: 3 },
+      boundary: crash.boundary,
+    });
+    const attempt = h.worker.POST(new Request("https://example.test/run", {
+      method: "POST", body: JSON.stringify({jobId:"existing",signature:"signed:existing"}),
+    }));
+    await Promise.race([crash.hit, attempt.then(() => { throw Error("Worker passed crash point"); })]);
+    assert.deepEqual(h.generations, [[2]]);
+    assert.equal(h.job.current_batch, stop === "cursor-saved" ? 2 : 1);
+    assert.equal(h.results.get(2), stop === "before-save" ? "pre-existing-draft" : "fixture-call-1");
+    assert.equal(h.results.get(1), "previous-batch");
+    assert.equal((await resume(h)).status,409);
+    for (let i=0; i<2 && h.job.status !== "completed"; i++) {
+      h.age();
+      assert.equal((await resume(h)).status,202);
+      await h.drain();
+    }
+    const replay = stop === "before-save";
+    assert.deepEqual(h.generations, replay ? [[2],[2],[3]] : [[2],[3]]);
+    assert.equal(h.results.get(2), replay ? "fixture-call-2" : "fixture-call-1");
+    assert.equal(h.results.get(1),"previous-batch");
+    assert.equal(h.results.size,3);
+    assert.equal(h.job.status,"completed");
+    assert.equal(h.job.id,"existing");
+    assert.equal(h.job.completed_items,3);
+    assert.equal(h.job.failed_items,0);
+    assert.equal(h.job.current_batch,3);
+    assert.deepEqual(h.saves,[[2],[3]]);
+  });
+}
+
+function oneCrash(stop) {
+  const hit = Promise.withResolvers();
+  let armed = true;
+  return {
+    hit: hit.promise,
+    async boundary(point) {
+      if (armed && stop === point) {
+        armed = false;
+        hit.resolve();
+        await new Promise(() => {});
+      }
+    },
+  };
+}
+
+async function interruptThenResume(h, crash, checkInterrupted) {
+  const attempt = h.worker.POST(new Request("https://example.test/run", {
+    method:"POST", body:JSON.stringify({jobId:"existing",signature:"signed:existing"}),
+  }));
+  await Promise.race([crash.hit, attempt.then(() => { throw Error("Missed crash point"); })]);
+  checkInterrupted();
+  assert.equal(h.job.status,"running");
+  assert.equal(h.job.current_batch,1);
+  h.age();
+  assert.equal((await resume(h)).status,202);
+  await h.drain();
+  assert.equal(h.job.id,"existing");
+  assert.equal(h.job.status,"completed");
+  assert.equal(h.job.current_batch,2);
+  assert.equal(h.job.completed_items,2);
+  assert.equal(h.job.failed_items,0);
+}
+
+for (const stop of ["before-save","after-save"]) {
+  test("pool candidate generation interrupted " + stop, {timeout:5000}, async () => {
+    const crash = oneCrash(stop);
+    const sentences = new Set(["already-approved"]);
+    let aiCalls = 0;
+    const batch = {spec:{canonicalSentence:"fixture"},poolVersionId:7,maxAttempts:1};
+    const h = harness({
+      runWorker:true, job:{job_type:"comment-pools",batches:[batch,batch],current_batch:1,completed_items:1},
+      worker(db,signature) {
+        const poolDb = {
+          ...db,
+          selectRows: async (table,q) => table === "comment_pool_sentences"
+            ? [...sentences].map(sentence => ({sentence})) : db.selectRows(table,q),
+          updateRows: async (table,q,v) => table === "comment_pool_versions" ? [] : db.updateRows(table,q,v),
+          upsertRows: async (table,rows) => {
+            assert.equal(table,"comment_pool_sentences");
+            await crash.boundary("before-save");
+            rows.forEach(row => sentences.add(row.sentence));
+            await crash.boundary("after-save");
+          },
+        };
+        return load("app/api/comment-pools/run/route.ts", {
+          "../../../../db/supabase":poolDb, "../../../comment-generation":signature,
+          "@vercel/functions":{}, "../../../ai-model-policy":{primaryAiModel:()=>"fixture"},
+          "../../../ai-usage":{recordAiUsage:async()=>{}},
+          "../../../comment-generation-policy":{hasNaturalNominalEnding:()=>true},
+          "../../../comment-pool-library":{
+            COMMENT_POOL_TARGET:2, normalizedPoolSentence:s=>s,
+            approvePoolCandidates:approved=>({approved,rejectedIssues:[]}),
+            commentPoolQuality:()=>({issues:[]}), commentPoolIsComplete:rows=>rows.length>=2,
+          },
+          "../../../comment-pool-prompt":{buildCommentPoolCandidatePrompt:()=>"fixture"},
+          "../../../openai-response":{openAiOutputText:p=>p.output,parseFirstJsonObject:JSON.parse},
+        }, {process:{env:{OPENAI_API_KEY:"fixture"}}, fetch:async url=>{
+          assert.equal(url,"https://api.openai.com/v1/responses");
+          aiCalls++;
+          return Response.json({output:JSON.stringify({candidates:[{text:"candidate-"+aiCalls}]})});
+        }});
+      },
+    });
+    await interruptThenResume(h,crash,()=>{
+      assert.equal(aiCalls,1);
+      assert.equal(sentences.has("candidate-1"),stop==="after-save");
+    });
+    const expected = stop==="before-save" ? 2 : 1;
+    assert.equal(aiCalls,expected);
+    assert.deepEqual([...sentences],["already-approved","candidate-"+expected]);
+  });
+
+  test("comment assembly interrupted " + stop, {timeout:5000}, async () => {
+    const crash = oneCrash(stop);
+    const entry = {studentId:2,subject:"국어",items:[{assessmentIndex:0,text:"fixture",poolFingerprint:"fp"}]};
+    let parts=[];
+    const comments=new Map([[1,"previous"],[2,"old draft"]]);
+    let assemblyWrites=0, partWrites=0, externalCalls=0;
+    const h=harness({
+      runWorker:true,job:{job_type:"comments",batches:[[],[entry]],current_batch:1,completed_items:1},
+      worker(db,signature) {
+        return load("app/api/comment-jobs/run/route.ts",{
+          "@vercel/functions":{}, "../../../linked-comment-pools":{linkedCommentPools:async()=>new Map()},
+          "../../../ability-statement-policy":{hasAbilityStatement:()=>false},
+          "../../../comment-generation-policy":{hasNaturalNominalEnding:()=>true},
+          "../../../comment-diversity":{selectMostDiverseComments:x=>x},
+          "../../../comment-pool-library":{COMMENT_POOL_TARGET:8},
+          "../../../comment-assembly":{assembleRotatedComment:items=>items.map(item=>item.text).join(" ")},
+          "../../../../db/supabase":{...db,selectRows:async(table,q)=>{
+            switch(table) {
+              case "generation_jobs": return db.selectRows(table,q);
+              case "generated_comment_parts": return parts;
+              case "generated_comments": return [...comments].map(([student_id,comment])=>({student_id,comment}));
+              case "comment_pool_versions": return [{id:7,fingerprint:"fp"}];
+              case "comment_pool_sentences": return [{pool_version_id:7,sentence:"approved"}];
+              default: throw Error(table);
+            }
+          }},
+          "../../../comment-generation":{...signature,saveGeneratedCommentParts:async({parts:rows})=>{
+            partWrites++;
+            parts=rows.map(r=>({student_id:r.studentId,assessment_index:r.assessmentIndex,subject:r.subject,evidence:r.evidence,status:r.status,sentence:r.text}));
+          },saveGeneratedComments:async({comments:rows})=>{
+            await crash.boundary("before-save");
+            assemblyWrites++;
+            for(const r of rows) comments.set(r.studentId,r.comment);
+            await crash.boundary("after-save");
+          }},
+        },{fetch:async()=>{externalCalls++;throw Error("external call");}});
+      },
+    });
+    await interruptThenResume(h,crash,()=>assert.equal(comments.get(2),stop==="after-save"?"approved":"old draft"));
+    assert.equal(partWrites,1);
+    assert.equal(assemblyWrites,stop==="after-save"?2:1);
+    assert.deepEqual([...comments],[[1,"previous"],[2,"approved"]]);
+    assert.equal(externalCalls,0);
+  });
+}
+
+
+
+test("resume generates only uncommitted students in this job and batch", async () => {
+  const h = harness({
+    runWorker: true, initialResults: [[1,"teacher-edited"],[2,"other-batch-result"]],
+    job: {current_batch:1,completed_items:1,total_batches:2,total_items:3,
+      batches:[[{studentId:2}],[{studentId:1},{studentId:2}]],
+      behavior_save_receipts:{"1:1":true,"0:2":true}},
+  });
+  assert.equal((await resume(h)).status,202);
+  await h.drain();
+  assert.deepEqual(h.generations,[[2]]);
+  assert.deepEqual(h.saves,[[2]]);
+  assert.equal(h.results.get(1),"teacher-edited");
+  assert.equal(h.job.status,"completed");
+  assert.equal(h.job.completed_items,3);
 });
