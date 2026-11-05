@@ -85,10 +85,7 @@ test('behavior storage failure is not counted as a saved student or as a second 
     '../../../comment-generation': { verifyCommentJob: () => true },
     '../../../ai-model-policy': { generationModel: () => 'test' },
   });
-  const response = await route.POST(new Request('https://example.test/run', { method: 'POST', body: JSON.stringify({ jobId: 'job', signature: 'test' }) }));
-  const result = await response.json();
-  assert.equal(result.completedItems, 0);
-  assert.equal(result.failedItems, 1);
-  assert.equal(updates.at(-1).status, 'completed_with_errors');
-  assert.deepEqual(events, Array.from({ length: 4 }, () => ['usage', 'save']).flat());
+  await assert.rejects(route.POST(new Request('https://example.test/run', { method: 'POST', body: JSON.stringify({ jobId: 'job', signature: 'test' }) })), /storage unavailable/);
+  assert.equal(updates.at(-1).status, 'running');
+  assert.deepEqual(events, ['usage', 'save']);
 });
