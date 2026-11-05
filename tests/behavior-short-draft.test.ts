@@ -71,5 +71,8 @@ test('saveable short candidate precedes a slightly overlong fallback', () => {
 test('generation returns accepted short drafts instead of putting them in repair failures', () => {
   const source = readFileSync(new URL('../app/behavior-generation.ts', import.meta.url), 'utf8');
   assert.match(source, /if \(canPersistBehaviorDraft\(validation\)\) return/);
-  assert.match(source, /confirmed: false/);
+  const migration = readFileSync(new URL('../supabase/0024_behavior_save_checkpoints.sql', import.meta.url), 'utf8');
+  assert.match(source, /rpc\/save_behavior_job_results/);
+  assert.match(migration, /item\.behavior,false,null,now\(\)/);
+  assert.match(migration, /confirmed=false, confirmed_at=null/);
 });
