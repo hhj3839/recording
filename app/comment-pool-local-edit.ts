@@ -51,5 +51,5 @@ export async function editLocalPool(input: {
   if (saved.length !== remaining.length) throw new Error("새 문장 목록을 모두 저장하지 못했습니다. 기존 풀은 유지됩니다.");
   const switched = await storage.updateRows<Row>("assessment_plan_pool_links", { ...scope, id: eq(Number(links[0].id)) }, { pool_version_id: created.id });
   if (switched.length !== 1) throw new PoolEditConflict("다른 작업에서 문장 풀을 변경했습니다. 새로고침 후 다시 시도해 주세요.");
-  return { approvedCount: remaining.length, poolVersionId: Number(created.id) };
+  return { approvedCount: remaining.length, poolVersionId: Number(created.id), changedSentences: selected.map((row) => String(row.sentence)), subject: String(version.subject) };
 }

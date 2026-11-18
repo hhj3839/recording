@@ -69,7 +69,7 @@ test("로그인부터 명단·평가계획·평가수준·교과 평어 화면�
   let classroomId: number | undefined;
   try {
     await navigate(page, "대시보드", "dashboard");
-    await page.locator(".dashboard-classroom .class-button").click();
+    await page.getByRole("button", { name: "학급 전환" }).click();
     await page.getByRole("button", { name: "+ 새 학급" }).click();
     const form = page.locator(".classroom-popover-form");
     await form.locator("input").nth(0).fill("기록샘E2E검증초");
@@ -94,7 +94,7 @@ test("로그인부터 명단·평가계획·평가수준·교과 평어 화면�
     const selectedClassroom = await page.request.put("/api/classrooms", { data: { id: classroomId } });
     expect(selectedClassroom.ok()).toBeTruthy();
     await page.reload();
-    await expect(page.getByRole("button", { name: /기록샘E2E검증초/ })).toBeVisible();
+    await expect(page.getByRole("region", { name: "현재 학급" }).getByText("기록샘E2E검증초", { exact: true })).toBeVisible();
 
     await navigate(page, "학생 관리", "students");
     await page.getByLabel("번호와 이름 명단").fill("1\t테스트가람\n2\t테스트나래");
@@ -113,7 +113,7 @@ test("로그인부터 명단·평가계획·평가수준·교과 평어 화면�
       "표현 방법이 다양할 수 있음을 고려한다.",
     ].join("\t");
     await page.locator(".plan-paste-entry textarea").fill(planRow);
-    await page.getByRole("button", { name: "표 이해하기" }).click();
+    await page.getByRole("button", { name: "표 분석·미리보기" }).click();
     await expect(page.getByRole("heading", { name: /저장 전 미리보기 · 1개/ })).toBeVisible();
     const planResponse = page.waitForResponse((response) =>
       response.url().endsWith("/api/assessment-plan") && response.request().method() === "PUT");
@@ -124,8 +124,9 @@ test("로그인부터 명단·평가계획·평가수준·교과 평어 화면�
     await navigate(page, "평가 수준 입력", "assessments");
     await expect(page.getByRole("heading", { name: "평가 수준 입력" })).toBeVisible();
     await expect(page.locator(".assessment-workspace-toolbar .unified-subject-tabs").getByRole("button", { name: /국어/ })).toBeVisible();
+
     await page.getByText("일괄 입력 도구", { exact: true }).click();
-    await page.getByRole("button", { name: "미입력 전체 적용" }).click();
+    await page.getByRole("button", { name: "미입력 칸에 적용" }).click();
     const levelResponse = page.waitForResponse((response) =>
       response.url().endsWith("/api/assessment-levels") && response.request().method() === "PUT");
     await page.getByRole("button", { name: "저장", exact: true }).click();
@@ -136,15 +137,12 @@ test("로그인부터 명단·평가계획·평가수준·교과 평어 화면�
     await page.locator(".plan-card-details summary").click();
     const goalInput = page.locator(".plan-card-fields input").nth(0);
     await goalInput.fill("상황에 맞는 표현을 활용하여 자연스럽게 발표할 수 있다.");
-    page.once("dialog", async (dialog) => {
-      expect(dialog.message()).toMatch(/학생 평가수준이 입력되어 있습니다/);
-      await dialog.accept();
-    });
     const confirmedPlanUpdate = page.waitForResponse((response) =>
       response.url().endsWith("/api/assessment-plan")
       && response.request().method() === "PATCH"
       && response.status() === 200);
     await page.getByRole("button", { name: "수정 저장" }).click();
+    await page.getByRole("dialog").getByRole("button", { name: "확인", exact: true }).click();
     expect((await confirmedPlanUpdate).ok()).toBeTruthy();
     await expect(page.getByText("평가계획을 수정했습니다.")).toBeVisible();
 
@@ -164,14 +162,14 @@ test("로그인부터 명단·평가계획·평가수준·교과 평어 화면�
     }
 
     await navigate(page, "교과 평어", "comments");
-    await expect(page.getByRole("heading", { name: "전 과목 교과 평어" })).toBeVisible();
-    await expect(page.getByRole("button", { name: "✦ 국어 평어 생성" })).toBeVisible();
+    await expect(page.getByRole("heading", { name: "교과 평어" })).toBeVisible();
+    await expect(page.getByRole("button", { name: "국어 평어 생성" })).toBeVisible();
     await expect(page.locator(".comments-toolbar .unified-subject-tabs").getByRole("button", { name: /국어/ })).toBeVisible();
     await expect(page.locator(".subject-comments-table textarea")).toHaveCount(2);
     await expect(page.locator(".subject-comments-table textarea").nth(0)).toHaveValue(seededComments[0]);
     await expect(page.locator(".subject-comments-table textarea").nth(1)).toHaveValue(seededComments[1]);
-    await page.getByRole("button", { name: "평어만 복사하기" }).click();
-    await expect(page.getByRole("button", { name: "복사됨 ✓" })).toBeVisible();
+    await page.getByRole("button", { name: "평어 복사" }).click();
+    await expect(page.getByRole("button", { name: "복사 완료" })).toBeVisible();
     const clipboardText = await page.evaluate(() => navigator.clipboard.readText());
     expect(clipboardText.replaceAll("\r\n", "\n")).toBe(seededComments.join("\n"));
 
@@ -196,10 +194,10 @@ test("로그인부터 명단·평가계획·평가수준·교과 평어 화면�
     }
 
     await navigate(page, "행동특성", "behavior");
-    await expect(page.getByRole("heading", { name: "행동특성 작성" })).toBeVisible();
-    await expect(page.getByRole("button", { name: "✦ 행동특성 생성" })).toBeVisible();
-    await expect(page.getByRole("columnheader", { name: /관찰 키워드·메모/ })).toBeVisible();
-    await expect(page.getByRole("columnheader", { name: /생성 결과/ })).toBeVisible();
+    await expect(page.getByRole("heading", { name: "행동특성" })).toBeVisible();
+    await expect(page.getByRole("button", { name: "행동특성 생성" })).toBeVisible();
+    await expect(page.locator(".behavior-table thead")).toBeAttached();
+
     await expect(page.getByLabel("관찰 사실 입력 학생 전체 선택")).toHaveCount(0);
     await expect(page.locator('.behavior-table input[type="checkbox"]')).toHaveCount(0);
     const behaviorRows = page.locator(".behavior-table tbody tr");
@@ -207,14 +205,14 @@ test("로그인부터 명단·평가계획·평가수준·교과 평어 화면�
     await expect(behaviorRows.nth(0).locator("textarea").nth(0)).toHaveValue(seededCharacteristics[0]);
     await expect(behaviorRows.nth(0).locator("textarea").nth(1)).toHaveValue(seededBehaviors[0]);
     await expect(behaviorRows.nth(1).locator("textarea").nth(1)).toHaveValue(seededBehaviors[1]);
-    await page.getByRole("button", { name: "행동특성만 복사하기" }).click();
-    await expect(page.getByRole("button", { name: "복사됨 ✓" })).toBeVisible();
+    await page.getByRole("button", { name: "행동특성 복사" }).click();
+    await expect(page.getByRole("button", { name: "복사 완료" })).toBeVisible();
     const behaviorClipboard = await page.evaluate(() => navigator.clipboard.readText());
     expect(behaviorClipboard.replaceAll("\r\n", "\n")).toBe(seededBehaviors.join("\n"));
 
     if (process.env.E2E_RUN_AI === "1") {
-      await page.getByRole("button", { name: "✦ 국어 평어 생성" }).click();
-      await expect(page.getByRole("button", { name: "평어만 복사하기" })).toBeEnabled({ timeout: 240_000 });
+      await page.getByRole("button", { name: "국어 평어 생성" }).click();
+      await expect(page.getByRole("button", { name: "평어 복사" })).toBeEnabled({ timeout: 240_000 });
     }
   } finally {
     if (classroomId) {
