@@ -13,7 +13,6 @@ import { parseAssessmentPlanText } from "./assessment-plan-parser";
 import { assessmentPlanWarnings, validateAssessmentPlanRow } from "./assessment-plan-policy";
 import { commentAreaIssuesForDisplay } from "./comment-generation-policy";
 import { readApiJson } from "./api-response";
-import { ResultsDownload } from "./results-download";
 
 type View = "dashboard" | "students" | "plans" | "assessments" | "comments" | "behavior" | "export" | "settings";
 const SHOW_EXPORT_RESULTS = false;
@@ -2413,7 +2412,6 @@ export default function Home() {
       <main id="main-content" tabIndex={-1}>
         <header className="mobile-header"><button className="brand" onClick={() => setView("dashboard")}><span>기록</span>샘</button><select aria-label="화면 이동" value={view} onChange={(e) => setView(e.target.value as View)}>{navItems.map((item) => <option value={item.id} key={item.id}>{item.label}</option>)}<option value="settings">개인정보·설정</option></select></header>
         <div className="content">
-          {view === "dashboard" && <ResultsDownload roster={roster} />}
           {view === "dashboard" && <Dashboard retry={() => { if (classLoadState === "error") setClassLoadAttempt((attempt) => attempt + 1); if (countsLoadState === "error") setCountsLoadAttempt((attempt) => attempt + 1); }} loadState={classLoadState === "error" || countsLoadState === "error" ? "error" : classLoadState === "loading" || countsLoadState === "loading" ? "loading" : "ready"} move={setView} teacherName={currentUser} classroom={classroom} studentCount={roster.length} completedLevels={completedLevels} totalLevels={totalLevels} commentCount={generatedCommentCount} expectedComments={roster.length * new Set(plan.map((item) => item.subject)).size} behaviorCount={generatedBehaviorCount} />}
           {view === "students" && <StudentManager roster={roster} onAdded={mergeStudentIntoState} onChanged={mergeStudentIntoState} onDeleted={(id) => void deleteStudent(id)} onImported={mergeImportedStudents} />}
           {view === "plans" && <PlanManager plan={plan} onChanged={applyPlanChange} current={classroom} />}
