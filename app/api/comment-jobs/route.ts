@@ -7,6 +7,8 @@ import { CommentEvidence, signCommentJob } from "../../comment-generation";
 import { createCommentVariations } from "../../comment-variation";
 import { buildCommentPoolSpecs, type PoolPlanItem } from "../../comment-pool-library";
 import { dataError, getDataScope, requireOwnedStudentIds } from "../../data-scope";
+import { archiveComment } from "../../record-revisions";
+import { protectCommentFromReassignment } from "../../comment-reassignment-policy";
 
 type Level = "상" | "중" | "하" | "미응시" | "평가 예정" | "-";
 type ScoreStudent = { studentId: number; levels: Level[] };
@@ -75,6 +77,7 @@ export async function POST(request: Request) {
       scores?: unknown;
       selectedStudentIds?: unknown;
       overwriteExisting?: unknown;
+      protectEdited?: unknown;
       targetAssessmentIndexes?: unknown;
       forceTargetRegeneration?: unknown;
     };
@@ -172,6 +175,20 @@ export async function POST(request: Request) {
       const selectedSubjects = Object.keys(body.scores as Record<string, unknown>);
       if (selectedSubjects.length !== 1) return Response.json({ error: "전체 재생성은 한 과목씩 실행해 주세요." }, { status: 400 });
       const subject = selectedSubjects[0];
+      if (body.protectEdited === true) {
+        const current = await selectRows<{ student_id: number; comment: string; confirmed: boolean }>("generated_comments", {
+          owner_id: eq(user.id), class_id: eq(classId), subject: eq(subject), student_id: selected,
+        });
+        const parts = await selectRows<{ student_id: number; assessment_index: number; sentence: string }>("generated_comment_parts", {
+          owner_id: eq(user.id), class_id: eq(classId), subject: eq(subject), student_id: selected,
+        });
+        const protectedRows = current.filter((row) => protectCommentFromReassignment(row.comment, Boolean(row.confirmed), parts.filter((part) => Number(part.student_id) === Number(row.student_id)).map((part) => ({ assessmentIndex: Number(part.assessment_index), sentence: part.sentence })), Number(row.student_id)));
+        if (protectedRows.length) return Response.json({ error: `수동 수정·확정 또는 생성 근거 확인이 필요한 평어 ${protectedRows.length}건이 있어 재배정을 중단했습니다. 해당 학생을 선택에서 제외해 주세요.`, code: "EDITED_COMMENTS_PROTECTED" }, { status: 409 });
+      }
+      // Finish preserving every original before removing any selected result.
+      for (const studentId of selectedStudentIds) {
+        await archiveComment({ ownerId: user.id, ownerEmail: user.email, classId, studentId, subject, nextContent: "", source: "pool-reassignment" });
+      }
       await supabaseRequest("generated_comment_parts", {
         method: "DELETE", query: { owner_id: eq(user.id), class_id: eq(classId), subject: eq(subject), student_id: selected },
       });

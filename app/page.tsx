@@ -13,6 +13,7 @@ import { parseAssessmentPlanText } from "./assessment-plan-parser";
 import { assessmentPlanWarnings, validateAssessmentPlanRow } from "./assessment-plan-policy";
 import { commentAreaIssuesForDisplay } from "./comment-generation-policy";
 import { readApiJson } from "./api-response";
+import { ResultsDownload } from "./results-download";
 
 type View = "dashboard" | "students" | "plans" | "assessments" | "comments" | "behavior" | "export" | "settings";
 const SHOW_EXPORT_RESULTS = false;
@@ -919,10 +920,10 @@ function PlanManager({ plan, onChanged, current }: { plan: AssessmentPlan[]; onC
         method: "POST", headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ sentenceId: row.id, assessmentPlanId: selectedPoolGroup?.assessmentPlanId }),
       });
-      const result = await readApiJson<{ excluded?: boolean; shared?: boolean; approvedCount?: number }>(response, "문장 후보를 제외하지 못했습니다.");
+      const result = await readApiJson<{ excluded?: boolean; shared?: boolean; approvedCount?: number; impactMessage?: string }>(response, "문장 후보를 제외하지 못했습니다.");
       if (!response.ok) throw new Error(result.error || "문장 후보를 제외하지 못했습니다.");
       await Promise.all([loadPoolStatus(), loadPoolStatus(selectedPoolFingerprint)]);
-      setMessage(`문장 후보를 제외했습니다. 승인 문장 ${Number(result.approvedCount ?? 0)}개가 남았습니다.`);
+      setMessage(`문장 후보를 제외했습니다. 승인 문장 ${Number(result.approvedCount ?? 0)}개가 남았습니다. ${result.impactMessage ?? ""}`);
     } catch (error) {
       setErrors([error instanceof Error ? error.message : "문장 후보를 제외하지 못했습니다."]);
     } finally { setPoolBusy(false); }
@@ -938,10 +939,10 @@ function PlanManager({ plan, onChanged, current }: { plan: AssessmentPlan[]; onC
         method: "POST", headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ sentenceIds: warningRows.map((row) => row.id), assessmentPlanId: selectedPoolGroup?.assessmentPlanId }),
       });
-      const result = await readApiJson<{ excluded?: boolean; excludedCount?: number; shared?: boolean }>(response, "경고 문장을 제거하지 못했습니다.");
+      const result = await readApiJson<{ excluded?: boolean; excludedCount?: number; shared?: boolean; impactMessage?: string }>(response, "경고 문장을 제거하지 못했습니다.");
       if (!response.ok) throw new Error(result.error || "경고 문장을 제거하지 못했습니다.");
       await Promise.all([loadPoolStatus(), loadPoolStatus(selectedPoolFingerprint)]);
-      setMessage(`경고 문장 ${Number(result.excludedCount ?? warningRows.length)}개를 제거했습니다. 부족한 문장은 이어서 제작할 수 있습니다.`);
+      setMessage(`경고 문장 ${Number(result.excludedCount ?? warningRows.length)}개를 제거했습니다. ${result.impactMessage ?? ""}`);
     } catch (error) {
       setErrors([error instanceof Error ? error.message : "경고 문장을 제거하지 못했습니다."]);
     } finally { setPoolBusy(false); }
@@ -961,10 +962,10 @@ function PlanManager({ plan, onChanged, current }: { plan: AssessmentPlan[]; onC
         method: "PATCH", headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ sentenceId: row.id, sentence: edited, assessmentPlanId: selectedPoolGroup?.assessmentPlanId }),
       });
-      const result = await readApiJson<{ updated?: boolean; shared?: boolean }>(response, "문장을 수정하지 못했습니다.");
+      const result = await readApiJson<{ updated?: boolean; shared?: boolean; impactMessage?: string }>(response, "문장을 수정하지 못했습니다.");
       if (!response.ok) throw new Error(result.error || "문장을 수정하지 못했습니다.");
       await Promise.all([loadPoolStatus(), loadPoolStatus(selectedPoolFingerprint)]);
-      setMessage("현재 평가계획의 문장을 수정했습니다. 공용 원본과 기존 학생 평어는 유지됩니다.");
+      setMessage(`현재 평가계획의 문장을 수정했습니다. 공용 원본과 기존 학생 평어는 유지됩니다. ${result.impactMessage ?? ""}`);
     } catch (error) {
       setErrors([error instanceof Error ? error.message : "문장을 수정하지 못했습니다."]);
     } finally { setPoolBusy(false); }
@@ -1072,7 +1073,7 @@ function PlanManager({ plan, onChanged, current }: { plan: AssessmentPlan[]; onC
             <span><small>유사 군집</small><b>{selectedPoolGroup.diversity.clusteredPairs}/{selectedPoolGroup.diversity.totalPairs}</b></span>
             <span><small>평균 길이</small><b>{selectedPoolGroup.diversity.averageLength.toFixed(1)}자</b></span>
           </div>}
-          {!!selectedPoolGroup?.qualityWarnings.length && <p className="ai-pool-quality-note">다양성 확인: {selectedPoolGroup.qualityWarnings.join(" · ")}</p>}
+          {!!selectedPoolGroup?.qualityWarnings.length && <p className="ai-pool-quality-note" id="pool-quality-explanation">풀 전체 참고 사항: {selectedPoolGroup.qualityWarnings.join(" · ")}. 개별 문장 오류와는 구분되며, 이 안내만으로 문장을 제거하지 않습니다.</p>}
           <div className="ai-pool-sentence-list">{poolSentencesLoading ? <p className="empty-cell" role="status">선택한 AI 평어를 불러오는 중입니다.</p> : orderedPoolSentences.length ? orderedPoolSentences.map((row, index) => {
             const reviewReasons = [...row.issues, ...(row.warnings ?? [])];
             return <p ref={reviewReasons.length > 0 && index === 0 ? firstPoolWarningRef : undefined} className={reviewReasons.length ? "needs-review" : ""} key={row.id}><b>{index + 1}{reviewReasons.length > 0 && <i aria-label="확인 필요">!</i>}</b><span>{row.sentence}{reviewReasons.length > 0 && <small>확인 필요: {reviewReasons.map(poolSentenceReviewLabel).join(" · ")}</small>}</span>{reviewReasons.length > 0 && <span className="pool-sentence-actions"><button className="edit-pool-sentence" type="button" disabled={poolBusy} onClick={() => void editPoolSentence(row)} aria-label={`${index + 1}번 문장 수정`}>문장 수정</button><button className="exclude-pool-sentence" type="button" disabled={poolBusy} onClick={() => void excludePoolSentence(row)} aria-label={`${index + 1}번 문장 후보 제외`}>문장 후보 제외</button></span>}</p>;
@@ -1285,7 +1286,7 @@ function Comments({ assessmentDataBySubject, plan, roster }: { assessmentDataByS
   const ui = useActionDialog();
   type CommentJob = { canResume?: boolean; id: string; status: string; subject: string; totalItems: number; completedItems: number; failedItems: number; totalBatches: number; currentBatch: number; error?: string; completedAt?: string | null };
   type CommentSelection = { text: string; start: number; end: number };
-  type CommentGenerationMode = "empty" | "modified" | "all";
+  type CommentGenerationMode = "empty" | "modified" | "all" | "selected";
   type GeneratedLevel = { assessmentIndex: number; level: string };
   const subjects = [...new Set(plan.map((item) => item.subject))];
   const [selectedSubject, setSelectedSubject] = useState(subjects[0] ?? "국어");
@@ -1305,6 +1306,7 @@ function Comments({ assessmentDataBySubject, plan, roster }: { assessmentDataByS
   const [selectedText, setSelectedText] = useState<Record<string, CommentSelection>>({});
   const [generationDialogOpen, setGenerationDialogOpen] = useState(false);
   const [generationMode, setGenerationMode] = useState<CommentGenerationMode>("modified");
+  const [reassignStudentIds, setReassignStudentIds] = useState<number[]>([]);
   const loadGeneratedComments = useCallback(async () => {
     setCommentsLoadState("loading");
     try {
@@ -1370,6 +1372,8 @@ function Comments({ assessmentDataBySubject, plan, roster }: { assessmentDataByS
     ? new Intl.DateTimeFormat("ko-KR", { month: "numeric", day: "numeric", hour: "numeric", minute: "2-digit" }).format(new Date(subjectGeneratedAt[selectedSubject]))
     : "";
   const copySubjectComments = async () => {
+    const missing = roster.filter((student) => !comments[`${student.id}|${selectedSubject}`]?.trim());
+    if (missing.length && !window.confirm(`평어가 없는 학생 ${missing.length}명: ${missing.map((student) => student.number ?? student.id).join(", ")}번. 학생 순서를 유지해 빈 줄을 포함하여 복사할까요?`)) return;
     const text = roster.map((student) => comments[`${student.id}|${selectedSubject}`] ?? "").join("\n");
     try {
       await navigator.clipboard.writeText(text);
@@ -1396,9 +1400,10 @@ function Comments({ assessmentDataBySubject, plan, roster }: { assessmentDataByS
     return Boolean(comments[`${id}|${selectedSubject}`]?.trim()) && saved.length > 0 && !sameLevelSnapshot(saved, currentLevelSnapshot(id));
   });
   const subjectGenerationModeCount = (mode: CommentGenerationMode) => mode === "empty"
-    ? emptySubjectIds.length : mode === "modified" ? modifiedSubjectIds.length : subjectEligibleIds.length;
+    ? emptySubjectIds.length : mode === "modified" ? modifiedSubjectIds.length : mode === "selected" ? reassignStudentIds.filter((id) => subjectEligibleIds.includes(id)).length : subjectEligibleIds.length;
   const openSubjectGenerationDialog = () => {
     if (!commentsReady) return;
+    setReassignStudentIds([]);
     if (!roster.length) return setError("등록된 학생이 없습니다.");
     if (!subjectEligibleIds.length) return setError(`${selectedSubject}에서 상·중·하 평가수준이 입력된 학생이 없습니다.`);
     setGenerationMode(modifiedSubjectIds.length ? "modified" : emptySubjectIds.length ? "empty" : "all");
@@ -1411,7 +1416,7 @@ function Comments({ assessmentDataBySubject, plan, roster }: { assessmentDataByS
     const subjectStudents = assessmentDataBySubject[selectedSubject] ?? [];
     const eligibleIds = subjectEligibleIds;
     if (!eligibleIds.length) return setError(`${selectedSubject}에서 상·중·하 평가수준이 입력된 학생이 없습니다.`);
-    const targetIds = mode === "empty" ? emptySubjectIds : mode === "modified" ? modifiedSubjectIds : eligibleIds;
+    const targetIds = mode === "empty" ? emptySubjectIds : mode === "modified" ? modifiedSubjectIds : mode === "selected" ? reassignStudentIds.filter((id) => eligibleIds.includes(id)) : eligibleIds;
     const overwriteExisting = mode !== "empty";
     if (!targetIds.length) return setError(mode === "empty" ? "결과가 비어 있는 학생이 없습니다." : "평가수준을 수정한 학생이 없습니다.");
     setLoading(true);
@@ -1427,7 +1432,7 @@ function Comments({ assessmentDataBySubject, plan, roster }: { assessmentDataByS
       const response = await fetch("/api/comment-jobs", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ scores, selectedStudentIds: targetIds, overwriteExisting }),
+        body: JSON.stringify({ scores, selectedStudentIds: targetIds, overwriteExisting, protectEdited: mode === "selected" }),
       });
       const result = await readApiJson<{ job?: CommentJob }>(response, "백그라운드 생성 작업을 시작하지 못했습니다.");
       if (!response.ok || !result.job) {
@@ -1579,11 +1584,13 @@ function Comments({ assessmentDataBySubject, plan, roster }: { assessmentDataByS
               ["empty", "결과가 비어 있는 학생만 생성", "기존 평어를 유지하고 아직 작성되지 않은 학생만 생성합니다."],
               ["modified", "평가수준을 수정한 학생만 생성", "마지막 생성 이후 상·중·하 입력이 달라진 학생만 다시 생성합니다."],
               ["all", "생성 대상 학생 전체 다시 생성", "해당 과목의 기존 평어를 포함해 대상 학생 전체를 새로 생성합니다."],
+              ["selected", "선택한 학생만 최신 승인 풀로 재배정", "AI 호출 없이 현재 연결된 풀을 사용합니다. 선택하지 않은 학생은 유지합니다."],
             ] as const).map(([mode, title, description]) => <label className={generationMode === mode ? "selected" : ""} key={mode}>
               <input type="radio" name="comment-generation-mode" value={mode} checked={generationMode === mode} onChange={() => setGenerationMode(mode)} />
               <span><strong>{title}</strong><small>{description}</small></span><b>{subjectGenerationModeCount(mode)}명</b>
             </label>)}
           </div>
+{generationMode === "selected" && <fieldset><legend>재배정할 학생 — 기본 선택 없음</legend><p>수동 수정·확정 또는 생성 근거를 확인할 수 없는 평어는 서버에서 보호합니다. 기존 결과는 버전 기록에 보존합니다.</p>{roster.filter((student) => subjectEligibleIds.includes(student.id)).map((student) => <label key={student.id} style={{ display: "block" }}><input type="checkbox" checked={reassignStudentIds.includes(student.id)} onChange={(event) => setReassignStudentIds((ids) => event.target.checked ? [...ids, student.id] : ids.filter((id) => id !== student.id))} />{student.number ?? student.id}번 {student.name} — {comments[`${student.id}|${selectedSubject}`]?.trim() ? "기존 평어 교체" : "빈칸 작성"}</label>)}</fieldset>}
           {generationMode === "all" && savedCommentCount > 0 && <p className="generation-overwrite-warning">기존 {selectedSubject} 평어가 새 결과로 교체됩니다.</p>}
           <div className="generation-dialog-actions"><button className="secondary" onClick={() => setGenerationDialogOpen(false)}>취소</button><button onClick={() => void generateSubjectComments(generationMode)} disabled={subjectGenerationModeCount(generationMode) === 0}>{subjectGenerationModeCount(generationMode)}명 생성하기</button></div>
         </div>
@@ -1821,6 +1828,8 @@ function Behavior({ roster }: { roster: AssessmentStudent[] }) {
     setError("");
   };
   const copyBehaviors = async () => {
+    const missing = roster.filter((student) => !records[student.id]?.behavior?.trim());
+    if (missing.length && !window.confirm(`행동특성이 없는 학생 ${missing.length}명: ${missing.map((student) => student.number ?? student.id).join(", ")}번. 학생 순서를 유지해 빈 줄을 포함하여 복사할까요?`)) return;
     try {
       await navigator.clipboard.writeText(roster.map((student) => records[student.id]?.behavior ?? "").join("\n"));
       setCopied(true);
@@ -2404,6 +2413,7 @@ export default function Home() {
       <main id="main-content" tabIndex={-1}>
         <header className="mobile-header"><button className="brand" onClick={() => setView("dashboard")}><span>기록</span>샘</button><select aria-label="화면 이동" value={view} onChange={(e) => setView(e.target.value as View)}>{navItems.map((item) => <option value={item.id} key={item.id}>{item.label}</option>)}<option value="settings">개인정보·설정</option></select></header>
         <div className="content">
+          {view === "dashboard" && <ResultsDownload roster={roster} />}
           {view === "dashboard" && <Dashboard retry={() => { if (classLoadState === "error") setClassLoadAttempt((attempt) => attempt + 1); if (countsLoadState === "error") setCountsLoadAttempt((attempt) => attempt + 1); }} loadState={classLoadState === "error" || countsLoadState === "error" ? "error" : classLoadState === "loading" || countsLoadState === "loading" ? "loading" : "ready"} move={setView} teacherName={currentUser} classroom={classroom} studentCount={roster.length} completedLevels={completedLevels} totalLevels={totalLevels} commentCount={generatedCommentCount} expectedComments={roster.length * new Set(plan.map((item) => item.subject)).size} behaviorCount={generatedBehaviorCount} />}
           {view === "students" && <StudentManager roster={roster} onAdded={mergeStudentIntoState} onChanged={mergeStudentIntoState} onDeleted={(id) => void deleteStudent(id)} onImported={mergeImportedStudents} />}
           {view === "plans" && <PlanManager plan={plan} onChanged={applyPlanChange} current={classroom} />}
